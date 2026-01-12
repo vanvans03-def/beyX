@@ -1,0 +1,112 @@
+{
+    "points": {
+        "9": [
+            "PhoenixWing"
+        ],
+        "8": [
+            "CobaltDragoon",
+            "WizardRod",
+            "ScorpioSpear"
+        ],
+        "7": [
+            "TyrannoBeat",
+            "CobaltDrake",
+            "Dranbuster",
+            "SamuraiSaber",
+            "ImpactDrake",
+            "KnightMail",
+            "MeteorDragoon",
+            "Blast",
+            "Hunt"
+        ],
+        "5": [
+            "DranSword",
+            "HellsScythe",
+            "SharkEdge",
+            "CrimsonGaruda",
+            "WhaleWave",
+            "TriceraPress",
+            "TyrannoRoar",
+            "SamuraiCalibur",
+            "GolemRock",
+            "ClockMirage",
+            "MummyCurse",
+            "Brave",
+            "Volt",
+            "Might"
+        ],
+        "3": [
+            "DranDagger",
+            "HellsChain",
+            "BlackShell",
+            "UnicornString",
+            "MammothTusk",
+            "PteraSwing",
+            "ShelterDrake",
+            "SharkGill",
+            "HellsHammer",
+            "Brush",
+            "Eclipse"
+        ],
+        "2": [
+            "KnightShield",
+            "KnightLance",
+            "ViperTails",
+            "WyvernGale",
+            "SphinxCowl",
+            "WeissTiger",
+            "PhoenixFeather",
+            "SamuraiSteel",
+            "GoatTackle",
+            "PhoenixRudder",
+            "Dark",
+            "Flame",
+            "Fang"
+        ],
+        "1": [
+            "WizardArrow",
+            "LeonClaw",
+            "RhinoHorn",
+            "DracielShield",
+            "ShinobiKnife",
+            "XenoXcalibur",
+            "LeonCrest",
+            "GhostCircle",
+            "Arc",
+            "Reaper"
+        ],
+        "0": [
+            "DragoonStorm",
+            "DrigerSlash",
+            "DranzerSpiral",
+            "StormPegasus",
+            "Lightning L-Drago",
+            "VictoryValkyrie",
+            "BearScratch",
+            "RockLeone",
+            "ShinobiShadow"
+        ]
+    },
+    "banList": [
+        "AeroPegasus",
+        "CobaltDrake",
+        "CobaltDragoon",
+        "PhoenixWing",
+        "TyrannoBeat",
+        "WizardRod",
+        "GolemRock",
+        "WyverHover",
+        "MeteorDragoon",
+        "ClockMirage",
+        "MummyCurse",
+        "SilverWolf",
+        "Dranbuster",
+        "ScorpioSpear",
+        "KnightMail",
+        "SharkScale",
+        "Blast",
+        "Eclipse",
+        "Emperor",
+        "Valkyrie"
+    ]
+}
