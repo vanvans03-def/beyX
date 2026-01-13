@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2 } from "lucide-react";
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
+import { Modal } from "@/components/ui/Modal";
 
 type Registration = {
     TournamentID: string;
@@ -32,6 +33,20 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
 
+    // Modal State
+    const [modalConfig, setModalConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        desc?: string;
+        type: "alert" | "confirm";
+        variant?: "default" | "destructive";
+        onConfirm?: () => void;
+    }>({
+        isOpen: false,
+        title: "",
+        type: "alert"
+    });
+
     const fetchData = async () => {
         if (!id) return;
         setLoading(true);
@@ -47,7 +62,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             }
         } catch (err) {
             console.error(err);
-            alert("Failed to fetch data");
+            setModalConfig({
+                isOpen: true,
+                title: "Error",
+                desc: "Failed to fetch data.",
+                type: "alert",
+                variant: "destructive"
+            });
         } finally {
             setLoading(false);
         }
@@ -60,7 +81,41 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const copyToClipboard = () => {
         const text = data.map(r => `${r.PlayerName} (${r.Mode})`).join("\n");
         navigator.clipboard.writeText(text);
-        alert("Copied list to clipboard!");
+        setModalConfig({
+            isOpen: true,
+            title: "Success",
+            desc: "Copied list to clipboard!",
+            type: "alert"
+        });
+    };
+
+    const handleDelete = (row: Registration) => {
+        setModalConfig({
+            isOpen: true,
+            title: "Delete Registration?",
+            desc: `Are you sure you want to delete ${row.PlayerName}? This action cannot be undone.`,
+            type: "confirm",
+            variant: "destructive",
+            onConfirm: async () => {
+                setModalConfig(prev => ({ ...prev, isOpen: false }));
+                try {
+                    await fetch("/api/admin/registrations", {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ roundId: row.RoundID })
+                    });
+                    fetchData();
+                } catch (e) {
+                    setModalConfig({
+                        isOpen: true,
+                        title: "Error",
+                        desc: "Failed to delete registration.",
+                        type: "alert",
+                        variant: "destructive"
+                    });
+                }
+            }
+        });
     };
 
     const validateRow = (row: Registration) => {
@@ -114,22 +169,22 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     );
 
     return (
-        <div className="min-h-screen bg-background p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="min-h-screen bg-background p-4 md:p-6">
+            <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
                 <header className="flex flex-col md:flex-row items-center justify-between gap-4 glass-card p-4 rounded-xl">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 w-full md:w-auto">
                         <Link href="/admin" className="p-2 hover:bg-secondary rounded-full transition-colors">
                             <ArrowLeft className="h-6 w-6" />
                         </Link>
                         <div>
-                            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+                            <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
                                 Tournament Details
                             </h1>
-                            <p className="text-xs text-muted-foreground">ID: {id}</p>
+                            <p className="text-xs text-muted-foreground break-all">ID: {id}</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-1 max-w-sm justify-center">
+                    <div className="flex items-center gap-2 w-full md:flex-1 md:max-w-sm justify-center">
                         <input
                             type="text"
                             placeholder="Search player name..."
@@ -139,21 +194,21 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         />
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 w-full md:w-auto justify-end">
                         <button
                             onClick={fetchData}
                             disabled={loading}
                             className="flex items-center gap-2 px-4 py-2 bg-secondary rounded-lg hover:bg-secondary/80 text-sm font-medium transition-colors"
                         >
                             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                            Refresh
+                            <span className="hidden md:inline">Refresh</span>
                         </button>
                         <button
                             onClick={copyToClipboard}
                             className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-lg hover:bg-primary/90 text-sm font-medium transition-colors"
                         >
                             <Copy className="h-4 w-4" />
-                            Copy List
+                            <span className="hidden md:inline">Copy List</span>
                         </button>
                     </div>
                 </header>
@@ -162,12 +217,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     <table className="w-full text-sm text-left">
                         <thead className="bg-secondary/50 text-muted-foreground uppercase text-xs font-bold tracking-wider">
                             <tr>
-                                <th className="p-4">Time</th>
-                                <th className="p-4">Player</th>
-                                <th className="p-4">Mode</th>
-                                <th className="p-4">Main Deck</th>
-                                <th className="p-4">Reserves</th>
-                                <th className="p-4">Status</th>
+                                <th className="p-4 whitespace-nowrap">Time</th>
+                                <th className="p-4 whitespace-nowrap">Player</th>
+                                <th className="p-4 whitespace-nowrap">Mode</th>
+                                <th className="p-4 whitespace-nowrap">Main Deck</th>
+                                <th className="p-4 whitespace-nowrap">Reserves</th>
+                                <th className="p-4 whitespace-nowrap">Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
@@ -189,35 +244,35 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         <td className="p-4 whitespace-nowrap text-muted-foreground">
                                             {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </td>
-                                        <td className="p-4 font-medium text-foreground">{row.PlayerName}</td>
-                                        <td className="p-4">
+                                        <td className="p-4 font-medium text-foreground whitespace-nowrap">{row.PlayerName}</td>
+                                        <td className="p-4 whitespace-nowrap">
                                             <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
                                                 {row.Mode === "Under10" ? "U10" : "NMM"}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-xs space-y-1">
-                                            <div className="flex gap-1">
+                                        <td className="p-4 text-xs space-y-1 min-w-[200px]">
+                                            <div className="flex gap-1 flex-wrap">
                                                 {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => (
-                                                    <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50">
+                                                    <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap">
                                                         {b}
                                                     </span>
                                                 ))}
                                             </div>
                                         </td>
-                                        <td className="p-4 text-xs space-y-2">
+                                        <td className="p-4 text-xs space-y-2 min-w-[200px]">
                                             {reserveDecks.map((deck, idx) => (
-                                                <div key={idx} className="flex gap-1 items-center opacity-80">
+                                                <div key={idx} className="flex gap-1 items-center opacity-80 flex-wrap">
                                                     <span className="text-[9px] w-4 text-muted-foreground">#{idx + 1}</span>
                                                     {deck.map((b, bIdx) => (
-                                                        <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30">
+                                                        <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap">
                                                             {b}
                                                         </span>
                                                     ))}
                                                 </div>
                                             ))}
                                         </td>
-                                        <td className="p-4">
-                                            <div className="flex items-center justify-between">
+                                        <td className="p-4 whitespace-nowrap">
+                                            <div className="flex items-center justify-between gap-4">
                                                 <div className="flex items-center gap-2">
                                                     {validation.status === "pass" && <CheckCircle className="h-4 w-4 text-green-500" />}
                                                     {validation.status === "fail" && <XCircle className="h-4 w-4 text-red-500" />}
@@ -228,19 +283,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     </span>
                                                 </div>
                                                 <button
-                                                    onClick={async () => {
-                                                        if (confirm(`Delete registration for ${row.PlayerName}?`)) {
-                                                            try {
-                                                                await fetch("/api/admin/registrations", {
-                                                                    method: "DELETE",
-                                                                    headers: { "Content-Type": "application/json" },
-                                                                    body: JSON.stringify({ roundId: row.RoundID })
-                                                                });
-                                                                fetchData();
-                                                            } catch (e) { alert("Failed to delete"); }
-                                                        }
-                                                    }}
-                                                    className="opacity-0 group-hover:opacity-100 p-2 text-muted-foreground hover:text-red-500 transition-all"
+                                                    onClick={() => handleDelete(row)}
+                                                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 text-muted-foreground hover:text-red-500 transition-all"
                                                     title="Delete"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
@@ -260,6 +304,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </tbody>
                     </table>
                 </div>
+
+                <Modal
+                    isOpen={modalConfig.isOpen}
+                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    title={modalConfig.title}
+                    description={modalConfig.desc}
+                    type={modalConfig.type}
+                    variant={modalConfig.variant}
+                    onConfirm={modalConfig.onConfirm}
+                    confirmText={modalConfig.variant === 'destructive' ? 'Delete' : 'OK'}
+                />
             </div>
         </div>
     );

@@ -48,7 +48,7 @@ export default function Home() {
       </main>
 
       <footer className="absolute bottom-6 text-[10px] text-muted-foreground/30 uppercase tracking-[0.3em]">
-        Build 2026.1
+        Powered by สายใต้ยิม - V0.0.2
       </footer>
     </div>
   );

@@ -1,10 +1,16 @@
 import RegistrationForm from "@/components/RegistrationForm";
-import { getTournaments } from "@/lib/sheets";
+import { getTournaments } from "@/lib/repository"; // Use Postgres
 
 export default async function RegisterPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const tournaments = await getTournaments();
-    const tournament = tournaments.find(t => t.TournamentID === id);
+    // Repository returns Postgres snake_case, but we need to match what we use.
+    // Wait, getTournaments returns { id, name, status }.
+    // Sheets version returned { TournamentID, Name, Status }.
+    // I should check what RegistrationForm expects?
+    // RegistrationForm expects "tournamentName".
+    // So here I just need to find the correct one.
+    const tournament = tournaments.find(t => t.id === id);
 
     return (
         <div className="min-h-screen relative overflow-hidden bg-background selection:bg-primary/30">
@@ -30,13 +36,13 @@ export default async function RegisterPage({ params }: { params: Promise<{ id: s
 
                 {/* Form */}
                 <div className="flex-1 glass-card p-6 md:p-8 rounded-3xl shadow-2xl shadow-black/50 border border-white/5 backdrop-blur-xl">
-                    <RegistrationForm tournamentId={id} tournamentName={tournament?.Name} />
+                    <RegistrationForm tournamentId={id} tournamentName={tournament?.name} />
                 </div>
 
                 {/* Footer */}
                 <footer className="mt-8 text-center">
                     <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest font-medium">
-                        Powered by สายใต้ยิม
+                        Powered by สายใต้ยิม - V0.0.2
                     </p>
                 </footer>
             </main>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Modal } from "@/components/ui/Modal";
 
 type Tournament = {
     TournamentID: string;
@@ -22,6 +23,21 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(false);
     const [creating, setCreating] = useState(false);
 
+    // Modal State
+    const [modalConfig, setModalConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        desc?: string;
+        type: "alert" | "confirm";
+        onConfirm?: () => void;
+        variant?: "default" | "destructive";
+        confirmText?: string;
+    }>({
+        isOpen: false,
+        title: "",
+        type: "alert"
+    });
+
     // Auth Check
     useEffect(() => {
         const saved = sessionStorage.getItem("admin_auth");
@@ -38,7 +54,12 @@ export default function AdminPage() {
             sessionStorage.setItem("admin_auth", "CYEAH");
             fetchTournaments();
         } else {
-            alert("Access Denied");
+            setModalConfig({
+                isOpen: true,
+                title: "Access Denied",
+                desc: "Incorrect password. Please try again.",
+                type: "alert"
+            });
             setPasswordInput("");
         }
     };
@@ -78,10 +99,40 @@ export default function AdminPage() {
                 fetchTournaments();
             }
         } catch (e) {
-            alert("Failed to create");
+            setModalConfig({
+                isOpen: true,
+                title: "Error",
+                desc: "Failed to create tournament.",
+                type: "alert",
+                variant: "destructive"
+            });
         } finally {
             setCreating(false);
         }
+    };
+
+    const handleEndTournament = (t: Tournament) => {
+        setModalConfig({
+            isOpen: true,
+            title: "End Tournament?",
+            desc: `Are you sure you want to end "${t.Name}"? This will disable new registrations immediately.`,
+            type: "confirm",
+            variant: "destructive",
+            confirmText: "End Tournament",
+            onConfirm: async () => {
+                setModalConfig(prev => ({ ...prev, isOpen: false }));
+                try {
+                    const res = await fetch("/api/admin/tournaments", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ tournamentId: t.TournamentID, status: "CLOSED" })
+                    });
+                    if (res.ok) fetchTournaments();
+                } catch (e) {
+                    alert("Failed to update");
+                }
+            }
+        });
     };
 
     const filteredTournaments = tournaments.filter(t =>
@@ -107,15 +158,24 @@ export default function AdminPage() {
                         Login
                     </button>
                 </form>
+                {/* Auth Modal */}
+                <Modal
+                    isOpen={modalConfig.isOpen}
+                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    title={modalConfig.title}
+                    description={modalConfig.desc}
+                    type={modalConfig.type}
+                    variant={modalConfig.variant}
+                />
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-background p-6">
-            <div className="max-w-4xl mx-auto space-y-8">
-                <header className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+        <div className="min-h-screen bg-background p-4 md:p-6">
+            <div className="max-w-4xl mx-auto space-y-6 md:space-y-8">
+                <header className="flex flex-col md:flex-row items-center justify-between gap-4">
+                    <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent text-center md:text-left">
                         Tournament Manager
                     </h1>
                     <button
@@ -134,7 +194,7 @@ export default function AdminPage() {
                 <div className="glass-card p-6 rounded-xl space-y-4">
                     <h2 className="text-lg font-bold">Create New Tournament</h2>
                     <form onSubmit={handleCreate} className="space-y-2">
-                        <div className="flex gap-2">
+                        <div className="flex flex-col md:flex-row gap-2">
                             <input
                                 type="text"
                                 placeholder="Tournament Name (e.g. Jan Weekly #1)"
@@ -151,7 +211,7 @@ export default function AdminPage() {
                             <button
                                 disabled={creating}
                                 type="submit"
-                                className="bg-primary text-black font-bold px-6 py-2 rounded-lg hover:bg-primary/90 flex items-center gap-2"
+                                className="bg-primary text-black font-bold px-6 py-2 rounded-lg hover:bg-primary/90 flex items-center justify-center gap-2"
                             >
                                 {creating ? <Loader2 className="animate-spin h-4 w-4" /> : <Plus className="h-4 w-4" />}
                                 Create
@@ -163,14 +223,14 @@ export default function AdminPage() {
 
                 {/* List */}
                 <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                         <h2 className="text-lg font-bold">Active Tournaments</h2>
                         <input
                             type="text"
                             placeholder="Search tournaments..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="bg-secondary/50 border border-transparent focus:border-primary/50 rounded-lg px-3 py-1.5 text-sm outline-none w-64 transition-colors"
+                            className="bg-secondary/50 border border-transparent focus:border-primary/50 rounded-lg px-3 py-1.5 text-sm outline-none w-full md:w-64 transition-colors"
                         />
                     </div>
                     {loading ? (
@@ -178,7 +238,7 @@ export default function AdminPage() {
                     ) : (
                         <div className="grid gap-4">
                             {filteredTournaments.map((t) => (
-                                <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex items-center justify-between group hover:border-primary/50 transition-colors">
+                                <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors">
                                     <div>
                                         <h3 className="font-bold text-lg">{t.Name}</h3>
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
@@ -190,7 +250,7 @@ export default function AdminPage() {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
                                         <div className="flex items-center gap-1">
                                             <Link
                                                 href={`/register/${t.TournamentID}`}
@@ -203,18 +263,7 @@ export default function AdminPage() {
 
                                             {t.Status === "OPEN" && (
                                                 <button
-                                                    onClick={async () => {
-                                                        if (confirm(`End tournament "${t.Name}"? This will disable new registrations.`)) {
-                                                            try {
-                                                                const res = await fetch("/api/admin/tournaments", {
-                                                                    method: "PATCH",
-                                                                    headers: { "Content-Type": "application/json" },
-                                                                    body: JSON.stringify({ tournamentId: t.TournamentID, status: "CLOSED" })
-                                                                });
-                                                                if (res.ok) fetchTournaments();
-                                                            } catch (e) { alert("Failed to update"); }
-                                                        }
-                                                    }}
+                                                    onClick={() => handleEndTournament(t)}
                                                     className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors"
                                                     title="End Tournament"
                                                 >
@@ -240,6 +289,17 @@ export default function AdminPage() {
                     )}
                 </div>
             </div>
+
+            <Modal
+                isOpen={modalConfig.isOpen}
+                onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                title={modalConfig.title}
+                description={modalConfig.desc}
+                type={modalConfig.type}
+                variant={modalConfig.variant}
+                onConfirm={modalConfig.onConfirm}
+                confirmText={modalConfig.confirmText || (modalConfig.type === 'confirm' ? (modalConfig.variant === 'destructive' ? 'Confirm End' : 'Confirm') : 'OK')}
+            />
         </div>
     );
 }

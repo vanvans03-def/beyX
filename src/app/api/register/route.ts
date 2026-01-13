@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appendRegistration } from "@/lib/sheets";
+import { createRegistration } from "@/lib/repository";
 import gameData from "@/data/game-data.json";
 
 // Validation Logic (Duplicated from Frontend for security, usually shared via lib/types but keeping simple here)
@@ -91,20 +91,16 @@ export async function POST(request: Request) {
         // ... (Keep existing checks, maybe extend for multi-deck later)
 
         const registrationData = {
-            TournamentID: tournamentId,
-            RoundID: crypto.randomUUID(),
-            Timestamp: new Date().toISOString(),
-            DeviceUUID: deviceUUID,
-            PlayerName: playerName,
-            Mode: mode,
-            Main_Bey1: mainBeys[0],
-            Main_Bey2: mainBeys[1],
-            Main_Bey3: mainBeys[2],
-            TotalPoints: String(totalPoints),
-            Reserve_Data: JSON.stringify(reserveDecks || []) // Store complex reserve data
+            tournament_id: tournamentId,
+            player_name: playerName,
+            device_uuid: deviceUUID,
+            mode: mode,
+            main_deck: [mainBeys[0], mainBeys[1], mainBeys[2]],
+            reserve_decks: reserveDecks || []
         };
 
-        await withRetry(() => appendRegistration(registrationData));
+        // repository.createRegistration handles dual write (Postgres + Sheets)
+        await withRetry(() => createRegistration(registrationData));
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
