@@ -213,97 +213,107 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     </div>
                 </header>
 
-                <div className="glass-card rounded-xl overflow-hidden overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-secondary/50 text-muted-foreground uppercase text-xs font-bold tracking-wider">
-                            <tr>
-                                <th className="p-4 whitespace-nowrap">Time</th>
-                                <th className="p-4 whitespace-nowrap">Player</th>
-                                <th className="p-4 whitespace-nowrap">Mode</th>
-                                <th className="p-4 whitespace-nowrap">Main Deck</th>
-                                <th className="p-4 whitespace-nowrap">Reserves</th>
-                                <th className="p-4 whitespace-nowrap">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {filteredData.map((row, i) => {
-                                const validation = validateRow(row);
-                                let reserveDecks: string[][] = [];
-                                try {
-                                    const parsed = JSON.parse(row.Reserve_Data);
-                                    if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-                                        // Legacy single deck
-                                        reserveDecks = [parsed as string[]];
-                                    } else {
-                                        reserveDecks = parsed;
-                                    }
-                                } catch (e) { }
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center min-h-[400px] glass-card rounded-xl">
+                        <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
+                        <h3 className="text-xl font-bold italic tracking-tighter text-white animate-pulse">
+                            FETCHING <span className="text-primary">DATA</span>
+                        </h3>
+                    </div>
+                ) : (
+                    <div className="glass-card rounded-xl overflow-hidden overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-secondary/50 text-muted-foreground uppercase text-xs font-bold tracking-wider">
+                                <tr>
+                                    <th className="p-4 whitespace-nowrap">Time</th>
+                                    <th className="p-4 whitespace-nowrap">Player</th>
+                                    <th className="p-4 whitespace-nowrap">Mode</th>
+                                    <th className="p-4 whitespace-nowrap">Main Deck</th>
+                                    <th className="p-4 whitespace-nowrap">Reserves</th>
+                                    <th className="p-4 whitespace-nowrap">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {filteredData.map((row, i) => {
+                                    const validation = validateRow(row);
+                                    let reserveDecks: string[][] = [];
+                                    try {
+                                        const parsed = JSON.parse(row.Reserve_Data);
+                                        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+                                            // Legacy single deck
+                                            reserveDecks = [parsed as string[]];
+                                        } else {
+                                            reserveDecks = parsed;
+                                        }
+                                    } catch (e) { }
 
-                                return (
-                                    <tr key={i} className="hover:bg-accent/5 transition-colors group">
-                                        <td className="p-4 whitespace-nowrap text-muted-foreground">
-                                            {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </td>
-                                        <td className="p-4 font-medium text-foreground whitespace-nowrap">{row.PlayerName}</td>
-                                        <td className="p-4 whitespace-nowrap">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
-                                                {row.Mode === "Under10" ? "U10" : "NMM"}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-xs space-y-1 min-w-[200px]">
-                                            <div className="flex gap-1 flex-wrap">
-                                                {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => (
-                                                    <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap">
-                                                        {b}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-xs space-y-2 min-w-[200px]">
-                                            {reserveDecks.map((deck, idx) => (
-                                                <div key={idx} className="flex gap-1 items-center opacity-80 flex-wrap">
-                                                    <span className="text-[9px] w-4 text-muted-foreground">#{idx + 1}</span>
-                                                    {deck.map((b, bIdx) => (
-                                                        <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap">
+                                    return (
+                                        <tr key={i} className="hover:bg-accent/5 transition-colors group">
+                                            <td className="p-4 whitespace-nowrap text-muted-foreground">
+                                                {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </td>
+                                            <td className="p-4 font-medium text-foreground whitespace-nowrap">{row.PlayerName}</td>
+                                            <td className="p-4 whitespace-nowrap">
+                                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
+                                                    {row.Mode === "Under10" ? "U10" : "NMM"}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-xs space-y-1 min-w-[200px]">
+                                                <div className="flex gap-1 flex-wrap">
+                                                    {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => (
+                                                        <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap">
                                                             {b}
                                                         </span>
                                                     ))}
                                                 </div>
-                                            ))}
-                                        </td>
-                                        <td className="p-4 whitespace-nowrap">
-                                            <div className="flex items-center justify-between gap-4">
-                                                <div className="flex items-center gap-2">
-                                                    {validation.status === "pass" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                    {validation.status === "fail" && <XCircle className="h-4 w-4 text-red-500" />}
-                                                    <span className={`font-bold ${validation.status === "pass" ? "text-green-500" :
-                                                        validation.status === "fail" ? "text-red-500" : "text-yellow-500"
-                                                        }`}>
-                                                        {validation.msg}
-                                                    </span>
+                                            </td>
+                                            <td className="p-4 text-xs space-y-2 min-w-[200px]">
+                                                {reserveDecks.map((deck, idx) => (
+                                                    <div key={idx} className="flex gap-1 items-center opacity-80 flex-wrap">
+                                                        <span className="text-[9px] w-4 text-muted-foreground">#{idx + 1}</span>
+                                                        {deck.map((b, bIdx) => (
+                                                            <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap">
+                                                                {b}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ))}
+                                            </td>
+                                            <td className="p-4 whitespace-nowrap">
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <div className="flex items-center gap-2">
+                                                        {validation.status === "pass" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                        {validation.status === "fail" && <XCircle className="h-4 w-4 text-red-500" />}
+                                                        <span className={`font-bold ${validation.status === "pass" ? "text-green-500" :
+                                                            validation.status === "fail" ? "text-red-500" : "text-yellow-500"
+                                                            }`}>
+                                                            {validation.msg}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleDelete(row)}
+                                                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 text-muted-foreground hover:text-red-500 transition-all"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onClick={() => handleDelete(row)}
-                                                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 text-muted-foreground hover:text-red-500 transition-all"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredData.length === 0 && !loading && (
+                                    <tr>
+                                        <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                                            No matching registrations found.
                                         </td>
                                     </tr>
-                                );
-                            })}
-                            {filteredData.length === 0 && !loading && (
-                                <tr>
-                                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                                        No matching registrations found.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                )}
 
                 <Modal
                     isOpen={modalConfig.isOpen}
@@ -316,6 +326,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     confirmText={modalConfig.variant === 'destructive' ? 'Delete' : 'OK'}
                 />
             </div>
-        </div>
+        </div >
     );
 }

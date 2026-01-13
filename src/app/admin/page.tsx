@@ -15,6 +15,7 @@ type Tournament = {
 
 export default function AdminPage() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Prevent flash
     const [passwordInput, setPasswordInput] = useState("");
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [newTournamentName, setNewTournamentName] = useState("");
@@ -45,6 +46,7 @@ export default function AdminPage() {
             setIsAuthenticated(true);
             fetchTournaments();
         }
+        setIsCheckingAuth(false);
     }, []);
 
     const handleLogin = (e: React.FormEvent) => {
@@ -139,6 +141,10 @@ export default function AdminPage() {
         t.Name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    if (isCheckingAuth) {
+        return null; // or a simple spinner, but null is fine to prevent flash
+    }
+
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -224,7 +230,7 @@ export default function AdminPage() {
                 {/* List */}
                 <div className="space-y-4">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                        <h2 className="text-lg font-bold">Active Tournaments</h2>
+                        <h2 className="text-lg font-bold">Tournaments</h2>
                         <input
                             type="text"
                             placeholder="Search tournaments..."
@@ -236,53 +242,93 @@ export default function AdminPage() {
                     {loading ? (
                         <div className="flex justify-center p-8"><Loader2 className="animate-spin text-muted-foreground" /></div>
                     ) : (
-                        <div className="grid gap-4">
-                            {filteredTournaments.map((t) => (
-                                <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors">
-                                    <div>
-                                        <h3 className="font-bold text-lg">{t.Name}</h3>
-                                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                                            <span className={cn(
-                                                "px-1.5 py-0.5 rounded font-bold uppercase",
-                                                t.Status === "OPEN" ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
-                                            )}>{t.Status}</span>
-                                            <span>• Created {new Date(t.CreatedAt).toLocaleDateString()}</span>
-                                        </div>
-                                    </div>
+                        <div className="space-y-8">
+                            {/* Active Tournaments */}
+                            <div className="space-y-4">
+                                <h2 className="text-lg font-bold flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                    Active Tournaments
+                                </h2>
+                                <div className="grid gap-4">
+                                    {filteredTournaments.filter(t => t.Status === 'OPEN').map((t) => (
+                                        <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors bg-gradient-to-r from-transparent to-primary/5">
+                                            <div>
+                                                <h3 className="font-bold text-lg text-white">{t.Name}</h3>
+                                                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                                                    <span className="px-1.5 py-0.5 rounded font-bold uppercase bg-green-500/20 text-green-500">
+                                                        {t.Status}
+                                                    </span>
+                                                    <span>• Created {new Date(t.CreatedAt).toLocaleDateString()}</span>
+                                                </div>
+                                            </div>
 
-                                    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                                        <div className="flex items-center gap-1">
-                                            <Link
-                                                href={`/register/${t.TournamentID}`}
-                                                target="_blank"
-                                                className="p-2 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-                                                title="Open Registration Link"
-                                            >
-                                                <ExternalLink className="h-5 w-5" />
-                                            </Link>
+                                            <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                                <div className="flex items-center gap-1">
+                                                    <Link
+                                                        href={`/register/${t.TournamentID}`}
+                                                        target="_blank"
+                                                        className="p-2 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                                                        title="Open Registration Link"
+                                                    >
+                                                        <ExternalLink className="h-5 w-5" />
+                                                    </Link>
 
-                                            {t.Status === "OPEN" && (
-                                                <button
-                                                    onClick={() => handleEndTournament(t)}
-                                                    className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors"
-                                                    title="End Tournament"
+                                                    <button
+                                                        onClick={() => handleEndTournament(t)}
+                                                        className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors"
+                                                        title="End Tournament"
+                                                    >
+                                                        <LockKeyhole className="h-5 w-5" />
+                                                    </button>
+                                                </div>
+                                                <Link
+                                                    href={`/admin/tournament/${t.TournamentID}`}
+                                                    className="bg-secondary hover:bg-primary hover:text-black text-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
                                                 >
-                                                    <LockKeyhole className="h-5 w-5" />
-                                                </button>
-                                            )}
+                                                    Manage <ArrowRight className="h-4 w-4" />
+                                                </Link>
+                                            </div>
                                         </div>
-                                        <Link
-                                            href={`/admin/tournament/${t.TournamentID}`}
-                                            className="bg-secondary hover:bg-primary hover:text-black text-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
-                                        >
-                                            Manage <ArrowRight className="h-4 w-4" />
-                                        </Link>
-                                    </div>
+                                    ))}
+                                    {filteredTournaments.filter(t => t.Status === 'OPEN').length === 0 && (
+                                        <div className="text-center p-8 text-muted-foreground bg-secondary/10 rounded-xl border border-white/5 font-mono text-sm">
+                                            No active tournaments.
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
-                            {filteredTournaments.length === 0 && (
-                                <div className="text-center p-8 text-muted-foreground bg-secondary/20 rounded-xl border-dashed border border-border">
-                                    No tournaments found.
+                            </div>
+
+                            {/* Past Tournaments */}
+                            {filteredTournaments.filter(t => t.Status !== 'OPEN').length > 0 && (
+                                <div className="space-y-4 pt-4 border-t border-white/5">
+                                    <h2 className="text-lg font-bold text-muted-foreground flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-gray-600" />
+                                        Past Tournaments
+                                    </h2>
+                                    <div className="grid gap-4">
+                                        {filteredTournaments.filter(t => t.Status !== 'OPEN').map((t) => (
+                                            <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 opacity-60 hover:opacity-100 transition-opacity grayscale hover:grayscale-0">
+                                                <div>
+                                                    <h3 className="font-bold text-lg">{t.Name}</h3>
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                                                        <span className="px-1.5 py-0.5 rounded font-bold uppercase bg-secondary text-muted-foreground">
+                                                            {t.Status}
+                                                        </span>
+                                                        <span>• Ended {new Date(t.CreatedAt).toLocaleDateString()}</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                                    <Link
+                                                        href={`/admin/tournament/${t.TournamentID}`}
+                                                        className="bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
+                                                    >
+                                                        View History <ArrowRight className="h-4 w-4" />
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>

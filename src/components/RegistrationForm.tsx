@@ -15,7 +15,7 @@ const allBeys = Object.entries(gameData.points).flatMap(([point, names]) =>
 );
 allBeys.sort((a, b) => a.name.localeCompare(b.name));
 
-export default function RegistrationForm({ tournamentId, tournamentName }: { tournamentId: string, tournamentName?: string }) {
+export default function RegistrationForm({ tournamentId, tournamentName, tournamentStatus }: { tournamentId: string, tournamentName?: string, tournamentStatus?: string }) {
     const [deviceUUID, setDeviceUUID] = useState("");
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -54,6 +54,22 @@ export default function RegistrationForm({ tournamentId, tournamentName }: { tou
             // Maybe just show specific "Already Registered" message.
         }
     }, [tournamentId]);
+
+    // Handle Tournament Closed for New Users
+    if (tournamentStatus === 'CLOSED' && !alreadyRegistered && !success) {
+        return (
+            <div className="flex flex-col items-center justify-center space-y-6 py-10 animate-in fade-in zoom-in-95 grayscale">
+                <div className="rounded-full bg-secondary p-6 ring-4 ring-white/10">
+                    <Trash2 className="h-16 w-16 text-muted-foreground" />
+                </div>
+                <div className="text-center space-y-2 max-w-xs">
+                    <h2 className="text-2xl font-bold text-foreground">Tournament Ended</h2>
+                    <p className="text-muted-foreground">Registration for this event is closed.</p>
+                    {tournamentName && <p className="text-sm font-bold opacity-50">{tournamentName}</p>}
+                </div>
+            </div>
+        );
+    }
 
     const validateDeck = (deck: string[]) => {
         // 1. Full
@@ -244,11 +260,17 @@ export default function RegistrationForm({ tournamentId, tournamentName }: { tou
         }
 
         return (
-            <div className="flex flex-col space-y-6 py-6 animate-in fade-in zoom-in-95">
+            <div className={cn("flex flex-col space-y-6 py-6 animate-in fade-in zoom-in-95", tournamentStatus === 'CLOSED' && "grayscale opacity-80")}>
                 <div className="text-center space-y-2">
-                    <div className="inline-flex items-center justify-center p-3 rounded-full bg-green-500/10 mb-2">
-                        <CheckCircle2 className="h-8 w-8 text-green-500" />
-                    </div>
+                    {tournamentStatus === 'CLOSED' ? (
+                        <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-secondary mb-2 border border-white/10">
+                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Tournament Ended</span>
+                        </div>
+                    ) : (
+                        <div className="inline-flex items-center justify-center p-3 rounded-full bg-green-500/10 mb-2">
+                            <CheckCircle2 className="h-8 w-8 text-green-500" />
+                        </div>
+                    )}
                     <h2 className="text-2xl font-bold text-foreground">Registration Complete</h2>
                     {tournamentName && <h3 className="text-lg font-bold text-primary">{tournamentName}</h3>}
                     <p className="text-muted-foreground text-sm">Your entry has been locked.</p>

@@ -36,7 +36,11 @@ export default async function RegisterPage({ params }: { params: Promise<{ id: s
 
                 {/* Form */}
                 <div className="flex-1 glass-card p-6 md:p-8 rounded-3xl shadow-2xl shadow-black/50 border border-white/5 backdrop-blur-xl">
-                    <RegistrationForm tournamentId={id} tournamentName={tournament?.name} />
+                    <RegistrationForm
+                        tournamentId={id}
+                        tournamentName={tournament?.name}
+                        tournamentStatus={tournament?.status}
+                    />
                 </div>
 
                 {/* Footer */}
