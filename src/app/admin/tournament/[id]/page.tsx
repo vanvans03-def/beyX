@@ -50,35 +50,53 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         if (cardRef.current === null) return;
         setGenerating(true);
         try {
-            await document.fonts.ready; // Ensure fonts load
+            await document.fonts.ready;
 
-            // Wait for all images to load
+            // 1. Force browser to paint images by "waking up" the layout
+            // We do this by toggling a tiny style change or just waiting
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            // 2. Wait for images to be strictly loaded
             const images = Array.from(cardRef.current.getElementsByTagName("img"));
             await Promise.all(
                 images.map((img) => {
-                    if (img.complete) return Promise.resolve();
+                    if (img.complete && img.naturalHeight > 0) return Promise.resolve();
                     return new Promise((resolve) => {
-                        img.onload = resolve;
-                        img.onerror = resolve; // Resolve even on error to prevent hanging
+                        img.onload = () => resolve(null);
+                        img.onerror = () => resolve(null);
+                        // Fallback timeout for individual images
+                        setTimeout(() => resolve(null), 3000);
                     });
                 })
             );
 
-            // Small delay to ensure rendering is stable after load
+            // 3. Double render trick for Safari/Mobile
+            // First pass to prime cache/font layout
+            try {
+                await toPng(cardRef.current, { cacheBust: true, pixelRatio: 1 });
+            } catch (e) { console.warn("Warmup render failed", e); }
+
+            // Small delay between renders
             await new Promise((resolve) => setTimeout(resolve, 500));
 
+            // Final high-res render
             const dataUrl = await toPng(cardRef.current, {
                 cacheBust: true,
                 backgroundColor: '#030303',
                 pixelRatio: 2 // High quality
             });
+
+            // Mobile-friendly download
             const link = document.createElement('a');
             link.download = `invite-${tournament?.Name || 'tournament'}.png`;
             link.href = dataUrl;
+            document.body.appendChild(link); // Required for Firefox/some mobile
             link.click();
+            document.body.removeChild(link);
+
         } catch (err) {
             console.error(err);
-            alert("Failed to generate image");
+            alert("Failed to generate image. Please try again.");
         } finally {
             setGenerating(false);
         }
@@ -383,7 +401,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </div>
 
                         {/* HIDDEN RENDER CONTAINER FOR IMAGE GENERATION */}
-                        <div style={{ position: "absolute", top: "-9999px", left: "-9999px" }}>
+                        {/* We use opacity: 0 instead of display: none or huge offset to ensure browser renders it for capture */}
+                        <div style={{ position: "fixed", top: 0, left: 0, zIndex: -50, opacity: 0, pointerEvents: "none" }}>
                             <div
                                 ref={cardRef}
                                 className="w-[1200px] min-h-[630px] h-fit bg-black text-white relative flex"
