@@ -44,10 +44,29 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const cardRef = useRef<HTMLDivElement>(null);
 
+    const [generating, setGenerating] = useState(false);
+
     const handleDownloadCard = async () => {
         if (cardRef.current === null) return;
+        setGenerating(true);
         try {
             await document.fonts.ready; // Ensure fonts load
+
+            // Wait for all images to load
+            const images = Array.from(cardRef.current.getElementsByTagName("img"));
+            await Promise.all(
+                images.map((img) => {
+                    if (img.complete) return Promise.resolve();
+                    return new Promise((resolve) => {
+                        img.onload = resolve;
+                        img.onerror = resolve; // Resolve even on error to prevent hanging
+                    });
+                })
+            );
+
+            // Small delay to ensure rendering is stable after load
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
             const dataUrl = await toPng(cardRef.current, {
                 cacheBust: true,
                 backgroundColor: '#030303',
@@ -60,6 +79,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         } catch (err) {
             console.error(err);
             alert("Failed to generate image");
+        } finally {
+            setGenerating(false);
         }
     };
 
@@ -313,17 +334,27 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </div>
                     </div>
                     <div className="glass-card p-6 rounded-xl flex flex-col gap-6 relative overflow-hidden">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <h3 className="font-bold text-foreground flex items-center gap-2">
                                 <Share2 className="h-4 w-4 text-primary" />
                                 {t('detail.share_link')} & Invite Card
                             </h3>
                             <button
                                 onClick={handleDownloadCard}
-                                className="text-xs flex items-center gap-1 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all"
+                                disabled={generating}
+                                className="text-xs flex items-center gap-1 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                <Download className="h-3 w-3" />
-                                Download Invite Card
+                                {generating ? (
+                                    <>
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        Generating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="h-3 w-3" />
+                                        Download Invite Card
+                                    </>
+                                )}
                             </button>
                         </div>
 
