@@ -4,9 +4,10 @@ import { useState, useEffect, useMemo } from "react";
 import { VisualSelector } from "@/components/ui/VisualSelector";
 import gameData from "@/data/game-data.json";
 import { cn } from "@/lib/utils";
-import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, Plus, Trash2, Globe } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
+import { useTranslation } from "@/hooks/useTranslation";
 
 type RegistrationMode = "Under10" | "NoMoreMeta";
 
@@ -15,7 +16,20 @@ const allBeys = Object.entries(gameData.points).flatMap(([point, names]) =>
 );
 allBeys.sort((a, b) => a.name.localeCompare(b.name));
 
-export default function RegistrationForm({ tournamentId, tournamentName, tournamentStatus }: { tournamentId: string, tournamentName?: string, tournamentStatus?: string }) {
+export default function RegistrationForm({
+    tournamentId,
+    tournamentName,
+    tournamentStatus,
+    tournamentType,
+    banList
+}: {
+    tournamentId: string,
+    tournamentName?: string,
+    tournamentStatus?: string,
+    tournamentType?: string,
+    banList?: string[]
+}) {
+    const { t, lang, toggleLang } = useTranslation();
     const [deviceUUID, setDeviceUUID] = useState("");
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -49,11 +63,14 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
         const lockKey = `reg_lock_${tournamentId}`;
         if (localStorage.getItem(lockKey)) {
             setAlreadyRegistered(true);
-            // Load saved data for display if available? 
-            // User said: "Cannot edit". 
-            // Maybe just show specific "Already Registered" message.
         }
     }, [tournamentId]);
+
+    // Force mode based on Tournament Type
+    useEffect(() => {
+        if (tournamentType === 'U10') setMode('Under10');
+        else if (tournamentType === 'NoMoreMeta') setMode('NoMoreMeta');
+    }, [tournamentType]);
 
     // Handle Tournament Closed for New Users
     if (tournamentStatus === 'CLOSED' && !alreadyRegistered && !success) {
@@ -63,8 +80,8 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                     <Trash2 className="h-16 w-16 text-muted-foreground" />
                 </div>
                 <div className="text-center space-y-2 max-w-xs">
-                    <h2 className="text-2xl font-bold text-foreground">Tournament Ended</h2>
-                    <p className="text-muted-foreground">Registration for this event is closed.</p>
+                    <h2 className="text-2xl font-bold text-foreground">{t('reg.closed')}</h2>
+                    <p className="text-muted-foreground">{t('reg.closed.desc')}</p>
                     {tournamentName && <p className="text-sm font-bold opacity-50">{tournamentName}</p>}
                 </div>
             </div>
@@ -73,9 +90,9 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
 
     const validateDeck = (deck: string[]) => {
         // 1. Full
-        if (deck.some(b => !b)) return { valid: false, message: "Incomplete Deck" };
+        if (deck.some(b => !b)) return { valid: false, message: t('reg.validation.incomplete') };
         // 2. Unique
-        if (new Set(deck).size !== 3) return { valid: false, message: "Duplicate Blades" };
+        if (new Set(deck).size !== 3) return { valid: false, message: t('reg.validation.duplicate') };
 
         // 3. Mode
         if (mode === "Under10") {
@@ -83,11 +100,13 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                 const b = allBeys.find(x => x.name === name);
                 return sum + (b?.point || 0);
             }, 0);
-            if (total > 10) return { valid: false, message: `${total}/10 pts`, points: total };
+            if (total > 10) return { valid: false, message: t('reg.validation.points', { pts: total }), points: total };
             return { valid: true, points: total };
         } else {
-            const banned = deck.filter(name => gameData.banList.includes(name));
-            if (banned.length > 0) return { valid: false, message: "Banned Item" };
+            // Use custom ban list if provided, else default
+            const effectiveBanList = (banList && banList.length > 0) ? banList : gameData.banList;
+            const banned = deck.filter(name => effectiveBanList.includes(name));
+            if (banned.length > 0) return { valid: false, message: t('reg.validation.banned') };
             return { valid: true, message: "" };
         }
     };
@@ -95,12 +114,12 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
     const validationResult = useMemo(() => {
         // Main Deck
         const mainVal = validateDeck(mainBeys);
-        if (!mainVal.valid) return { valid: false, section: "Main Deck", message: mainVal.message, points: mainVal.points };
+        if (!mainVal.valid) return { valid: false, section: t('reg.deck.main'), message: mainVal.message, points: mainVal.points };
 
         // Reserve Decks
         for (let i = 0; i < reserveDecks.length; i++) {
             const resVal = validateDeck(reserveDecks[i]);
-            if (!resVal.valid) return { valid: false, section: `Reserve ${i + 1}`, message: resVal.message, points: resVal.points };
+            if (!resVal.valid) return { valid: false, section: t('reg.deck.reserve_item', { n: i + 1 }), message: resVal.message, points: resVal.points };
         }
 
         return { valid: true, section: "", message: "", points: mainVal.points };
@@ -110,7 +129,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
         e.preventDefault();
         if (!validationResult.valid) return;
         if (!playerName.trim()) {
-            setErrorMSG("Please enter your name.");
+            setErrorMSG(t('reg.error.name'));
             return;
         }
         setLoading(true);
@@ -133,7 +152,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                 body: JSON.stringify(payload),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || "Registration failed");
+            if (!res.ok) throw new Error(data.message || t('reg.error.failed'));
 
             setSuccess(true);
             // Lock this device for this tournament
@@ -142,7 +161,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
             localStorage.setItem(`reg_data_${tournamentId}`, JSON.stringify(payload));
 
         } catch (err: any) {
-            setErrorMSG(err.message || "Something went wrong.");
+            setErrorMSG(err.message || t('reg.error.generic'));
         } finally {
             setLoading(false);
         }
@@ -186,7 +205,9 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
         // @ts-ignore
         const imgPath = imageMap[name];
         const pt = allBeys.find(b => b.name === name)?.point;
-        const isBanned = mode === "NoMoreMeta" && gameData.banList.includes(name);
+
+        const effectiveBanList = (banList && banList.length > 0) ? banList : gameData.banList;
+        const isBanned = mode !== "Under10" && effectiveBanList.includes(name);
 
         return (
             <button
@@ -222,12 +243,12 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                                     </span>
                                 )}
                                 {isBanned && (
-                                    <span className="text-[10px] text-destructive font-bold uppercase">Banned</span>
+                                    <span className="text-[10px] text-destructive font-bold uppercase">{t('reg.banned')}</span>
                                 )}
                             </div>
                         </>
                     ) : (
-                        <span className="text-sm font-medium text-muted-foreground">Select...</span>
+                        <span className="text-sm font-medium text-muted-foreground">{t('reg.select')}</span>
                     )}
                 </div>
 
@@ -251,8 +272,8 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                         <CheckCircle2 className="h-16 w-16 text-green-500" />
                     </div>
                     <div className="text-center space-y-2 max-w-xs">
-                        <h2 className="text-2xl font-bold text-foreground">Registered!</h2>
-                        <p className="text-muted-foreground">You are registered for this tournament.</p>
+                        <h2 className="text-2xl font-bold text-foreground">{t('reg.success.title')}</h2>
+                        <p className="text-muted-foreground">{t('reg.success.desc')}</p>
                         {tournamentName && <p className="text-sm font-bold text-primary opacity-80">{tournamentName}</p>}
                     </div>
                 </div>
@@ -264,22 +285,22 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                 <div className="text-center space-y-2">
                     {tournamentStatus === 'CLOSED' ? (
                         <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-secondary mb-2 border border-white/10">
-                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Tournament Ended</span>
+                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('reg.closed')}</span>
                         </div>
                     ) : (
                         <div className="inline-flex items-center justify-center p-3 rounded-full bg-green-500/10 mb-2">
                             <CheckCircle2 className="h-8 w-8 text-green-500" />
                         </div>
                     )}
-                    <h2 className="text-2xl font-bold text-foreground">Registration Complete</h2>
+                    <h2 className="text-2xl font-bold text-foreground">{t('reg.complete')}</h2>
                     {tournamentName && <h3 className="text-lg font-bold text-primary">{tournamentName}</h3>}
-                    <p className="text-muted-foreground text-sm">Your entry has been locked.</p>
+                    <p className="text-muted-foreground text-sm">{t('reg.locked')}</p>
                 </div>
 
                 <div className="space-y-6">
                     {/* Player Card */}
                     <div className="glass-card p-4 rounded-xl border border-white/10 space-y-2">
-                        <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Player Profile</div>
+                        <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('reg.player_profile')}</div>
                         <div className="flex items-center justify-between">
                             <span className="text-lg font-bold text-white max-w-[200px] truncate" title={savedData.playerName}>{savedData.playerName}</span>
                             <span className={cn("px-2 py-1 rounded text-xs font-bold", savedData.mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400")}>
@@ -291,7 +312,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                     {/* Main Deck */}
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
-                            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Main Deck</h3>
+                            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">{t('reg.deck.main')}</h3>
                             {savedData.mode === "Under10" && (
                                 <span className="text-xs font-bold text-primary">{savedData.totalPoints}/10 pts</span>
                             )}
@@ -313,10 +334,10 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                     {/* Reserve Decks */}
                     {savedData.reserveDecks && savedData.reserveDecks.length > 0 && (
                         <div className="space-y-4 pt-4 border-t border-white/5">
-                            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider px-1">Reserve Decks</h3>
+                            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider px-1">{t('reg.deck.reserve')}</h3>
                             {savedData.reserveDecks.map((deck: string[], dIdx: number) => (
                                 <div key={dIdx} className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
-                                    <div className="text-xs font-bold text-muted-foreground mb-2">Deck {dIdx + 1}</div>
+                                    <div className="text-xs font-bold text-muted-foreground mb-2">{t('reg.deck.reserve_item', { n: dIdx + 1 })}</div>
                                     {deck.map((bey: string, sIdx: number) => (
                                         <div key={sIdx} className="flex items-center gap-2">
                                             <div className="w-6 h-6 rounded bg-black/40 relative overflow-hidden">
@@ -333,7 +354,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                 </div>
 
                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-xs text-yellow-200/80 text-center">
-                    Registration is final. Contact the Tournament Organizer for changes.
+                    {t('reg.final_warning')}
                 </div>
             </div>
         );
@@ -342,32 +363,45 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
     return (
         <>
             <form onSubmit={handleSubmit} className="space-y-8 animate-in slide-in-from-bottom-5 duration-500 pb-20">
+                <div className="flex justify-end">
+                    <button
+                        type="button"
+                        onClick={toggleLang}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 hover:bg-secondary text-xs font-medium transition-colors"
+                    >
+                        <Globe className="h-3 w-3" />
+                        {lang === 'TH' ? 'EN' : 'ไทย'}
+                    </button>
+                </div>
 
                 {/* Player Info */}
                 <div className="space-y-2">
                     <label htmlFor="playerName" className="text-sm font-semibold text-muted-foreground uppercase tracking-wider ml-1">
-                        Player Name
+                        {t('reg.player_name')}
                     </label>
+
                     <input
                         id="playerName"
                         type="text"
                         value={playerName}
                         onChange={(e) => setPlayerName(e.target.value)}
-                        placeholder="Enter your Display Name"
+                        placeholder={t('reg.placeholder.name')}
                         className="w-full rounded-lg border border-input bg-secondary px-4 py-3 font-medium text-foreground outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/50"
                     />
                 </div>
 
-                {/* Mode Selection */}
-                <div className="grid grid-cols-2 gap-2 p-1 bg-secondary rounded-xl">
-                    <button type="button" onClick={() => setMode("Under10")} className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", mode === "Under10" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}>U10 (Points)</button>
-                    <button type="button" onClick={() => setMode("NoMoreMeta")} className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", mode === "NoMoreMeta" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}>No More Meta</button>
-                </div>
+                {/* Mode Selection - Hide if fixed by tournament type */}
+                {!tournamentType && (
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-secondary rounded-xl">
+                        <button type="button" onClick={() => setMode("Under10")} className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", mode === "Under10" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}>{t('reg.mode.u10')}</button>
+                        <button type="button" onClick={() => setMode("NoMoreMeta")} className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", mode === "NoMoreMeta" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}>{t('reg.mode.nmm')}</button>
+                    </div>
+                )}
 
                 {/* Main Deck */}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between px-1">
-                        <h3 className="text-lg font-bold text-foreground">Main Deck</h3>
+                        <h3 className="text-lg font-bold text-foreground">{t('reg.deck.main')}</h3>
                         {mode === "Under10" && (
                             <span className={cn(
                                 "text-sm font-bold px-2 py-0.5 rounded",
@@ -395,7 +429,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                 <div className="space-y-6 pt-4 border-t border-border">
                     <div className="flex items-center justify-between px-1">
                         <h3 className="text-lg font-bold text-foreground">
-                            Reserves <span className="text-xs font-normal text-muted-foreground">({reserveDecks.length}/3)</span>
+                            {t('reg.deck.reserve')} <span className="text-xs font-normal text-muted-foreground">({reserveDecks.length}/3)</span>
                         </h3>
                     </div>
 
@@ -404,7 +438,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                         return (
                             <div key={dIdx} className="space-y-2 bg-secondary/10 p-3 rounded-xl border border-border/50">
                                 <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-bold text-muted-foreground uppercase">Reserve Deck {dIdx + 1}</h4>
+                                    <h4 className="text-sm font-bold text-muted-foreground uppercase">{t('reg.deck.reserve_item', { n: dIdx + 1 })}</h4>
                                     <div className="flex items-center gap-2">
                                         {mode === "Under10" && (
                                             <span className={cn("text-xs font-bold", val.points! <= 10 ? "text-primary" : "text-destructive")}>
@@ -437,7 +471,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                             className="w-full py-4 border-2 border-dashed border-border rounded-xl flex items-center justify-center gap-2 text-muted-foreground hover:bg-secondary/50 hover:border-primary/50 hover:text-primary transition-all font-bold"
                         >
                             <Plus className="h-5 w-5" />
-                            Add Reserve Deck
+                            {t('reg.btn.add_reserve')}
                         </button>
                     )}
                 </div>
@@ -457,7 +491,7 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
                         disabled={!validationResult.valid || loading || !playerName}
                         className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-sm font-bold text-black shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
                     >
-                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Complete Registration"}
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('reg.btn.submit')}
                     </button>
                 </div>
 
@@ -465,16 +499,20 @@ export default function RegistrationForm({ tournamentId, tournamentName, tournam
 
             {selectingState && (
                 <VisualSelector
-                    label={selectingState.type === 'main' ? `Main Bey ${selectingState.slotIndex + 1}` : `Res ${selectingState.deckIndex + 1} - Bey ${selectingState.slotIndex + 1}`}
+                    label={selectingState.type === 'main' ? t('reg.selector.main', { n: selectingState.slotIndex + 1 }) : t('reg.selector.reserve', { d: selectingState.deckIndex + 1, n: selectingState.slotIndex + 1 })}
                     value={selectingState.type === 'main'
                         ? mainBeys[selectingState.slotIndex]
                         : reserveDecks[selectingState.deckIndex][selectingState.slotIndex]}
                     onChange={handleSelect}
                     onClose={() => setSelectingState(null)}
-                    options={allBeys.map(opt => ({
-                        ...opt,
-                        blocked: false // Only hard block if needed, let validation handle soft limits
-                    }))}
+                    options={allBeys.map(opt => {
+                        const effectiveBanList = (banList && banList.length > 0) ? banList : gameData.banList;
+                        const isBanned = mode !== "Under10" && effectiveBanList.includes(opt.name);
+                        return {
+                            ...opt,
+                            blocked: isBanned
+                        };
+                    })}
                     maxPoint={(() => {
                         if (mode !== 'Under10') return undefined;
                         // Calculate current points for the ACTIVE deck being edited

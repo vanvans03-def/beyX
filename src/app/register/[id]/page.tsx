@@ -40,13 +40,15 @@ export default async function RegisterPage({ params }: { params: Promise<{ id: s
                         tournamentId={id}
                         tournamentName={tournament?.name}
                         tournamentStatus={tournament?.status}
+                        tournamentType={tournament?.type}
+                        banList={tournament?.ban_list}
                     />
                 </div>
 
                 {/* Footer */}
                 <footer className="mt-8 text-center">
                     <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest font-medium">
-                        Powered by สายใต้ยิม - V0.0.2
+                        Powered by สายใต้ยิม
                     </p>
                 </footer>
             </main>

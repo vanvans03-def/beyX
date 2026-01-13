@@ -7,7 +7,9 @@ export type Tournament = {
     id: string;
     name: string;
     status: 'OPEN' | 'CLOSED';
-    created_at: Date; // Supabase returns string string, we might need to parse? usually js sdk returns string.
+    created_at: Date;
+    type: 'U10' | 'NoMoreMeta' | 'Open';
+    ban_list: string[];
 };
 
 export type Registration = {
@@ -39,11 +41,35 @@ export async function getTournaments(): Promise<Tournament[]> {
         id: r.id,
         name: r.name,
         status: r.status,
-        created_at: new Date(r.created_at)
+        created_at: new Date(r.created_at),
+        type: r.type || 'U10', // Default for legacy data
+        ban_list: r.ban_list || []
     }));
 }
 
-export async function createTournament(name: string): Promise<Tournament> {
+export async function getTournament(id: string): Promise<Tournament | null> {
+    const { data, error } = await supabaseAdmin
+        .from('tournaments')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+    if (error) {
+        if (error.code === 'PGRST116') return null; // Not found
+        throw new Error(error.message);
+    }
+
+    return {
+        id: data.id,
+        name: data.name,
+        status: data.status,
+        created_at: new Date(data.created_at),
+        type: data.type || 'U10',
+        ban_list: data.ban_list || []
+    };
+}
+
+export async function createTournament(name: string, type: 'U10' | 'NoMoreMeta' | 'Open' = 'U10', ban_list: string[] = []): Promise<Tournament> {
     const id = uuidv4();
     const status = 'OPEN';
     const created_at = new Date();
@@ -51,7 +77,14 @@ export async function createTournament(name: string): Promise<Tournament> {
     // 1. Supabase
     const { error } = await supabaseAdmin
         .from('tournaments')
-        .insert([{ id, name, status, created_at: created_at.toISOString() }]);
+        .insert([{
+            id,
+            name,
+            status,
+            created_at: created_at.toISOString(),
+            type,
+            ban_list
+        }]);
 
     if (error) {
         throw new Error(`Supabase Insert Failed: ${error.message}`);
@@ -64,7 +97,7 @@ export async function createTournament(name: string): Promise<Tournament> {
     //     console.error("Sheets Error (createTournament):", e);
     // }
 
-    return { id, name, status, created_at };
+    return { id, name, status, created_at, type, ban_list };
 }
 
 export async function updateTournamentStatus(id: string, status: 'OPEN' | 'CLOSED') {
