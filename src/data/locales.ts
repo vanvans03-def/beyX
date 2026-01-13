@@ -58,6 +58,7 @@ export const locales = {
         "detail.csv": "ส่งออก CSV",
         "detail.status": "สถานะ",
         "detail.type": "ประเภท",
+        "detail.rules_title": "กฎกติกาการแข่งขัน",
         "detail.banned_parts": "ชิ้นส่วนที่ถูกแบน",
 
         // Tournament Types
@@ -130,6 +131,7 @@ export const locales = {
         "detail.csv": "Export CSV",
         "detail.status": "Status",
         "detail.type": "Type",
+        "detail.rules_title": "Tournament Rules",
         "detail.banned_parts": "Banned Parts",
 
         // Tournament Types
