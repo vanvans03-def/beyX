@@ -50,71 +50,87 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const handleGeneratePreview = async () => {
         if (cardRef.current === null) return;
         setGenerating(true);
+
+        // Give UI time to show the card (with opacity 0.01)
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         try {
             // Wait for fonts
             await document.fonts.ready;
 
             // Step 1: Collect ALL image URLs from the card
             const imageElements = Array.from(cardRef.current.getElementsByTagName("img"));
-            const imageUrls = imageElements
-                .map(img => img.src)
-                .filter(src => src && src.startsWith('http'));
+            console.log(`Found ${imageElements.length} images in card`);
 
-            console.log(`Preloading ${imageUrls.length} images...`);
-
-            // Step 2: Preload ALL images into browser cache FIRST
-            const preloadPromises = imageUrls.map((url, idx) => {
+            // Step 2: Wait for each image to be complete
+            const imagePromises = imageElements.map((img, idx) => {
                 return new Promise<void>((resolve) => {
-                    const img = document.createElement('img') as HTMLImageElement;
-                    img.crossOrigin = "anonymous";
+                    if (img.complete && img.naturalHeight > 0) {
+                        console.log(`✓ Image ${idx + 1} already loaded`);
+                        resolve();
+                        return;
+                    }
 
                     let resolved = false;
 
-                    img.onload = () => {
+                    const onLoad = () => {
                         if (!resolved) {
-                            console.log(`✓ Preloaded ${idx + 1}/${imageUrls.length}`);
+                            console.log(`✓ Image ${idx + 1} loaded`);
                             resolved = true;
+                            cleanup();
                             resolve();
                         }
                     };
 
-                    img.onerror = () => {
+                    const onError = () => {
                         if (!resolved) {
-                            console.warn(`✗ Failed ${idx + 1}/${imageUrls.length}`);
+                            console.warn(`✗ Image ${idx + 1} failed`);
                             resolved = true;
+                            cleanup();
                             resolve();
                         }
                     };
+
+                    const cleanup = () => {
+                        img.removeEventListener('load', onLoad);
+                        img.removeEventListener('error', onError);
+                    };
+
+                    img.addEventListener('load', onLoad);
+                    img.addEventListener('error', onError);
+
+                    // Force reload if needed
+                    const src = img.src;
+                    img.src = '';
+                    img.src = src;
 
                     // Timeout after 10s
                     setTimeout(() => {
                         if (!resolved) {
-                            console.warn(`⏱ Timeout ${idx + 1}/${imageUrls.length}`);
+                            console.warn(`⏱ Image ${idx + 1} timeout`);
                             resolved = true;
+                            cleanup();
                             resolve();
                         }
                     }, 10000);
-
-                    img.src = url;
                 });
             });
 
-            // Wait for ALL images to preload
-            await Promise.all(preloadPromises);
-            console.log('All images preloaded!');
+            await Promise.all(imagePromises);
+            console.log('All images processed!');
 
-            // Step 3: Force browser to paint/decode
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            // Step 3: Give iOS extra time to decode and paint
+            await new Promise((resolve) => setTimeout(resolve, 3000));
 
-            // Step 4: Trigger reflow
+            // Step 4: Force reflow
             cardRef.current.style.transform = 'translateZ(0)';
             void cardRef.current.offsetHeight;
             await new Promise((resolve) => setTimeout(resolve, 500));
 
-            // Step 5: Warmup render
+            // Step 5: Warmup render (low quality)
             try {
                 await toJpeg(cardRef.current, {
-                    cacheBust: false, // Don't bust cache since we preloaded
+                    cacheBust: false,
                     pixelRatio: 1,
                     quality: 0.3,
                     backgroundColor: '#030303'
