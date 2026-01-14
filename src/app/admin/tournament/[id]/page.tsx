@@ -332,7 +332,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 <div className="relative w-full aspect-square">
                                                     {hasImg ? (
                                                         // @ts-ignore
-                                                        <Image src={imageMap[bey]} alt={bey} width={100} height={100} className="w-full h-full object-contain grayscale-[0.5] opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all" />
+                                                        <img
+                                                            src={imageMap[bey]}
+                                                            alt={bey}
+                                                            className="w-full h-full object-contain grayscale-[0.5] opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all"
+                                                            loading="eager"
+                                                        />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground bg-black/20 rounded">IMG</div>
                                                     )}
@@ -383,9 +388,23 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${id}`} size={100} />
                             </div>
                             <div className="space-y-2 flex-1 min-w-0">
-                                <div className="p-2 bg-secondary rounded text-xs font-mono text-muted-foreground break-all border border-white/5">
-                                    {typeof window !== 'undefined' ? `${window.location.host}/register/${id}` : `.../register/${id}`}
+                                <div className="flex items-center gap-2">
+                                    <div className="flex-1 p-2 bg-secondary rounded text-xs font-mono text-muted-foreground break-all border border-white/5">
+                                        {typeof window !== 'undefined' ? `${window.location.host}/register/${id}` : `.../register/${id}`}
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const url = `${window.location.origin}/register/${id}`;
+                                            navigator.clipboard.writeText(url);
+                                            alert("Link copied!");
+                                        }}
+                                        className="p-2 bg-secondary hover:bg-secondary/80 rounded transition-colors text-primary"
+                                        title="Copy Link"
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </button>
                                 </div>
+
                                 <div className="flex gap-2">
                                     {tournament?.Type && (
                                         <span className={
