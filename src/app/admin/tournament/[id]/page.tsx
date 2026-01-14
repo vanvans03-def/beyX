@@ -45,18 +45,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const cardRef = useRef<HTMLDivElement>(null);
 
     const [generating, setGenerating] = useState(false);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-    const handleDownloadCard = async () => {
+    const handleGeneratePreview = async () => {
         if (cardRef.current === null) return;
         setGenerating(true);
         try {
             await document.fonts.ready;
 
-            // 1. Force browser to paint images by "waking up" the layout
-            // We do this by toggling a tiny style change or just waiting
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            // 2. Wait for images to be strictly loaded
             const images = Array.from(cardRef.current.getElementsByTagName("img"));
             await Promise.all(
                 images.map((img) => {
@@ -64,43 +62,48 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     return new Promise((resolve) => {
                         img.onload = () => resolve(null);
                         img.onerror = () => resolve(null);
-                        // Fallback timeout for individual images
                         setTimeout(() => resolve(null), 3000);
                     });
                 })
             );
 
-            // 3. Double render trick for Safari/Mobile
-            // First pass to prime cache/font layout
             try {
                 await toJpeg(cardRef.current, { cacheBust: true, pixelRatio: 1, quality: 0.5 });
             } catch (e) { console.warn("Warmup render failed", e); }
 
-            // Small delay between renders
             await new Promise((resolve) => setTimeout(resolve, 500));
 
-            // Final render - Normal Quality (Ratio 1)
             const dataUrl = await toJpeg(cardRef.current, {
                 cacheBust: true,
                 backgroundColor: '#030303',
-                pixelRatio: 1, // Reduced from 2 to 1 for speed
-                quality: 0.95 // High JPEG quality
+                pixelRatio: 1,
+                quality: 0.95
             });
 
-            // Mobile-friendly download
-            const link = document.createElement('a');
-            link.download = `invite-${tournament?.Name || 'tournament'}.jpg`;
-            link.href = dataUrl;
-            document.body.appendChild(link); // Required for Firefox/some mobile
-            link.click();
-            document.body.removeChild(link);
+            setPreviewImage(dataUrl);
 
         } catch (err) {
             console.error(err);
-            alert("Failed to generate image. Please try again.");
+            setModalConfig({
+                isOpen: true,
+                title: "Error",
+                desc: "Failed to generate image.",
+                type: "alert",
+                variant: "destructive"
+            });
         } finally {
             setGenerating(false);
         }
+    };
+
+    const handleSaveImage = () => {
+        if (!previewImage) return;
+        const link = document.createElement('a');
+        link.download = `invite-${tournament?.Name || 'tournament'}.jpg`;
+        link.href = previewImage;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     // Modal State
@@ -364,19 +367,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 {t('detail.share_link')} & Invite Card
                             </h3>
                             <button
-                                onClick={handleDownloadCard}
+                                onClick={handleGeneratePreview}
                                 disabled={generating}
                                 className="text-xs flex items-center gap-1 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {generating ? (
                                     <>
                                         <Loader2 className="h-3 w-3 animate-spin" />
-                                        Generating...
+                                        Creating...
                                     </>
                                 ) : (
                                     <>
-                                        <Download className="h-3 w-3" />
-                                        Download Invite Card
+                                        <ImageIcon className="h-3 w-3" />
+                                        Create Invite Card
                                     </>
                                 )}
                             </button>
@@ -704,6 +707,42 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     onConfirm={modalConfig.onConfirm}
                     confirmText={modalConfig.variant === 'destructive' ? 'Delete' : 'OK'}
                 />
+
+                {/* IMAGE PREVIEW MODAL */}
+                <Modal
+                    isOpen={!!previewImage}
+                    onClose={() => setPreviewImage(null)}
+                    title="Invite Card Created"
+                    type="custom"
+                >
+                    <div className="flex flex-col gap-6">
+                        <div className="relative w-full aspect-[1.91/1] bg-black/50 rounded-lg overflow-hidden border border-white/10">
+                            {previewImage && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={previewImage} alt="Preview" className="w-full h-full object-contain" />
+                            )}
+                        </div>
+                        <p className="text-xs text-center text-muted-foreground">
+                            If the image looks correct, click Download below. <br />
+                            If images are missing, try closing and generating again.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setPreviewImage(null)}
+                                className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={handleSaveImage}
+                                className="px-6 py-2 rounded-lg text-sm font-bold text-black bg-primary hover:bg-primary/90 transition-colors shadow-lg shadow-black/20 flex items-center gap-2"
+                            >
+                                <Download className="h-4 w-4" />
+                                Download Image
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             </div>
         </div >
     );
