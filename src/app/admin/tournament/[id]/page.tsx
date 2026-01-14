@@ -5,7 +5,8 @@ import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft,
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
 import { QRCodeSVG } from "qrcode.react";
-import { toPng } from "html-to-image";
+// @ts-ignore
+import domtoimage from "dom-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import { Download, Share2, ImageIcon } from "lucide-react";
@@ -94,14 +95,21 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             console.log('Images ready, waiting for paint...');
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
-            console.log('Capturing with html-to-image...');
+            console.log('Capturing with dom-to-image...');
 
-            // Use html-to-image
-            const dataUrl = await toPng(cardRef.current, {
-                backgroundColor: '#030303',
-                pixelRatio: 2, // High quality
+            // Use dom-to-image
+            // @ts-ignore
+            const dataUrl = await domtoimage.toPng(cardRef.current, {
+                bgcolor: '#030303',
                 cacheBust: true,
-                skipAutoScale: true
+                style: {
+                    transform: 'scale(2)',
+                    transformOrigin: 'top left',
+                    width: `${cardRef.current.offsetWidth}px`,
+                    height: `${cardRef.current.offsetHeight}px`
+                },
+                width: cardRef.current.offsetWidth * 2,
+                height: cardRef.current.offsetHeight * 2
             });
 
             console.log('✓ Image generated successfully');
