@@ -54,80 +54,87 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             // Wait for fonts
             await document.fonts.ready;
 
-            // Collect all images
-            const images = Array.from(cardRef.current.getElementsByTagName("img"));
-            console.log(`Found ${images.length} images to load`);
+            // Step 1: Collect ALL image URLs from the card
+            const imageElements = Array.from(cardRef.current.getElementsByTagName("img"));
+            const imageUrls = imageElements
+                .map(img => img.src)
+                .filter(src => src && src.startsWith('http'));
 
-            // iOS-specific: Preload images into memory first
-            const imagePromises = images.map((img) => {
+            console.log(`Preloading ${imageUrls.length} images...`);
+
+            // Step 2: Preload ALL images into browser cache FIRST
+            const preloadPromises = imageUrls.map((url, idx) => {
                 return new Promise<void>((resolve) => {
-                    const src = img.src;
-                    if (!src) {
-                        resolve();
-                        return;
-                    }
+                    const img = document.createElement('img') as HTMLImageElement;
+                    img.crossOrigin = "anonymous";
 
-                    // Create a new image object to force actual load
-                    const tempImg = new window.Image();
-                    tempImg.crossOrigin = "anonymous";
+                    let resolved = false;
 
-                    tempImg.onload = () => {
-                        console.log(`Preloaded: ${src.substring(0, 50)}...`);
-                        // Set the loaded image back
-                        img.src = tempImg.src;
-                        // Give browser time to decode and paint
-                        setTimeout(() => resolve(), 150);
+                    img.onload = () => {
+                        if (!resolved) {
+                            console.log(`✓ Preloaded ${idx + 1}/${imageUrls.length}`);
+                            resolved = true;
+                            resolve();
+                        }
                     };
 
-                    tempImg.onerror = () => {
-                        console.warn(`Failed to preload: ${src}`);
-                        resolve();
+                    img.onerror = () => {
+                        if (!resolved) {
+                            console.warn(`✗ Failed ${idx + 1}/${imageUrls.length}`);
+                            resolved = true;
+                            resolve();
+                        }
                     };
 
-                    // Trigger load
-                    tempImg.src = src;
+                    // Timeout after 10s
+                    setTimeout(() => {
+                        if (!resolved) {
+                            console.warn(`⏱ Timeout ${idx + 1}/${imageUrls.length}`);
+                            resolved = true;
+                            resolve();
+                        }
+                    }, 10000);
 
-                    // Timeout fallback
-                    setTimeout(() => resolve(), 8000);
+                    img.src = url;
                 });
             });
 
-            await Promise.all(imagePromises);
-            console.log('All images preloaded');
+            // Wait for ALL images to preload
+            await Promise.all(preloadPromises);
+            console.log('All images preloaded!');
 
-            // Give iOS Safari extra time to actually paint the images
-            await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+            // Step 3: Force browser to paint/decode
+            await new Promise((resolve) => setTimeout(resolve, 2000));
 
-            // Force a reflow to ensure painting is complete
+            // Step 4: Trigger reflow
             cardRef.current.style.transform = 'translateZ(0)';
-            void cardRef.current.offsetHeight; // Trigger reflow
+            void cardRef.current.offsetHeight;
+            await new Promise((resolve) => setTimeout(resolve, 500));
 
-            await new Promise<void>((resolve) => setTimeout(resolve, 500));
-
-            // Warmup render
+            // Step 5: Warmup render
             try {
                 await toJpeg(cardRef.current, {
-                    cacheBust: true,
+                    cacheBust: false, // Don't bust cache since we preloaded
                     pixelRatio: 1,
                     quality: 0.3,
                     backgroundColor: '#030303'
                 });
                 console.log('Warmup complete');
-                await new Promise<void>((resolve) => setTimeout(resolve, 300));
+                await new Promise((resolve) => setTimeout(resolve, 500));
             } catch (e) {
                 console.warn("Warmup failed", e);
             }
 
-            // Final capture with high quality
+            // Step 6: Final high-quality capture
             console.log('Generating final image...');
             const dataUrl = await toJpeg(cardRef.current, {
-                cacheBust: true,
+                cacheBust: false,
                 backgroundColor: '#030303',
                 pixelRatio: 2,
                 quality: 0.95
             });
 
-            console.log('Image generated successfully');
+            console.log('✓ Image generated successfully');
             setPreviewImage(dataUrl);
 
         } catch (err) {
