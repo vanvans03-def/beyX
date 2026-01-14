@@ -253,45 +253,95 @@ export default function RegistrationForm({
         fetchExistingPlayers();
     };
 
-    const handleSubmit = async (index: number) => {
-        const profile = profiles[index];
-        const validation = validateProfile(profile);
-        if (!validation.valid) return;
-        if (!profile.name.trim()) {
-            updateProfile(index, { errorMsg: t('reg.error.name') });
+    const handleSubmit = async () => {
+        // 1. Identify all draft profiles
+        const draftProfiles = profiles.map((p, index) => ({ ...p, originalIndex: index })).filter(p => p.status === 'draft');
+        if (draftProfiles.length === 0) return;
+
+        // 2. Validate ALL draft profiles
+        let allValid = true;
+        const updates: { index: number, update: Partial<Profile> }[] = [];
+
+        draftProfiles.forEach(p => {
+            const validation = validateProfile(p);
+            let errorMsg = "";
+            if (!validation.valid) {
+                errorMsg = `${validation.section}: ${validation.message}`;
+            } else if (!p.name.trim()) {
+                errorMsg = t('reg.error.name');
+            }
+
+            if (errorMsg) {
+                allValid = false;
+                updates.push({ index: p.originalIndex, update: { errorMsg } });
+            } else {
+                // Clear any previous error
+                updates.push({ index: p.originalIndex, update: { errorMsg: "" } });
+            }
+        });
+
+        // Apply validation updates (errors or clearing errors)
+        if (updates.length > 0) {
+            setProfiles(prev => {
+                const newProfiles = [...prev];
+                updates.forEach(u => {
+                    newProfiles[u.index] = { ...newProfiles[u.index], ...u.update };
+                });
+                return newProfiles;
+            });
+        }
+
+        if (!allValid) {
+            // Optional: visual cue or toast? The red error text on each profile should be enough.
             return;
         }
 
+        // 3. Submit ALL valid draft profiles
         setLoading(true);
-        updateProfile(index, { errorMsg: "" });
-
         try {
-            const payload = {
-                deviceUUID,
-                playerName: profile.name,
-                mode: profile.mode,
-                mainBeys: profile.mainBeys,
-                reserveDecks: profile.reserveDecks,
-                totalPoints: validation.points || 0,
-                tournamentId
-            };
+            const results = await Promise.all(draftProfiles.map(async (p) => {
+                const validation = validateProfile(p); // Re-calc points if needed
+                const payload = {
+                    deviceUUID,
+                    playerName: p.name,
+                    mode: p.mode,
+                    mainBeys: p.mainBeys,
+                    reserveDecks: p.reserveDecks,
+                    totalPoints: validation.points || 0,
+                    tournamentId
+                };
 
-            const res = await fetch("/api/register", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
+                const res = await fetch("/api/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(`${p.name}: ${data.message || t('reg.error.failed')}`);
+                return { originalIndex: p.originalIndex, success: true };
+            }));
+
+            // Mark all as submitted
+            setProfiles(prev => {
+                const newProfiles = [...prev];
+                results.forEach(r => {
+                    newProfiles[r.originalIndex] = { ...newProfiles[r.originalIndex], status: 'submitted' };
+                });
+                return newProfiles;
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || t('reg.error.failed'));
 
-            // Mark as submitted
-            updateProfile(index, { status: 'submitted' });
-
-            // If all profiles submitted, maybe show a toast?
-            // For now, just individual success state is handled by rendering logic.
+            setSuccess(true); // Maybe trigger a confetti or global success message?
 
         } catch (err: any) {
-            updateProfile(index, { errorMsg: err.message || t('reg.error.generic') });
+            // If one failed, we might want to handle partials?
+            // For now, just show the error on the active tab or globally?
+            // The catch block catches the first error from Promise.all if strict, 
+            // but Promise.all fails fast. We might want Promise.allSettled ideally, 
+            // but to keep it simple, if one fails, we show alert.
+            console.error("Batch submit error", err);
+            // Show error on the currently active profile if it's one of the drafts?
+            // Or just a specific error message.
+            updateProfile(activeTab, { errorMsg: err.message || t('reg.error.generic') });
         } finally {
             setLoading(false);
         }
@@ -583,22 +633,33 @@ export default function RegistrationForm({
 
             {/* Actions - Moved outside animation wrapper for stability */}
             <div className="sticky bottom-4 z-50 bg-background/95 backdrop-blur-lg p-4 -mx-4 border-t border-border/50 rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.2)]">
-                {!validation.valid && (
-                    <div className="mb-4 flex items-center gap-2 text-sm text-destructive font-medium bg-destructive/10 p-3 rounded-lg">
-                        <AlertTriangle className="h-4 w-4" />
-                        {validation.section}: {validation.message}
+                {/* Global Validation Errors - Show errors for ALL profiles here */}
+                {profiles.some(p => p.errorMsg) && (
+                    <div className="mb-4 space-y-2 animate-in slide-in-from-bottom-2">
+                        {profiles.map((p, idx) => p.errorMsg && (
+                            <div key={idx} className="flex items-start gap-2 text-sm text-destructive font-bold bg-destructive/10 p-3 rounded-lg border border-destructive/20 shadow-sm">
+                                <AlertTriangle className="h-5 w-5 shrink-0" />
+                                <div className="flex flex-col">
+                                    <span className="underline mb-0.5">{p.name || `Player ${idx + 1}`}</span>
+                                    <span className="font-normal opacity-90">{p.errorMsg}</span>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
-                {activeProfile.errorMsg && <div className="mb-4 text-sm text-destructive font-medium bg-destructive/10 p-3 rounded-lg">{activeProfile.errorMsg}</div>}
 
                 {activeProfile.status === 'draft' ? (
                     <button
                         type="button"
-                        onClick={() => handleSubmit(activeTab)}
-                        disabled={!validation.valid || loading || !activeProfile.name.trim()}
+                        onClick={handleSubmit}
+                        disabled={loading}
                         className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-sm font-bold text-black shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
                     >
-                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('reg.btn.submit')}
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                            (profiles.filter(p => p.status === 'draft').length > 1
+                                ? `${t('reg.btn.submit')} All (${profiles.filter(p => p.status === 'draft').length})`
+                                : t('reg.btn.submit'))
+                        }
                     </button>
                 ) : (
                     <div className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-4 text-sm font-bold text-muted-foreground cursor-not-allowed">

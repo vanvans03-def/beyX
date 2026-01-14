@@ -626,29 +626,29 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </div>
 
                                 {/* Simple QR Layout */}
-                                <div style={{ flex: 1, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 48, position: 'relative' }}>
+                                <div style={{ flex: 1, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32, position: 'relative' }}>
                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full z-[-1]" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full z-[-1] opacity-50" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
 
-                                    <p className="text-xl font-bold tracking-[0.5em] uppercase mb-4" style={{ color: '#00ff94', filter: 'drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04)) drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1))' }}>
+                                    <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', filter: 'drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04)) drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1))' }}>
                                         Tournament Invite
                                     </p>
 
-                                    <h1 style={{ fontSize: '4rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', marginBottom: 12, lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', padding: '8px 16px', filter: 'drop-shadow(0 25px 25px rgba(0, 0, 0, 0.15))' }}>
+                                    <h1 style={{ fontSize: '4rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', marginBottom: 8, lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', padding: '0 16px', filter: 'drop-shadow(0 25px 25px rgba(0, 0, 0, 0.15))' }}>
                                         {tournament?.Name || "BEYBLADE X"}
                                     </h1>
 
 
                                     {tournament?.Type && (
-                                        <p style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 32 }}>
+                                        <p style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>
                                             {tournament.Type} FORMAT
                                         </p>
                                     )}
 
-                                    <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 24, boxShadow: '0 0 50px rgba(0,0,0,0.5)', border: '4px solid rgba(255,255,255,0.2)', marginBottom: 32 }}>
+                                    <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 24, boxShadow: '0 0 50px rgba(0,0,0,0.5)', border: '4px solid rgba(255,255,255,0.2)', marginBottom: 16 }}>
                                         <QRCodeSVG
                                             value={`${origin || ''}/register/${id}`}
-                                            size={400}
+                                            size={320}
                                         />
                                     </div>
 
