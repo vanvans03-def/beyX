@@ -1,15 +1,40 @@
 import RegistrationForm from "@/components/RegistrationForm";
 import { getTournaments } from "@/lib/repository"; // Use Postgres
 
-export default async function RegisterPage({ params }: { params: Promise<{ id: string }> }) {
+import { Metadata, ResolvingMetadata } from "next";
+
+type Props = {
+    params: Promise<{ id: string }>
+}
+
+export async function generateMetadata(
+    { params }: Props,
+    parent: ResolvingMetadata
+): Promise<Metadata> {
     const { id } = await params;
     const tournaments = await getTournaments();
-    // Repository returns Postgres snake_case, but we need to match what we use.
-    // Wait, getTournaments returns { id, name, status }.
-    // Sheets version returned { TournamentID, Name, Status }.
-    // I should check what RegistrationForm expects?
-    // RegistrationForm expects "tournamentName".
-    // So here I just need to find the correct one.
+    const tournament = tournaments.find(t => t.id === id);
+
+    if (!tournament) {
+        return {
+            title: "Tournament Not Found",
+        };
+    }
+
+    return {
+        title: `${tournament.name} - Register Now`,
+        description: `Join the battle at ${tournament.name}! Status: ${tournament.status}. Type: ${tournament.type || 'Standard'}.`,
+        openGraph: {
+            title: `${tournament.name} - Registration Open`,
+            description: `Click to register for ${tournament.name}. Status: ${tournament.status}.`,
+            images: ['/beyx-logo.png'], // We can make this dynamic if tournament has an image later
+        },
+    };
+}
+
+export default async function RegisterPage({ params }: Props) {
+    const { id } = await params;
+    const tournaments = await getTournaments();
     const tournament = tournaments.find(t => t.id === id);
 
     return (
@@ -25,7 +50,7 @@ export default async function RegisterPage({ params }: { params: Promise<{ id: s
                 {/* Header */}
                 <header className="flex flex-col items-center justify-center space-y-4 mb-8">
                     <div className="text-center space-y-1">
-                        <h1 className="text-4xl font-black italic tracking-tighter bg-gradient-to-br from-white via-white to-gray-400 bg-clip-text text-transparent drop-shadow-sm uppercase">
+                        <h1 className="text-4xl font-black italic tracking-tighter bg-gradient-to-br from-white via-white to-gray-400 bg-clip-text text-transparent drop-shadow-sm uppercase py-2 leading-relaxed">
                             {tournament?.name || "TOURNAMENT REGISTER"}
                         </h1>
                         <p className="text-xs font-bold tracking-[0.2em] text-muted-foreground uppercase">

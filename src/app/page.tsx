@@ -1,8 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Trophy, LockKeyhole } from "lucide-react";
+import { ArrowRight, Trophy, LockKeyhole, Calendar } from "lucide-react";
+import { getSystemSetting } from "@/lib/repository";
 
-export default function Home() {
+export const dynamic = 'force-dynamic';
+
+export default async function Home() {
+  const isEventsActive = await getSystemSetting("event_system_active", true);
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-background flex flex-col items-center justify-center p-6">
       {/* Background Ambience */}
@@ -22,6 +27,21 @@ export default function Home() {
         </div>
 
         <div className="grid w-full gap-4">
+          {isEventsActive && (
+            <Link href="/events" className="group relative flex items-center justify-between bg-card hover:bg-secondary/80 border border-white/10 p-5 rounded-2xl transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-secondary rounded-xl group-hover:bg-background transition-colors">
+                  <Calendar className="h-6 w-6 text-primary" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-bold text-foreground">View Events</h3>
+                  <p className="text-xs text-muted-foreground">Tournament Schedule</p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            </Link>
+          )}
+
           <Link href="/admin" className="group relative flex items-center justify-between bg-card hover:bg-secondary/80 border border-white/10 p-5 rounded-2xl transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-secondary rounded-xl group-hover:bg-background transition-colors">

@@ -13,8 +13,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BeyX Tournament Registration",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "https://beyx.vercel.app"),
+  title: {
+    default: "BeyX System",
+    template: "%s | BeyX"
+  },
   description: "High performance registration system for Beyblade X",
+  openGraph: {
+    title: "BeyX System",
+    description: "Tournament Registration & Management Platform",
+    url: '/',
+    siteName: 'BeyX',
+    images: [
+      {
+        url: '/beyx-logo.png',
+        width: 800,
+        height: 600,
+      }
+    ],
+    locale: 'th_TH',
+    type: 'website',
+  },
 };
 
 export default function RootLayout({

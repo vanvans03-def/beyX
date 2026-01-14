@@ -24,6 +24,27 @@ export type Registration = {
     round_id: string;
 };
 
+// --- Settings ---
+
+export async function getSystemSetting<T>(key: string, defaultValue: T): Promise<T> {
+    const { data, error } = await supabaseAdmin
+        .from('system_settings')
+        .select('value')
+        .eq('key', key)
+        .single();
+
+    if (error || !data) return defaultValue;
+    return data.value as T;
+}
+
+export async function setSystemSetting<T>(key: string, value: T) {
+    const { error } = await supabaseAdmin
+        .from('system_settings')
+        .upsert({ key, value: value as any });
+
+    if (error) throw new Error(error.message);
+}
+
 // --- Tournaments ---
 
 export async function getTournaments(): Promise<Tournament[]> {
@@ -205,4 +226,102 @@ export async function deleteRegistration(id: string) {
     // } catch (e) {
     //     console.error("Sheets Error (deleteRegistration):", e);
     // }
+}
+
+// --- Events ---
+
+export type Event = {
+    id: string;
+    title: string;
+    description: string;
+    event_date: Date;
+    location: string;
+    map_link: string;
+    facebook_link: string;
+    image_url: string;
+    created_at: Date;
+};
+
+export async function getEvents(): Promise<Event[]> {
+    const { data, error } = await supabaseAdmin
+        .from('events')
+        .select('*')
+        .order('event_date', { ascending: true }); // Soonest first for upcoming check
+
+    if (error) {
+        // If table doesn't exist yet, return empty to prevent crash
+        if (error.code === '42P01') return [];
+        throw new Error(error.message);
+    }
+
+    return data.map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        description: e.description,
+        event_date: new Date(e.event_date),
+        location: e.location,
+        map_link: e.map_link,
+        facebook_link: e.facebook_link,
+        image_url: e.image_url,
+        created_at: new Date(e.created_at)
+    }));
+}
+
+export async function createEvent(data: Omit<Event, 'id' | 'created_at'>): Promise<Event> {
+    const id = uuidv4();
+    const created_at = new Date();
+
+    const { error } = await supabaseAdmin
+        .from('events')
+        .insert([{
+            id,
+            title: data.title,
+            description: data.description,
+            event_date: data.event_date.toISOString(),
+            location: data.location,
+            map_link: data.map_link,
+            facebook_link: data.facebook_link,
+            image_url: data.image_url,
+            created_at: created_at.toISOString()
+        }]);
+
+    if (error) throw new Error(error.message);
+
+    return { id, created_at, ...data };
+}
+
+export async function updateEvent(id: string, data: Partial<Omit<Event, 'id' | 'created_at'>>): Promise<Event | null> {
+    const { data: updated, error } = await supabaseAdmin
+        .from('events')
+        .update({
+            title: data.title,
+            description: data.description,
+            event_date: data.event_date ? data.event_date.toISOString() : undefined,
+            location: data.location,
+            map_link: data.map_link,
+            facebook_link: data.facebook_link,
+            image_url: data.image_url
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) throw new Error(error.message);
+
+    if (!updated) return null;
+
+    return {
+        ...updated,
+        event_date: new Date(updated.event_date),
+        created_at: new Date(updated.created_at)
+    };
+}
+
+export async function deleteEvent(id: string) {
+    const { error } = await supabaseAdmin
+        .from('events')
+        .delete()
+        .eq('id', id);
+
+    if (error) throw new Error(error.message);
 }
