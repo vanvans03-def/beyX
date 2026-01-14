@@ -5,7 +5,7 @@ import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft,
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
 import { QRCodeSVG } from "qrcode.react";
-import { toPng } from "html-to-image";
+import { toJpeg } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import { Download, Share2, ImageIcon } from "lucide-react";
@@ -73,22 +73,23 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             // 3. Double render trick for Safari/Mobile
             // First pass to prime cache/font layout
             try {
-                await toPng(cardRef.current, { cacheBust: true, pixelRatio: 1 });
+                await toJpeg(cardRef.current, { cacheBust: true, pixelRatio: 1, quality: 0.5 });
             } catch (e) { console.warn("Warmup render failed", e); }
 
             // Small delay between renders
             await new Promise((resolve) => setTimeout(resolve, 500));
 
-            // Final high-res render
-            const dataUrl = await toPng(cardRef.current, {
+            // Final render - Normal Quality (Ratio 1)
+            const dataUrl = await toJpeg(cardRef.current, {
                 cacheBust: true,
                 backgroundColor: '#030303',
-                pixelRatio: 2 // High quality
+                pixelRatio: 1, // Reduced from 2 to 1 for speed
+                quality: 0.95 // High JPEG quality
             });
 
             // Mobile-friendly download
             const link = document.createElement('a');
-            link.download = `invite-${tournament?.Name || 'tournament'}.png`;
+            link.download = `invite-${tournament?.Name || 'tournament'}.jpg`;
             link.href = dataUrl;
             document.body.appendChild(link); // Required for Firefox/some mobile
             link.click();
