@@ -427,12 +427,14 @@ export default function RegistrationForm({
                         <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider ml-1">
                             {t('reg.player_name')}
                         </label>
-                        <button
-                            onClick={() => deleteProfile(activeTab)}
-                            className="text-xs text-destructive hover:underline flex items-center gap-1"
-                        >
-                            <Trash2 className="h-3 w-3" /> Remove Player
-                        </button>
+                        {profiles.length > 1 && activeProfile.status === 'draft' && (
+                            <button
+                                onClick={() => deleteProfile(activeTab)}
+                                className="text-xs text-destructive hover:underline flex items-center gap-1"
+                            >
+                                <Trash2 className="h-3 w-3" /> Remove Player
+                            </button>
+                        )}
 
                     </div>
 
