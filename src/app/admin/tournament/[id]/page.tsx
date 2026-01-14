@@ -5,7 +5,7 @@ import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft,
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
 import { QRCodeSVG } from "qrcode.react";
-import { toJpeg } from "html-to-image";
+import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import { Download, Share2, ImageIcon } from "lucide-react";
@@ -46,30 +46,37 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const [generating, setGenerating] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [origin, setOrigin] = useState("");
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setOrigin(window.location.origin);
+        }
+    }, []);
+
     const handleGeneratePreview = async () => {
         if (cardRef.current === null) return;
         setGenerating(true);
 
-        // Show the card briefly
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        // Wait a bit for any layouts to settle
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         try {
             await document.fonts.ready;
 
-            // Since images are preloaded, just wait for them to render
             const imageElements = Array.from(cardRef.current.getElementsByTagName("img"));
             console.log(`Found ${imageElements.length} images`);
 
-            // Wait for images in DOM
+            // Wait for all images to load
             await Promise.all(
-                imageElements.map((img, idx) => {
+                imageElements.map((img) => {
                     return new Promise<void>((resolve) => {
                         if (img.complete && img.naturalHeight > 0) {
                             resolve();
                             return;
                         }
 
-                        const timeout = setTimeout(() => resolve(), 3000);
+                        const timeout = setTimeout(() => resolve(), 5000);
 
                         img.onload = () => {
                             clearTimeout(timeout);
@@ -85,49 +92,20 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             );
 
             console.log('Images ready, waiting for paint...');
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
-            // Extra long delay for iOS
-            await new Promise((resolve) => setTimeout(resolve, 4000));
+            console.log('Capturing with html-to-image...');
 
-            // Multiple reflows
-            for (let i = 0; i < 3; i++) {
-                cardRef.current.style.transform = i % 2 === 0 ? 'translateZ(0)' : 'translateZ(0) scale(1)';
-                void cardRef.current.offsetHeight;
-                await new Promise((resolve) => setTimeout(resolve, 300));
-            }
+            // Use html-to-image
+            const dataUrl = await toPng(cardRef.current, {
+                backgroundColor: '#030303',
+                pixelRatio: 2, // High quality
+                cacheBust: true,
+                skipAutoScale: true
+            });
 
-            // Try multiple captures with increasing delays
-            let dataUrl = null;
-            for (let attempt = 1; attempt <= 3; attempt++) {
-                try {
-                    console.log(`Capture attempt ${attempt}...`);
-                    dataUrl = await toJpeg(cardRef.current, {
-                        cacheBust: false,
-                        backgroundColor: '#030303',
-                        pixelRatio: 2,
-                        quality: 0.95
-                    });
-
-                    // Check if image is not just black
-                    if (dataUrl && dataUrl.length > 50000) {
-                        console.log(`✓ Capture successful on attempt ${attempt}`);
-                        break;
-                    }
-
-                    console.log(`Attempt ${attempt} produced small image, retrying...`);
-                    await new Promise((resolve) => setTimeout(resolve, 2000));
-                } catch (e) {
-                    console.warn(`Attempt ${attempt} failed:`, e);
-                    if (attempt === 3) throw e;
-                    await new Promise((resolve) => setTimeout(resolve, 2000));
-                }
-            }
-
-            if (dataUrl) {
-                setPreviewImage(dataUrl);
-            } else {
-                throw new Error('Failed to generate valid image');
-            }
+            console.log('✓ Image generated successfully');
+            setPreviewImage(dataUrl);
 
         } catch (err) {
             console.error('Image generation error:', err);
@@ -331,6 +309,25 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         r.PlayerName.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Dynamic Sizing Logic for Ban List
+    const banListCount = tournament?.BanList?.length || 0;
+    let gridCols = "grid-cols-4";
+    let gap = "gap-6";
+    let fontSize = "text-xs";
+    let iconSize = "p-2";
+
+    if (banListCount > 20) {
+        gridCols = "grid-cols-6";
+        gap = "gap-3";
+        fontSize = "text-[9px]";
+        iconSize = "p-1.5";
+    } else if (banListCount > 12) {
+        gridCols = "grid-cols-5";
+        gap = "gap-4";
+        fontSize = "text-[10px]";
+        iconSize = "p-2";
+    }
+
     return (
         <div className="min-h-screen bg-background p-4 md:p-6">
             <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
@@ -467,16 +464,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         {/* Visible QR Info */}
                         <div className="flex items-center gap-6">
                             <div className="bg-white p-2 rounded-lg">
-                                <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${id}`} size={100} />
+                                <QRCodeSVG value={`${origin || ''}/register/${id}`} size={100} />
                             </div>
                             <div className="space-y-2 flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                     <div className="flex-1 p-2 bg-secondary rounded text-xs font-mono text-muted-foreground break-all border border-white/5">
-                                        {typeof window !== 'undefined' ? `${window.location.host}/register/${id}` : `.../register/${id}`}
+                                        {origin ? `${origin.replace(/^https?:\/\//, '')}/register/${id}` : `.../register/${id}`}
                                     </div>
                                     <button
                                         onClick={() => {
-                                            const url = `${window.location.origin}/register/${id}`;
+                                            const url = `${origin}/register/${id}`;
                                             navigator.clipboard.writeText(url);
                                             alert("Link copied!");
                                         }}
@@ -507,39 +504,40 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         <div style={{ position: "fixed", top: 0, left: 0, zIndex: -50, opacity: 0, pointerEvents: "none" }}>
                             <div
                                 ref={cardRef}
-                                className="w-[1200px] min-h-[630px] h-fit bg-black text-white relative flex"
+                                style={{ width: 1200, minHeight: 630, height: 'fit-content', backgroundColor: 'black', color: 'white', position: 'relative', display: 'flex' }}
                             >
                                 {/* Dynamic Background */}
-                                <div className="absolute inset-0 z-0 overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_20%,_#222_0%,_#050505_100%)]" />
-                                    <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] bg-primary/10 rounded-full blur-[150px]" />
-                                    <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px]" />
+                                <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
+                                    <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
+                                    <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
+                                    <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.1)' }} />
+                                    <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#2563eb]/20 rounded-full blur-[120px]" />
                                 </div>
 
                                 {/* Conditional Layout: Single Column if No Bans, Two Columns if Bans */}
                                 {tournament?.BanList && tournament.BanList.length > 0 ? (
                                     <>
                                         {/* Left Side: Info & QR - Sticky to stay visible on tall cards */}
-                                        <div className="z-10 w-[450px] flex flex-col border-r border-white/10 bg-black/20 backdrop-blur-sm relative">
+                                        <div style={{ zIndex: 10, width: 450, display: 'flex', flexDirection: 'column', position: 'relative', borderRight: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
                                             {/* Fixed Content Container */}
-                                            <div className="sticky top-0 h-[630px] flex flex-col justify-between p-12">
-                                                <div className="space-y-4">
-                                                    <p className="text-sm font-bold tracking-[0.3em] text-primary uppercase">
+                                            <div style={{ position: 'sticky', top: 0, height: 630, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 48 }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                                    <p className="text-sm font-bold tracking-[0.3em] uppercase" style={{ color: '#00ff94' }}>
                                                         Tournament Invite
                                                     </p>
-                                                    <h1 className="text-5xl font-black italic tracking-tighter leading-[0.9]">
+                                                    <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', lineHeight: 0.9 }}>
                                                         {tournament?.Name || "BEYBLADE X"}
                                                     </h1>
                                                     {tournament?.Type && (
-                                                        <div className="inline-block px-4 py-2 rounded-lg bg-white/10 border border-white/20 backdrop-blur-md">
-                                                            <span className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent uppercase">
+                                                        <div style={{ display: 'inline-block', padding: '8px 16px', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                                                            <span style={{ fontSize: '1.25rem', fontWeight: 700, background: 'linear-gradient(to right, white, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', textTransform: 'uppercase' }}>
                                                                 {tournament.Type} FORMAT
                                                             </span>
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                <div className="space-y-6 flex flex-col justify-end flex-1">
+                                                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flex: 1, gap: 24 }}>
                                                     {(() => {
                                                         // Dynamic QR Size based on density
                                                         const count = tournament.BanList.length;
@@ -548,124 +546,101 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         else if (count > 12) qrSize = 260; // Medium fill
 
                                                         return (
-                                                            <div className="bg-white p-4 rounded-xl w-fit shadow-2xl shadow-primary/20 transition-all duration-300">
+                                                            <div style={{ backgroundColor: 'white', padding: 16, borderRadius: 12, width: 'fit-content', transition: 'all 0.3s', boxShadow: '0 25px 50px -12px rgba(0, 255, 148, 0.2)' }}>
                                                                 <QRCodeSVG
-                                                                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${id}`}
+                                                                    value={`${origin || ''}/register/${id}`}
                                                                     size={qrSize}
                                                                 />
                                                             </div>
                                                         );
                                                     })()}
-                                                    <p className="text-sm text-gray-400 font-mono">
+                                                    <p className="text-sm text-[#9ca3af] font-mono">
                                                         SCAN TO REGISTER
                                                     </p>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Right Side: Ban List Grid - Grows naturally */}
-                                        <div className="flex-1 p-12 z-10 flex flex-col h-full">
-                                            <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-4">
-                                                <h2 className="text-2xl font-bold uppercase tracking-widest flex items-center gap-3">
-                                                    <AlertCircle className="text-destructive" />
+                                        <div style={{ flex: 1, padding: 48, zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 16 }}>
+                                                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                    <AlertCircle style={{ color: '#ef4444' }} />
                                                     Restricted Parts
                                                 </h2>
-                                                <span className="text-xs font-mono text-gray-500">
+                                                <span className="text-xs font-mono text-[#6b7280]">
                                                     {tournament.BanList.length} PARTS BANNED
                                                 </span>
                                             </div>
 
-                                            {(() => {
-                                                const count = tournament.BanList.length;
-                                                // Dynamic Sizing Logic for Readability
-                                                // We no longer limit items, but we adjust size for better packing
-                                                let gridCols = "grid-cols-4";
-                                                let gap = "gap-6";
-                                                let fontSize = "text-xs";
-                                                let iconSize = "p-2";
+                                            <div className={`flex-1 content-start grid ${gridCols} ${gap}`}>
+                                                {tournament.BanList.map((bey: string, i: number) => {
+                                                    // @ts-ignore
+                                                    const hasImg = !!imageMap[bey];
+                                                    return (
+                                                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                                            <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: 12, overflow: 'hidden', border: '1px solid', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+                                                                {hasImg ? (
+                                                                    // @ts-ignore
+                                                                    <img src={imageMap[bey]} alt={bey} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: iconSize === 'p-2' ? 8 : 6, filter: 'grayscale(0.5) opacity(0.9)' }} />
+                                                                ) : (
+                                                                    <span style={{ fontSize: 10, color: '#4b5563', fontFamily: 'monospace' }}>IMG</span>
+                                                                )}
+                                                                <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.1)', mixBlendMode: 'overlay' }} />
+                                                            </div>
+                                                            <span style={{ fontSize: fontSize === 'text-xs' ? 12 : fontSize === 'text-[10px]' ? 10 : 9, fontWeight: 700, color: '#d1d5db', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                                                {bey}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
 
-                                                if (count > 20) {
-                                                    gridCols = "grid-cols-6";
-                                                    gap = "gap-3";
-                                                    fontSize = "text-[9px]";
-                                                    iconSize = "p-1.5";
-                                                } else if (count > 12) {
-                                                    gridCols = "grid-cols-5";
-                                                    gap = "gap-4";
-                                                    fontSize = "text-[10px]";
-                                                    iconSize = "p-2";
-                                                }
-
-                                                return (
-                                                    <div className={`flex-1 content-start grid ${gridCols} ${gap}`}>
-                                                        {tournament.BanList.map((bey: string, i: number) => {
-                                                            // @ts-ignore
-                                                            const hasImg = !!imageMap[bey];
-                                                            return (
-                                                                <div key={i} className="flex flex-col items-center gap-1.5 group">
-                                                                    <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-white/5 border border-white/10 shadow-lg flex items-center justify-center">
-                                                                        {hasImg ? (
-                                                                            // @ts-ignore
-                                                                            <img src={imageMap[bey]} alt={bey} className={`w-full h-full object-contain ${iconSize} grayscale-[0.5] opacity-90`} />
-                                                                        ) : (
-                                                                            <span className="text-[10px] text-gray-600 font-mono">IMG</span>
-                                                                        )}
-                                                                        <div className="absolute inset-0 bg-black/10 mix-blend-overlay" />
-                                                                    </div>
-                                                                    <span className={`${fontSize} font-bold text-gray-300 uppercase text-center leading-tight line-clamp-2`}>
-                                                                        {bey}
-                                                                    </span>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                );
-                                            })()}
-
-                                            <div className="mt-8 pt-8 border-t border-white/10 flex justify-end">
-                                                <div className="flex items-center gap-2 opacity-50">
-                                                    <span className="text-xs font-bold tracking-[0.2em] uppercase">Powered by สายใต้ยิม</span>
+                                            <div style={{ marginTop: 32, paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
+                                                    <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </>
+
                                 ) : (
                                     /* Single Column Centered Layout (No Bans) */
-                                    <div className="flex-1 z-10 flex flex-col items-center justify-center text-center p-12 relative">
-
+                                    <div style={{ flex: 1, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 48, position: 'relative' }}>
                                         {/* Decorative Element */}
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] border border-white/5 rounded-full z-[-1]" />
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] border border-white/5 rounded-full z-[-1] opacity-50" />
+                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full z-[-1]" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
+                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full z-[-1] opacity-50" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
 
-                                        <p className="text-lg font-bold tracking-[0.5em] text-primary uppercase mb-6 drop-shadow-lg">
+                                        <p className="text-lg font-bold tracking-[0.5em] uppercase mb-6" style={{ color: '#00ff94', filter: 'drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04)) drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1))' }}>
                                             Tournament Invite
                                         </p>
 
-                                        <h1 className="text-7xl font-black italic tracking-tighter mb-4 leading-none bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent drop-shadow-2xl px-4 py-2">
+                                        <h1 style={{ fontSize: '4.5rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', marginBottom: 16, lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', padding: '8px 16px', filter: 'drop-shadow(0 25px 25px rgba(0, 0, 0, 0.15))' }}>
                                             {tournament?.Name || "BEYBLADE X"}
                                         </h1>
 
-                                        {tournament?.Type && (
-                                            <div className="mb-12 inline-block px-8 py-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl shadow-xl">
-                                                <span className="text-3xl font-bold text-white uppercase tracking-widest">
-                                                    {tournament.Type} FORMAT
-                                                </span>
-                                            </div>
-                                        )}
+                                        {
+                                            tournament?.Type && (
+                                                <div style={{ marginBottom: 48, display: 'inline-block', padding: '12px 32px', borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+                                                    <span style={{ fontSize: '1.875rem', fontWeight: 700, color: 'white', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                                        {tournament.Type} FORMAT
+                                                    </span>
+                                                </div>
+                                            )
+                                        }
 
-                                        <div className="bg-white p-6 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border-4 border-white/20 mb-12 transform scale-110">
+                                        <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 24, boxShadow: '0 0 50px rgba(0,0,0,0.5)', border: '4px solid rgba(255,255,255,0.2)', marginBottom: 48, transform: 'scale(1.1)' }}>
                                             <QRCodeSVG
-                                                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${id}`}
+                                                value={`${origin || ''}/register/${id}`}
                                                 size={280}
                                             />
                                         </div>
 
-                                        <p className="text-xl text-gray-400 font-mono tracking-widest uppercase mb-12">
+                                        <p style={{ fontSize: '1.25rem', color: '#9ca3af', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 48 }}>
                                             Scan to Register
                                         </p>
 
-                                        <div className="absolute bottom-12 right-12 opacity-50">
-                                            <span className="text-sm font-bold tracking-[0.3em] uppercase">Powered by สายใต้ยิม</span>
+                                        <div style={{ position: 'absolute', bottom: 48, right: 48, opacity: 0.5 }}>
+                                            <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
                                         </div>
                                     </div>
                                 )}
