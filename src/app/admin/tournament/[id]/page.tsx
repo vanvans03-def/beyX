@@ -333,7 +333,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     {hasImg ? (
                                                         // @ts-ignore
                                                         <img
-                                                            src={imageMap[bey]}
+                                                            src={(imageMap as any)[bey]}
                                                             alt={bey}
                                                             className="w-full h-full object-contain grayscale-[0.5] opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all"
                                                             loading="eager"
