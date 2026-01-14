@@ -46,112 +46,88 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const [generating, setGenerating] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
-
     const handleGeneratePreview = async () => {
         if (cardRef.current === null) return;
         setGenerating(true);
 
-        // Give UI time to show the card (with opacity 0.01)
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // Show the card briefly
+        await new Promise((resolve) => setTimeout(resolve, 200));
 
         try {
-            // Wait for fonts
             await document.fonts.ready;
 
-            // Step 1: Collect ALL image URLs from the card
+            // Since images are preloaded, just wait for them to render
             const imageElements = Array.from(cardRef.current.getElementsByTagName("img"));
-            console.log(`Found ${imageElements.length} images in card`);
+            console.log(`Found ${imageElements.length} images`);
 
-            // Step 2: Wait for each image to be complete
-            const imagePromises = imageElements.map((img, idx) => {
-                return new Promise<void>((resolve) => {
-                    if (img.complete && img.naturalHeight > 0) {
-                        console.log(`✓ Image ${idx + 1} already loaded`);
-                        resolve();
-                        return;
-                    }
-
-                    let resolved = false;
-
-                    const onLoad = () => {
-                        if (!resolved) {
-                            console.log(`✓ Image ${idx + 1} loaded`);
-                            resolved = true;
-                            cleanup();
+            // Wait for images in DOM
+            await Promise.all(
+                imageElements.map((img, idx) => {
+                    return new Promise<void>((resolve) => {
+                        if (img.complete && img.naturalHeight > 0) {
                             resolve();
+                            return;
                         }
-                    };
 
-                    const onError = () => {
-                        if (!resolved) {
-                            console.warn(`✗ Image ${idx + 1} failed`);
-                            resolved = true;
-                            cleanup();
+                        const timeout = setTimeout(() => resolve(), 3000);
+
+                        img.onload = () => {
+                            clearTimeout(timeout);
                             resolve();
-                        }
-                    };
+                        };
 
-                    const cleanup = () => {
-                        img.removeEventListener('load', onLoad);
-                        img.removeEventListener('error', onError);
-                    };
-
-                    img.addEventListener('load', onLoad);
-                    img.addEventListener('error', onError);
-
-                    // Force reload if needed
-                    const src = img.src;
-                    img.src = '';
-                    img.src = src;
-
-                    // Timeout after 10s
-                    setTimeout(() => {
-                        if (!resolved) {
-                            console.warn(`⏱ Image ${idx + 1} timeout`);
-                            resolved = true;
-                            cleanup();
+                        img.onerror = () => {
+                            clearTimeout(timeout);
                             resolve();
-                        }
-                    }, 10000);
-                });
-            });
+                        };
+                    });
+                })
+            );
 
-            await Promise.all(imagePromises);
-            console.log('All images processed!');
+            console.log('Images ready, waiting for paint...');
 
-            // Step 3: Give iOS extra time to decode and paint
-            await new Promise((resolve) => setTimeout(resolve, 3000));
+            // Extra long delay for iOS
+            await new Promise((resolve) => setTimeout(resolve, 4000));
 
-            // Step 4: Force reflow
-            cardRef.current.style.transform = 'translateZ(0)';
-            void cardRef.current.offsetHeight;
-            await new Promise((resolve) => setTimeout(resolve, 500));
-
-            // Step 5: Warmup render (low quality)
-            try {
-                await toJpeg(cardRef.current, {
-                    cacheBust: false,
-                    pixelRatio: 1,
-                    quality: 0.3,
-                    backgroundColor: '#030303'
-                });
-                console.log('Warmup complete');
-                await new Promise((resolve) => setTimeout(resolve, 500));
-            } catch (e) {
-                console.warn("Warmup failed", e);
+            // Multiple reflows
+            for (let i = 0; i < 3; i++) {
+                cardRef.current.style.transform = i % 2 === 0 ? 'translateZ(0)' : 'translateZ(0) scale(1)';
+                void cardRef.current.offsetHeight;
+                await new Promise((resolve) => setTimeout(resolve, 300));
             }
 
-            // Step 6: Final high-quality capture
-            console.log('Generating final image...');
-            const dataUrl = await toJpeg(cardRef.current, {
-                cacheBust: false,
-                backgroundColor: '#030303',
-                pixelRatio: 2,
-                quality: 0.95
-            });
+            // Try multiple captures with increasing delays
+            let dataUrl = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    console.log(`Capture attempt ${attempt}...`);
+                    dataUrl = await toJpeg(cardRef.current, {
+                        cacheBust: false,
+                        backgroundColor: '#030303',
+                        pixelRatio: 2,
+                        quality: 0.95
+                    });
 
-            console.log('✓ Image generated successfully');
-            setPreviewImage(dataUrl);
+                    // Check if image is not just black
+                    if (dataUrl && dataUrl.length > 50000) {
+                        console.log(`✓ Capture successful on attempt ${attempt}`);
+                        break;
+                    }
+
+                    console.log(`Attempt ${attempt} produced small image, retrying...`);
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                } catch (e) {
+                    console.warn(`Attempt ${attempt} failed:`, e);
+                    if (attempt === 3) throw e;
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                }
+            }
+
+            if (dataUrl) {
+                setPreviewImage(dataUrl);
+            } else {
+                throw new Error('Failed to generate valid image');
+            }
 
         } catch (err) {
             console.error('Image generation error:', err);
