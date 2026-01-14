@@ -5,8 +5,7 @@ import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft,
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
 import { QRCodeSVG } from "qrcode.react";
-// @ts-ignore
-import domtoimage from "dom-to-image";
+import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import { Download, Share2, ImageIcon } from "lucide-react";
@@ -44,9 +43,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [searchQuery, setSearchQuery] = useState("");
 
     const cardRef = useRef<HTMLDivElement>(null);
+    const banListRef = useRef<HTMLDivElement>(null);
 
     const [generating, setGenerating] = useState(false);
+    const [generatingBanList, setGeneratingBanList] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [banListImage, setBanListImage] = useState<string | null>(null);
     const [origin, setOrigin] = useState("");
 
     useEffect(() => {
@@ -90,24 +92,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             console.log('Images ready, waiting for paint...');
             await new Promise((resolve) => setTimeout(resolve, 1500)); // Increased wait time
 
-            console.log('Capturing with dom-to-image...');
+            console.log('Capturing with html-to-image...');
 
-            // Use dom-to-image
-            // @ts-ignore
-            const dataUrl = await domtoimage.toPng(cardRef.current, {
-                bgcolor: '#030303',
-                cacheBust: true,
-                style: {
-                    transform: 'scale(2)',
-                    transformOrigin: 'top left',
-                    width: `${cardRef.current.offsetWidth}px`,
-                    height: `${cardRef.current.offsetHeight}px`,
-                    // Ensure visibility during capture
-                    opacity: '1',
-                    visibility: 'visible'
-                },
-                width: cardRef.current.offsetWidth * 2,
-                height: cardRef.current.offsetHeight * 2
+            // Use html-to-image
+            const dataUrl = await toPng(cardRef.current, {
+                backgroundColor: '#030303',
+                pixelRatio: 2,
+                cacheBust: true
             });
 
             console.log('✓ Image generated successfully');
@@ -124,6 +115,64 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             });
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const handleExportBanList = async () => {
+        if (banListRef.current === null) return;
+        setGeneratingBanList(true);
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        try {
+            await document.fonts.ready;
+
+            const imageElements = Array.from(banListRef.current.getElementsByTagName("img"));
+            console.log(`Found ${imageElements.length} ban list images`);
+
+            await Promise.all(
+                imageElements.map(async (img) => {
+                    if (img.src && !img.complete) {
+                        await new Promise((resolve) => {
+                            img.onload = resolve;
+                            img.onerror = resolve;
+                            setTimeout(resolve, 2000);
+                        });
+                    }
+                    try {
+                        await img.decode();
+                    } catch (e) {
+                        console.warn("Image decode failed", e);
+                    }
+                })
+            );
+
+            console.log('Ban list images ready, waiting for paint...');
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+
+            console.log('Capturing ban list with html-to-image...');
+
+            // Use html-to-image
+            const dataUrl = await toPng(banListRef.current, {
+                backgroundColor: '#030303',
+                pixelRatio: 2,
+                cacheBust: true
+            });
+
+            console.log('✓ Ban list image generated successfully');
+            setBanListImage(dataUrl);
+
+        } catch (err) {
+            console.error('Ban list generation error:', err);
+            setModalConfig({
+                isOpen: true,
+                title: "Error",
+                desc: "Failed to generate ban list image. Please try again.",
+                type: "alert",
+                variant: "destructive"
+            });
+        } finally {
+            setGeneratingBanList(false);
         }
     };
 
@@ -166,6 +215,43 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             console.error('Download failed:', downloadError);
             // Last resort: open in new tab
             window.open(previewImage, '_blank');
+        }
+    };
+
+    const handleSaveBanList = async () => {
+        if (!banListImage) return;
+
+        try {
+            const response = await fetch(banListImage);
+            const blob = await response.blob();
+
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'banlist.jpg', { type: 'image/jpeg' })] })) {
+                const file = new File([blob], `banlist-${tournament?.Name || 'tournament'}.jpg`, { type: 'image/jpeg' });
+                await navigator.share({
+                    files: [file],
+                    title: 'Tournament Ban List',
+                    text: `Ban list for ${tournament?.Name || 'our tournament'}`
+                });
+                return;
+            }
+        } catch (shareError) {
+            console.log('Share API not available or failed, falling back to download:', shareError);
+        }
+
+        try {
+            const link = document.createElement('a');
+            link.download = `banlist-${tournament?.Name || 'tournament'}.jpg`;
+            link.href = banListImage;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+
+            setTimeout(() => {
+                document.body.removeChild(link);
+            }, 100);
+        } catch (downloadError) {
+            console.error('Download failed:', downloadError);
+            window.open(banListImage, '_blank');
         }
     };
 
@@ -448,23 +534,44 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <Share2 className="h-4 w-4 text-primary" />
                                 {t('detail.share_link')} & Invite Card
                             </h3>
-                            <button
-                                onClick={handleGeneratePreview}
-                                disabled={generating}
-                                className="text-xs flex items-center gap-1 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {generating ? (
-                                    <>
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        Creating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <ImageIcon className="h-3 w-3" />
-                                        Create Invite Card
-                                    </>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleGeneratePreview}
+                                    disabled={generating}
+                                    className="text-xs flex items-center gap-1 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {generating ? (
+                                        <>
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ImageIcon className="h-3 w-3" />
+                                            Create Invite Card
+                                        </>
+                                    )}
+                                </button>
+                                {tournament?.BanList && tournament.BanList.length > 0 && (
+                                    <button
+                                        onClick={handleExportBanList}
+                                        disabled={generatingBanList}
+                                        className="text-xs flex items-center gap-1 bg-gradient-to-r from-red-500 to-orange-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {generatingBanList ? (
+                                            <>
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                Exporting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Download className="h-3 w-3" />
+                                                Export Ban List
+                                            </>
+                                        )}
+                                    </button>
                                 )}
-                            </button>
+                            </div>
                         </div>
 
                         {/* Visible QR Info */}
@@ -505,153 +612,116 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             </div>
                         </div>
 
-                        {/* HIDDEN RENDER CONTAINER FOR IMAGE GENERATION */}
-                        {/* We use opacity: 0 instead of display: none or huge offset to ensure browser renders it for capture */}
+                        {/* HIDDEN RENDER CONTAINER FOR INVITE CARD - Always simple QR layout */}
                         <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
                             <div
                                 ref={cardRef}
-                                style={{ width: 1200, minHeight: 630, height: 'fit-content', backgroundColor: 'black', color: 'white', position: 'relative', display: 'flex' }}
+                                style={{ width: 1200, height: 630, backgroundColor: 'black', color: 'white', position: 'relative', display: 'flex' }}
                             >
                                 {/* Dynamic Background */}
                                 <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
-                                    <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
                                     <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
                                     <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.1)' }} />
                                     <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#2563eb]/20 rounded-full blur-[120px]" />
                                 </div>
 
-                                {/* Conditional Layout: Single Column if No Bans, Two Columns if Bans */}
-                                {tournament?.BanList && tournament.BanList.length > 0 ? (
-                                    <>
-                                        {/* Left Side: Info & QR - Sticky to stay visible on tall cards */}
-                                        <div style={{ zIndex: 10, width: 450, display: 'flex', flexDirection: 'column', position: 'relative', borderRight: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                                            {/* Fixed Content Container */}
-                                            <div style={{ position: 'sticky', top: 0, height: 630, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 48 }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                                    <p className="text-sm font-bold tracking-[0.3em] uppercase" style={{ color: '#00ff94' }}>
-                                                        Tournament Invite
-                                                    </p>
-                                                    <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', lineHeight: 0.9 }}>
-                                                        {tournament?.Name || "BEYBLADE X"}
-                                                    </h1>
-                                                    {tournament?.Type && (
-                                                        <div style={{ display: 'inline-block', padding: '8px 16px', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                                                            <span style={{ fontSize: '1.25rem', fontWeight: 700, background: 'linear-gradient(to right, white, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', textTransform: 'uppercase' }}>
-                                                                {tournament.Type} FORMAT
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                {/* Simple QR Layout */}
+                                <div style={{ flex: 1, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 48, position: 'relative' }}>
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full z-[-1]" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full z-[-1] opacity-50" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
 
-                                                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flex: 1, gap: 24 }}>
-                                                    {(() => {
-                                                        // Dynamic QR Size based on density
-                                                        const count = tournament.BanList.length;
-                                                        let qrSize = 200;
-                                                        if (count > 28) qrSize = 340; // Fill more space if huge list
-                                                        else if (count > 12) qrSize = 260; // Medium fill
+                                    <p className="text-xl font-bold tracking-[0.5em] uppercase mb-4" style={{ color: '#00ff94', filter: 'drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04)) drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1))' }}>
+                                        Tournament Invite
+                                    </p>
 
-                                                        return (
-                                                            <div style={{ backgroundColor: 'white', padding: 16, borderRadius: 12, width: 'fit-content', transition: 'all 0.3s', boxShadow: '0 25px 50px -12px rgba(0, 255, 148, 0.2)' }}>
-                                                                <QRCodeSVG
-                                                                    value={`${origin || ''}/register/${id}`}
-                                                                    size={qrSize}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                    <p className="text-sm text-[#9ca3af] font-mono">
-                                                        SCAN TO REGISTER
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <h1 style={{ fontSize: '4rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', marginBottom: 12, lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', padding: '8px 16px', filter: 'drop-shadow(0 25px 25px rgba(0, 0, 0, 0.15))' }}>
+                                        {tournament?.Name || "BEYBLADE X"}
+                                    </h1>
 
-                                        <div style={{ flex: 1, padding: 48, zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 16 }}>
-                                                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                    <AlertCircle style={{ color: '#ef4444' }} />
-                                                    Restricted Parts
-                                                </h2>
-                                                <span className="text-xs font-mono text-[#6b7280]">
-                                                    {tournament.BanList.length} PARTS BANNED
-                                                </span>
-                                            </div>
 
-                                            <div className={`flex-1 content-start grid ${gridCols} ${gap}`}>
-                                                {tournament.BanList.map((bey: string, i: number) => {
-                                                    // @ts-ignore
-                                                    const hasImg = !!imageMap[bey];
-                                                    return (
-                                                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                                                            <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: 12, overflow: 'hidden', border: '1px solid', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                                                                {hasImg ? (
-                                                                    // @ts-ignore
-                                                                    <img src={imageMap[bey]} alt={bey} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: iconSize === 'p-2' ? 8 : 6, filter: 'grayscale(0.5) opacity(0.9)' }} />
-                                                                ) : (
-                                                                    <span style={{ fontSize: 10, color: '#4b5563', fontFamily: 'monospace' }}>IMG</span>
-                                                                )}
-                                                                <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.1)', mixBlendMode: 'overlay' }} />
-                                                            </div>
-                                                            <span style={{ fontSize: fontSize === 'text-xs' ? 12 : fontSize === 'text-[10px]' ? 10 : 9, fontWeight: 700, color: '#d1d5db', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                                {bey}
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            <div style={{ marginTop: 32, paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'flex-end' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
-                                                    <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </>
-
-                                ) : (
-                                    /* Single Column Centered Layout (No Bans) */
-                                    <div style={{ flex: 1, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 48, position: 'relative' }}>
-                                        {/* Decorative Element */}
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full z-[-1]" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full z-[-1] opacity-50" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
-
-                                        <p className="text-lg font-bold tracking-[0.5em] uppercase mb-6" style={{ color: '#00ff94', filter: 'drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04)) drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1))' }}>
-                                            Tournament Invite
+                                    {tournament?.Type && (
+                                        <p style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 32 }}>
+                                            {tournament.Type} FORMAT
                                         </p>
+                                    )}
 
-                                        <h1 style={{ fontSize: '4.5rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', marginBottom: 16, lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', padding: '8px 16px', filter: 'drop-shadow(0 25px 25px rgba(0, 0, 0, 0.15))' }}>
-                                            {tournament?.Name || "BEYBLADE X"}
-                                        </h1>
-
-                                        {
-                                            tournament?.Type && (
-                                                <div style={{ marginBottom: 48, display: 'inline-block', padding: '12px 32px', borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
-                                                    <span style={{ fontSize: '1.875rem', fontWeight: 700, color: 'white', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                                                        {tournament.Type} FORMAT
-                                                    </span>
-                                                </div>
-                                            )
-                                        }
-
-                                        <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 24, boxShadow: '0 0 50px rgba(0,0,0,0.5)', border: '4px solid rgba(255,255,255,0.2)', marginBottom: 48, transform: 'scale(1.1)' }}>
-                                            <QRCodeSVG
-                                                value={`${origin || ''}/register/${id}`}
-                                                size={280}
-                                            />
-                                        </div>
-
-                                        <p style={{ fontSize: '1.25rem', color: '#9ca3af', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 48 }}>
-                                            Scan to Register
-                                        </p>
-
-                                        <div style={{ position: 'absolute', bottom: 48, right: 48, opacity: 0.5 }}>
-                                            <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
-                                        </div>
+                                    <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 24, boxShadow: '0 0 50px rgba(0,0,0,0.5)', border: '4px solid rgba(255,255,255,0.2)', marginBottom: 32 }}>
+                                        <QRCodeSVG
+                                            value={`${origin || ''}/register/${id}`}
+                                            size={400}
+                                        />
                                     </div>
-                                )}
+
+                                    <p style={{ fontSize: '1.5rem', color: '#9ca3af', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                                        Scan to Register
+                                    </p>
+
+                                    <div style={{ position: 'absolute', bottom: 48, right: 48, opacity: 0.5 }}>
+                                        <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+
+                        {/* HIDDEN RENDER CONTAINER FOR BAN LIST */}
+                        {tournament?.BanList && tournament.BanList.length > 0 && (
+                            <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
+                                <div
+                                    ref={banListRef}
+                                    style={{ width: 1200, minHeight: 630, height: 'fit-content', backgroundColor: 'black', color: 'white', position: 'relative', padding: 48 }}
+                                >
+                                    {/* Background */}
+                                    <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
+                                        <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
+                                        <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }} />
+                                    </div>
+
+                                    <div style={{ position: 'relative', zIndex: 10 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 16 }}>
+                                            <h2 style={{ fontSize: '2rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <AlertCircle style={{ color: '#ef4444', width: 32, height: 32 }} />
+                                                Restricted Parts
+                                            </h2>
+                                            <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#6b7280' }}>
+                                                {tournament.BanList.length} PARTS BANNED
+                                            </span>
+                                        </div>
+
+                                        <div className={`grid ${gridCols} ${gap}`}>
+                                            {tournament.BanList.map((bey: string, i: number) => {
+                                                // @ts-ignore
+                                                const hasImg = !!imageMap[bey];
+                                                return (
+                                                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                                        <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: 12, overflow: 'hidden', border: '1px solid', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+                                                            {hasImg ? (
+                                                                // @ts-ignore
+                                                                <img src={imageMap[bey]} alt={bey} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: iconSize === 'p-2' ? 8 : 6, filter: 'grayscale(0.5) opacity(0.9)' }} loading="eager" />
+                                                            ) : (
+                                                                <span style={{ fontSize: 10, color: '#4b5563', fontFamily: 'monospace' }}>IMG</span>
+                                                            )}
+                                                            <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.1)', mixBlendMode: 'overlay' }} />
+                                                        </div>
+                                                        <span style={{ fontSize: fontSize === 'text-xs' ? 12 : fontSize === 'text-[10px]' ? 10 : 9, fontWeight: 700, color: '#d1d5db', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                                            {bey}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <div style={{ marginTop: 32, paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ opacity: 0.7 }}>
+                                                <h3 style={{ fontSize: '1.5rem', fontWeight: 900, fontStyle: 'italic' }}>{tournament?.Name || "BEYBLADE X"}</h3>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
+                                                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -831,6 +901,41 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             >
                                 <Download className="h-4 w-4" />
                                 Download Image
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+
+                {/* BAN LIST PREVIEW MODAL */}
+                <Modal
+                    isOpen={!!banListImage}
+                    onClose={() => setBanListImage(null)}
+                    title="Ban List Image Created"
+                    type="custom"
+                >
+                    <div className="flex flex-col gap-6">
+                        <div className="relative w-full bg-black/50 rounded-lg overflow-hidden border border-white/10">
+                            {banListImage && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={banListImage} alt="Ban List Preview" className="w-full h-auto object-contain" />
+                            )}
+                        </div>
+                        <p className="text-xs text-center text-muted-foreground">
+                            Ban list image ready for download.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setBanListImage(null)}
+                                className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={handleSaveBanList}
+                                className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-red-500 to-orange-500 hover:opacity-90 transition-opacity shadow-lg shadow-black/20 flex items-center gap-2"
+                            >
+                                <Download className="h-4 w-4" />
+                                Download Ban List
                             </button>
                         </div>
                     </div>
