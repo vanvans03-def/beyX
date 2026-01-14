@@ -25,11 +25,11 @@ export default async function RegisterPage({ params }: { params: Promise<{ id: s
                 {/* Header */}
                 <header className="flex flex-col items-center justify-center space-y-4 mb-8">
                     <div className="text-center space-y-1">
-                        <h1 className="text-4xl font-black italic tracking-tighter bg-gradient-to-br from-white via-white to-gray-400 bg-clip-text text-transparent drop-shadow-sm">
-                            TOURNAMENT <span className="text-primary">REGISTER</span>
+                        <h1 className="text-4xl font-black italic tracking-tighter bg-gradient-to-br from-white via-white to-gray-400 bg-clip-text text-transparent drop-shadow-sm uppercase">
+                            {tournament?.name || "TOURNAMENT REGISTER"}
                         </h1>
                         <p className="text-xs font-bold tracking-[0.2em] text-muted-foreground uppercase">
-                            BeyBlade X • Season 2026
+                            {tournament?.name ? "BeyBlade X Tournament" : "BeyBlade X • Season 2026"}
                         </p>
                     </div>
                 </header>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
 import { QRCodeSVG } from "qrcode.react";
@@ -51,43 +51,98 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         if (cardRef.current === null) return;
         setGenerating(true);
         try {
+            // Wait for fonts
             await document.fonts.ready;
 
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Initial delay for DOM settling
+            await new Promise((resolve) => setTimeout(resolve, 300));
 
+            // Collect all images
             const images = Array.from(cardRef.current.getElementsByTagName("img"));
+            console.log(`Found ${images.length} images to load`);
+
+            // Force reload and wait for ALL images with extended timeout
             await Promise.all(
-                images.map((img) => {
-                    if (img.complete && img.naturalHeight > 0) return Promise.resolve();
+                images.map((img, idx) => {
                     return new Promise((resolve) => {
-                        img.onload = () => resolve(null);
-                        img.onerror = () => resolve(null);
-                        setTimeout(() => resolve(null), 3000);
+                        // If already loaded, still wait a bit to ensure render
+                        if (img.complete && img.naturalHeight > 0) {
+                            console.log(`Image ${idx} already loaded`);
+                            setTimeout(() => resolve(null), 100);
+                            return;
+                        }
+
+                        // Set up load handlers
+                        const onLoad = () => {
+                            console.log(`Image ${idx} loaded successfully`);
+                            cleanup();
+                            // Extra delay after load for iOS
+                            setTimeout(() => resolve(null), 200);
+                        };
+
+                        const onError = () => {
+                            console.warn(`Image ${idx} failed to load`);
+                            cleanup();
+                            resolve(null);
+                        };
+
+                        const onTimeout = () => {
+                            console.warn(`Image ${idx} timed out after 10s`);
+                            cleanup();
+                            resolve(null);
+                        };
+
+                        const cleanup = () => {
+                            img.removeEventListener('load', onLoad);
+                            img.removeEventListener('error', onError);
+                            clearTimeout(timeoutId);
+                        };
+
+                        img.addEventListener('load', onLoad);
+                        img.addEventListener('error', onError);
+                        const timeoutId = setTimeout(onTimeout, 10000); // 10s timeout
+
+                        // Force reload by resetting src
+                        const src = img.src;
+                        img.src = '';
+                        img.src = src;
                     });
                 })
             );
 
+            console.log('All images loaded, waiting for render...');
+
+            // Extra delay for iOS to ensure all images are painted
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+
+            // Warmup render (helps with consistency)
             try {
                 await toJpeg(cardRef.current, { cacheBust: true, pixelRatio: 1, quality: 0.5 });
-            } catch (e) { console.warn("Warmup render failed", e); }
+                console.log('Warmup render complete');
+            } catch (e) {
+                console.warn("Warmup render failed", e);
+            }
 
+            // Final delay before actual capture
             await new Promise((resolve) => setTimeout(resolve, 500));
 
+            console.log('Generating final image...');
             const dataUrl = await toJpeg(cardRef.current, {
                 cacheBust: true,
                 backgroundColor: '#030303',
-                pixelRatio: 1,
+                pixelRatio: 2, // Higher quality for better results
                 quality: 0.95
             });
 
+            console.log('Image generated successfully');
             setPreviewImage(dataUrl);
 
         } catch (err) {
-            console.error(err);
+            console.error('Image generation error:', err);
             setModalConfig({
                 isOpen: true,
                 title: "Error",
-                desc: "Failed to generate image.",
+                desc: "Failed to generate image. Please try again.",
                 type: "alert",
                 variant: "destructive"
             });
@@ -96,14 +151,46 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         }
     };
 
-    const handleSaveImage = () => {
+    const handleSaveImage = async () => {
         if (!previewImage) return;
-        const link = document.createElement('a');
-        link.download = `invite-${tournament?.Name || 'tournament'}.jpg`;
-        link.href = previewImage;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+
+        try {
+            // Convert data URL to blob for better compatibility
+            const response = await fetch(previewImage);
+            const blob = await response.blob();
+
+            // Try modern Web Share API first (works in LINE, iOS Safari, etc.)
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'invite.jpg', { type: 'image/jpeg' })] })) {
+                const file = new File([blob], `invite-${tournament?.Name || 'tournament'}.jpg`, { type: 'image/jpeg' });
+                await navigator.share({
+                    files: [file],
+                    title: 'Tournament Invite',
+                    text: `Join ${tournament?.Name || 'our tournament'}!`
+                });
+                return;
+            }
+        } catch (shareError) {
+            console.log('Share API not available or failed, falling back to download:', shareError);
+        }
+
+        // Fallback: Traditional download link
+        try {
+            const link = document.createElement('a');
+            link.download = `invite-${tournament?.Name || 'tournament'}.jpg`;
+            link.href = previewImage;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+
+            // Cleanup after a delay
+            setTimeout(() => {
+                document.body.removeChild(link);
+            }, 100);
+        } catch (downloadError) {
+            console.error('Download failed:', downloadError);
+            // Last resort: open in new tab
+            window.open(previewImage, '_blank');
+        }
     };
 
     // Modal State
@@ -616,74 +703,106 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {filteredData.map((row, i) => {
-                                    const validation = validateRow(row);
-                                    let reserveDecks: string[][] = [];
-                                    try {
-                                        const parsed = JSON.parse(row.Reserve_Data);
-                                        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-                                            // Legacy single deck
-                                            reserveDecks = [parsed as string[]];
-                                        } else {
-                                            reserveDecks = parsed;
-                                        }
-                                    } catch (e) { }
+                                {(() => {
+                                    // Pre-calculate device counts
+                                    const deviceCounts: Record<string, number> = {};
+                                    filteredData.forEach(r => {
+                                        deviceCounts[r.DeviceUUID] = (deviceCounts[r.DeviceUUID] || 0) + 1;
+                                    });
 
-                                    return (
-                                        <tr key={i} className="hover:bg-accent/5 transition-colors group">
-                                            <td className="p-4 whitespace-nowrap text-muted-foreground">
-                                                {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </td>
-                                            <td className="p-4 font-medium text-foreground whitespace-nowrap">{row.PlayerName}</td>
-                                            <td className="p-4 whitespace-nowrap">
-                                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
-                                                    {row.Mode === "Under10" ? "U10" : "NMM"}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 text-xs space-y-1 min-w-[200px]">
-                                                <div className="flex gap-1 flex-wrap">
-                                                    {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => (
-                                                        <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap">
-                                                            {b}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-xs space-y-2 min-w-[200px]">
-                                                {reserveDecks.map((deck, idx) => (
-                                                    <div key={idx} className="flex gap-1 items-center opacity-80 flex-wrap">
-                                                        <span className="text-[9px] w-4 text-muted-foreground">#{idx + 1}</span>
-                                                        {deck.map((b, bIdx) => (
-                                                            <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap">
+                                    // Helper for consistent color
+                                    const getDeviceColor = (uuid: string) => {
+                                        let hash = 0;
+                                        for (let i = 0; i < uuid.length; i++) hash = uuid.charCodeAt(i) + ((hash << 5) - hash);
+                                        const hue = Math.abs(hash % 360);
+                                        return `hsl(${hue}, 70%, 60%)`;
+                                    };
+
+                                    return filteredData.map((row, i) => {
+                                        const validation = validateRow(row);
+                                        const isMulti = (deviceCounts[row.DeviceUUID] || 0) > 1;
+                                        const deviceColor = isMulti ? getDeviceColor(row.DeviceUUID) : undefined;
+
+                                        let reserveDecks: string[][] = [];
+                                        try {
+                                            const parsed = JSON.parse(row.Reserve_Data);
+                                            if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+                                                // Legacy single deck
+                                                reserveDecks = [parsed as string[]];
+                                            } else {
+                                                reserveDecks = parsed;
+                                            }
+                                        } catch (e) { }
+
+                                        return (
+                                            <tr key={i} className="hover:bg-accent/5 transition-colors group">
+                                                <td className="p-4 whitespace-nowrap text-muted-foreground">
+                                                    {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </td>
+                                                <td className="p-4 font-medium text-foreground whitespace-nowrap">
+                                                    <div className="flex items-center gap-2">
+                                                        {row.PlayerName}
+                                                        {isMulti && (
+                                                            <div
+                                                                className="flex items-center justify-center p-1 rounded-full bg-white/10"
+                                                                title={`Multi-player Device: ${row.DeviceUUID.substring(0, 4)}...`}
+                                                                style={{ color: deviceColor }}
+                                                            >
+                                                                <Users className="h-3.5 w-3.5" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 whitespace-nowrap">
+                                                    <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
+                                                        {row.Mode === "Under10" ? "U10" : "NMM"}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-xs space-y-1 min-w-[200px]">
+                                                    <div className="flex gap-1 flex-wrap">
+                                                        {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => (
+                                                            <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap">
                                                                 {b}
                                                             </span>
                                                         ))}
                                                     </div>
-                                                ))}
-                                            </td>
-                                            <td className="p-4 whitespace-nowrap">
-                                                <div className="flex items-center justify-between gap-4">
-                                                    <div className="flex items-center gap-2">
-                                                        {validation.status === "pass" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                        {validation.status === "fail" && <XCircle className="h-4 w-4 text-red-500" />}
-                                                        <span className={`font-bold ${validation.status === "pass" ? "text-green-500" :
-                                                            validation.status === "fail" ? "text-red-500" : "text-yellow-500"
-                                                            }`}>
-                                                            {validation.msg}
-                                                        </span>
+                                                </td>
+                                                <td className="p-4 text-xs space-y-2 min-w-[200px]">
+                                                    {reserveDecks.map((deck, idx) => (
+                                                        <div key={idx} className="flex gap-1 items-center opacity-80 flex-wrap">
+                                                            <span className="text-[9px] w-4 text-muted-foreground">#{idx + 1}</span>
+                                                            {deck.map((b, bIdx) => (
+                                                                <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap">
+                                                                    {b}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ))}
+                                                </td>
+                                                <td className="p-4 whitespace-nowrap">
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div className="flex items-center gap-2">
+                                                            {validation.status === "pass" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                            {validation.status === "fail" && <XCircle className="h-4 w-4 text-red-500" />}
+                                                            <span className={`font-bold ${validation.status === "pass" ? "text-green-500" :
+                                                                validation.status === "fail" ? "text-red-500" : "text-yellow-500"
+                                                                }`}>
+                                                                {validation.msg}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleDelete(row)}
+                                                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 text-muted-foreground hover:text-red-500 transition-all"
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleDelete(row)}
-                                                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 text-muted-foreground hover:text-red-500 transition-all"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                })()}
                                 {filteredData.length === 0 && !loading && (
                                     <tr>
                                         <td colSpan={6} className="p-8 text-center text-muted-foreground">

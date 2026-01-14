@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createRegistration } from "@/lib/repository";
 import gameData from "@/data/game-data.json";
+import { supabaseAdmin } from "@/lib/supabase";
 
 // Validation Logic (Duplicated from Frontend for security, usually shared via lib/types but keeping simple here)
 function validatePayload(body: any) {
@@ -105,6 +106,65 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true });
     } catch (error: any) {
         console.error("Registration Error:", error);
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    }
+}
+
+export async function GET(request: Request) {
+    const { searchParams } = new URL(request.url);
+    const tournamentId = searchParams.get('tournamentId');
+    const deviceUUID = searchParams.get('deviceUUID');
+    const checkName = searchParams.get('checkName');
+    const listPlayers = searchParams.get('listPlayers');
+
+    if (!tournamentId) {
+        return NextResponse.json({ success: false, message: "Missing Tournament ID" }, { status: 400 });
+    }
+
+    try {
+        if (listPlayers) {
+            const { data, error } = await supabaseAdmin
+                .from('registrations')
+                .select('player_name')
+                .eq('tournament_id', tournamentId)
+                .order('player_name', { ascending: true });
+
+            if (error) throw error;
+            return NextResponse.json({
+                success: true,
+                players: data.map((d: any) => d.player_name)
+            });
+        }
+
+        if (checkName) {
+            const { data, error } = await supabaseAdmin
+                .from('registrations')
+                .select('id')
+                .eq('tournament_id', tournamentId)
+                .ilike('player_name', checkName) // Case insensitive check
+                .limit(1);
+
+            if (error) throw error;
+            return NextResponse.json({ exists: data && data.length > 0 });
+        }
+
+        if (deviceUUID) {
+            const { data, error } = await supabaseAdmin
+                .from('registrations')
+                .select('*')
+                .eq('tournament_id', tournamentId)
+                .eq('device_uuid', deviceUUID)
+                .order('timestamp', { ascending: true }); // Show oldest first (Player 1, 2, 3...)
+
+            if (error) throw error;
+
+            return NextResponse.json({ success: true, data: data });
+        }
+
+        return NextResponse.json({ success: false, message: "Invalid parameters" }, { status: 400 });
+
+    } catch (error: any) {
+        console.error("GET Registration Error:", error);
         return NextResponse.json({ success: false, message: error.message }, { status: 500 });
     }
 }

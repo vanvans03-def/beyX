@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { VisualSelector } from "@/components/ui/VisualSelector";
 import gameData from "@/data/game-data.json";
 import { cn } from "@/lib/utils";
-import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, Plus, Trash2, Globe } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, Plus, Trash2, Globe, Eye, X } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -29,23 +29,41 @@ export default function RegistrationForm({
     tournamentType?: string,
     banList?: string[]
 }) {
+    // Validation Logic Note:
+    // We validate each deck INDIVIDUALLY.
+    // Duplicates are allowed ACROSS different decks (e.g. Main vs Reserve 1),
+    // but not WITHIN the same deck (e.g. 3 of the same Bey in Main).
     const { t, lang, toggleLang } = useTranslation();
     const [deviceUUID, setDeviceUUID] = useState("");
     const [loading, setLoading] = useState(false);
-    const [success, setSuccess] = useState(false);
-    const [errorMSG, setErrorMSG] = useState("");
-    const [alreadyRegistered, setAlreadyRegistered] = useState(false);
+    const [success, setSuccess] = useState(false); // Global success (all submitted)
+    // const [errorMSG, setErrorMSG] = useState(""); // Per-profile error? Or global? Use toast/alert.
 
-    const [playerName, setPlayerName] = useState("");
-    const [mode, setMode] = useState<RegistrationMode>("Under10");
-    const [mainBeys, setMainBeys] = useState(["", "", ""]);
-    // Multi-deck reserves: Array of decks (which are arrays of strings)
-    const [reserveDecks, setReserveDecks] = useState<string[][]>([]);
+    // View Players Modal State
+    const [showPlayerList, setShowPlayerList] = useState(false);
+    const [existingPlayers, setExistingPlayers] = useState<string[]>([]);
+    const [loadingPlayers, setLoadingPlayers] = useState(false);
+
+    type Profile = {
+        internalId: number; // For React keys
+        id?: string; // DB ID if submitted
+        name: string;
+        mode: RegistrationMode;
+        mainBeys: string[];
+        reserveDecks: string[][];
+        status: 'draft' | 'submitted';
+        errorMsg?: string;
+        validationPoints?: number;
+    };
+
+    const [profiles, setProfiles] = useState<Profile[]>([
+        { internalId: 1, name: "", mode: "Under10", mainBeys: ["", "", ""], reserveDecks: [], status: 'draft' }
+    ]);
+    const [activeTab, setActiveTab] = useState(0);
 
     // Selector State
-    // type can be 'main' or 'reserve'
-    // if 'reserve', we need deckIndex
     const [selectingState, setSelectingState] = useState<{
+        profileIndex: number,
         type: 'main' | 'reserve',
         deckIndex: number,
         slotIndex: number
@@ -59,21 +77,46 @@ export default function RegistrationForm({
         }
         setDeviceUUID(uuid);
 
-        // Check strict registration lock for THIS tournament
-        const lockKey = `reg_lock_${tournamentId}`;
-        if (localStorage.getItem(lockKey)) {
-            setAlreadyRegistered(true);
+        // Fetch existing registrations for this device
+        if (tournamentId) {
+            fetch(`/api/register?tournamentId=${tournamentId}&deviceUUID=${uuid}`)
+                .then(res => res.json())
+                .then(json => {
+                    if (json.success && json.data.length > 0) {
+                        const loadedProfiles = json.data.map((r: any, idx: number) => ({
+                            internalId: idx + 1,
+                            id: r.id,
+                            name: r.player_name,
+                            mode: r.mode,
+                            mainBeys: r.main_deck,
+                            reserveDecks: r.reserve_decks || [],
+                            status: 'submitted'
+                        }));
+                        setProfiles(loadedProfiles);
+                        // If all submitted, show success screen? 
+                        // User wants to see "Player 1, 2, 3" links.
+                        // We will just render the form in "View/Edit" mode (actually View only if locked?).
+                        // "reg.locked" implies they can't edit. 
+                        // But user wants "add player". So if they visit again, they see list. 
+                        // If they are locked, they can still add NEW players?
+                        // Let's assume yes? Or maybe lock strictly?
+                        // "Check strict registration lock": existing code setAlreadyRegistered(true).
+                        // We'll relax this. If they have profiles, we show them. Can they add more? Yes.
+                    }
+                })
+                .catch(err => console.error("Failed to load profiles", err));
         }
     }, [tournamentId]);
 
-    // Force mode based on Tournament Type
+    // Force mode based on Tournament Type (Apply to all profiles?)
     useEffect(() => {
-        if (tournamentType === 'U10') setMode('Under10');
-        else if (tournamentType === 'NoMoreMeta') setMode('NoMoreMeta');
+        if (tournamentType === 'U10' || tournamentType === 'NoMoreMeta') {
+            setProfiles(prev => prev.map(p => ({ ...p, mode: (tournamentType === 'U10' ? 'Under10' : 'NoMoreMeta') })));
+        }
     }, [tournamentType]);
 
-    // Handle Tournament Closed for New Users
-    if (tournamentStatus === 'CLOSED' && !alreadyRegistered && !success) {
+    // Handle Tournament Closed
+    if (tournamentStatus === 'CLOSED' && profiles.length === 0 /* If no existing profiles, show closed */) {
         return (
             <div className="flex flex-col items-center justify-center space-y-6 py-10 animate-in fade-in zoom-in-95 grayscale">
                 <div className="rounded-full bg-secondary p-6 ring-4 ring-white/10">
@@ -82,13 +125,12 @@ export default function RegistrationForm({
                 <div className="text-center space-y-2 max-w-xs">
                     <h2 className="text-2xl font-bold text-foreground">{t('reg.closed')}</h2>
                     <p className="text-muted-foreground">{t('reg.closed.desc')}</p>
-                    {tournamentName && <p className="text-sm font-bold opacity-50">{tournamentName}</p>}
                 </div>
             </div>
         );
     }
 
-    const validateDeck = (deck: string[]) => {
+    const validateDeck = (deck: string[], mode: RegistrationMode) => {
         // 1. Full
         if (deck.some(b => !b)) return { valid: false, message: t('reg.validation.incomplete') };
         // 2. Unique
@@ -103,7 +145,6 @@ export default function RegistrationForm({
             if (total > 10) return { valid: false, message: t('reg.validation.points', { pts: total }), points: total };
             return { valid: true, points: total };
         } else {
-            // Use custom ban list if provided, else default
             const effectiveBanList = (banList && banList.length > 0) ? banList : gameData.banList;
             const banned = deck.filter(name => effectiveBanList.includes(name));
             if (banned.length > 0) return { valid: false, message: t('reg.validation.banned') };
@@ -111,38 +152,127 @@ export default function RegistrationForm({
         }
     };
 
-    const validationResult = useMemo(() => {
-        // Main Deck
-        const mainVal = validateDeck(mainBeys);
+    const validateProfile = (p: Profile) => {
+        const mainVal = validateDeck(p.mainBeys, p.mode);
         if (!mainVal.valid) return { valid: false, section: t('reg.deck.main'), message: mainVal.message, points: mainVal.points };
 
-        // Reserve Decks
-        for (let i = 0; i < reserveDecks.length; i++) {
-            const resVal = validateDeck(reserveDecks[i]);
+        for (let i = 0; i < p.reserveDecks.length; i++) {
+            const resVal = validateDeck(p.reserveDecks[i], p.mode);
             if (!resVal.valid) return { valid: false, section: t('reg.deck.reserve_item', { n: i + 1 }), message: resVal.message, points: resVal.points };
         }
-
         return { valid: true, section: "", message: "", points: mainVal.points };
-    }, [mainBeys, reserveDecks, mode]);
+    };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validationResult.valid) return;
-        if (!playerName.trim()) {
-            setErrorMSG(t('reg.error.name'));
+    const updateProfile = (index: number, updates: Partial<Profile>) => {
+        setProfiles(prev => {
+            const newProfiles = [...prev];
+            newProfiles[index] = { ...newProfiles[index], ...updates };
+            return newProfiles;
+        });
+    };
+
+    const handleSelect = (val: string) => {
+        if (!selectingState) return;
+        const pIndex = selectingState.profileIndex;
+        const profile = profiles[pIndex];
+        if (!profile) return;
+
+        if (selectingState.type === 'main') {
+            const newBeys = [...profile.mainBeys];
+            newBeys[selectingState.slotIndex] = val;
+            updateProfile(pIndex, { mainBeys: newBeys });
+        } else {
+            const newDecks = [...profile.reserveDecks];
+            newDecks[selectingState.deckIndex][selectingState.slotIndex] = val;
+            updateProfile(pIndex, { reserveDecks: newDecks });
+        }
+        setSelectingState(null);
+    };
+
+    const addReserveDeck = (pIndex: number) => {
+        const profile = profiles[pIndex];
+        if (profile.reserveDecks.length < 3) {
+            updateProfile(pIndex, { reserveDecks: [...profile.reserveDecks, ["", "", ""]] });
+        }
+    };
+
+    const removeReserveDeck = (pIndex: number, deckIndex: number) => {
+        const profile = profiles[pIndex];
+        const newDecks = [...profile.reserveDecks];
+        newDecks.splice(deckIndex, 1);
+        updateProfile(pIndex, { reserveDecks: newDecks });
+    };
+
+    const addProfile = () => {
+        setProfiles(prev => [...prev, {
+            internalId: Math.max(...prev.map(p => p.internalId), 0) + 1,
+            name: "",
+            mode: (tournamentType === 'NoMoreMeta' ? 'NoMoreMeta' : 'Under10'),
+            mainBeys: ["", "", ""],
+            reserveDecks: [],
+            status: 'draft'
+        }]);
+        setActiveTab(profiles.length); // Switch to new tab
+    };
+
+    const deleteProfile = (index: number) => {
+        if (profiles.length <= 1) return;
+        setProfiles(prev => prev.filter((_, i) => i !== index));
+        // If we deleted the active tab, or a tab before it, adjust activeTab
+        if (index <= activeTab) {
+            setActiveTab(prev => Math.max(0, prev - 1));
+        }
+    };
+
+    const copyComboFromFirst = (index: number) => {
+        if (index === 0) return;
+        const source = profiles[0];
+        updateProfile(index, {
+            mainBeys: [...source.mainBeys],
+            reserveDecks: JSON.parse(JSON.stringify(source.reserveDecks)) // Deep copy
+        });
+    };
+
+    const fetchExistingPlayers = async () => {
+        setLoadingPlayers(true);
+        try {
+            const res = await fetch(`/api/register?tournamentId=${tournamentId}&listPlayers=true`);
+            const data = await res.json();
+            if (data.success) {
+                setExistingPlayers(data.players || []);
+            }
+        } catch (e) {
+            console.error("Failed to list players", e);
+        } finally {
+            setLoadingPlayers(false);
+        }
+    };
+
+    const openPlayerList = () => {
+        setShowPlayerList(true);
+        fetchExistingPlayers();
+    };
+
+    const handleSubmit = async (index: number) => {
+        const profile = profiles[index];
+        const validation = validateProfile(profile);
+        if (!validation.valid) return;
+        if (!profile.name.trim()) {
+            updateProfile(index, { errorMsg: t('reg.error.name') });
             return;
         }
+
         setLoading(true);
-        setErrorMSG("");
+        updateProfile(index, { errorMsg: "" });
 
         try {
             const payload = {
                 deviceUUID,
-                playerName,
-                mode,
-                mainBeys,
-                reserveDecks,
-                totalPoints: validationResult.points || 0,
+                playerName: profile.name,
+                mode: profile.mode,
+                mainBeys: profile.mainBeys,
+                reserveDecks: profile.reserveDecks,
+                totalPoints: validation.points || 0,
                 tournamentId
             };
 
@@ -154,44 +284,17 @@ export default function RegistrationForm({
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || t('reg.error.failed'));
 
-            setSuccess(true);
-            // Lock this device for this tournament
-            localStorage.setItem(`reg_lock_${tournamentId}`, "true");
-            // Save data for receipt
-            localStorage.setItem(`reg_data_${tournamentId}`, JSON.stringify(payload));
+            // Mark as submitted
+            updateProfile(index, { status: 'submitted' });
+
+            // If all profiles submitted, maybe show a toast?
+            // For now, just individual success state is handled by rendering logic.
 
         } catch (err: any) {
-            setErrorMSG(err.message || t('reg.error.generic'));
+            updateProfile(index, { errorMsg: err.message || t('reg.error.generic') });
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleSelect = (val: string) => {
-        if (!selectingState) return;
-
-        if (selectingState.type === 'main') {
-            const newBeys = [...mainBeys];
-            newBeys[selectingState.slotIndex] = val;
-            setMainBeys(newBeys);
-        } else {
-            const newDecks = [...reserveDecks];
-            newDecks[selectingState.deckIndex][selectingState.slotIndex] = val;
-            setReserveDecks(newDecks);
-        }
-        setSelectingState(null);
-    };
-
-    const addReserveDeck = () => {
-        if (reserveDecks.length < 3) {
-            setReserveDecks([...reserveDecks, ["", "", ""]]);
-        }
-    };
-
-    const removeReserveDeck = (index: number) => {
-        const newDecks = [...reserveDecks];
-        newDecks.splice(index, 1);
-        setReserveDecks(newDecks);
     };
 
     // Helper to render a generic Blade Slot
@@ -200,8 +303,9 @@ export default function RegistrationForm({
         type,
         deckIndex = 0,
         slotIndex,
+        mode,
         onPress
-    }: { name: string, type: 'main' | 'reserve', deckIndex?: number, slotIndex: number, onPress: () => void }) => {
+    }: { name: string, type: 'main' | 'reserve', deckIndex?: number, slotIndex: number, mode: RegistrationMode, onPress: () => void }) => {
         // @ts-ignore
         const imgPath = imageMap[name];
         const pt = allBeys.find(b => b.name === name)?.point;
@@ -257,144 +361,131 @@ export default function RegistrationForm({
         );
     };
 
-    if (alreadyRegistered || success) {
-        let savedData: any = null;
-        try {
-            const raw = localStorage.getItem(`reg_data_${tournamentId}`);
-            if (raw) savedData = JSON.parse(raw);
-        } catch (e) { }
+    const activeProfile = profiles[activeTab];
+    const validation = validateProfile(activeProfile);
 
-        // Fallback if local storage missing but lock exists (shouldn't happen often)
-        if (!savedData) {
-            return (
-                <div className="flex flex-col items-center justify-center space-y-6 py-10 animate-in fade-in zoom-in-95">
-                    <div className="rounded-full bg-green-500/20 p-6 ring-4 ring-green-500/10">
-                        <CheckCircle2 className="h-16 w-16 text-green-500" />
-                    </div>
-                    <div className="text-center space-y-2 max-w-xs">
-                        <h2 className="text-2xl font-bold text-foreground">{t('reg.success.title')}</h2>
-                        <p className="text-muted-foreground">{t('reg.success.desc')}</p>
-                        {tournamentName && <p className="text-sm font-bold text-primary opacity-80">{tournamentName}</p>}
-                    </div>
-                </div>
-            );
-        }
-
-        return (
-            <div className={cn("flex flex-col space-y-6 py-6 animate-in fade-in zoom-in-95", tournamentStatus === 'CLOSED' && "grayscale opacity-80")}>
-                <div className="text-center space-y-2">
-                    {tournamentStatus === 'CLOSED' ? (
-                        <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-secondary mb-2 border border-white/10">
-                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('reg.closed')}</span>
-                        </div>
-                    ) : (
-                        <div className="inline-flex items-center justify-center p-3 rounded-full bg-green-500/10 mb-2">
-                            <CheckCircle2 className="h-8 w-8 text-green-500" />
-                        </div>
-                    )}
-                    <h2 className="text-2xl font-bold text-foreground">{t('reg.complete')}</h2>
-                    {tournamentName && <h3 className="text-lg font-bold text-primary">{tournamentName}</h3>}
-                    <p className="text-muted-foreground text-sm">{t('reg.locked')}</p>
-                </div>
-
-                <div className="space-y-6">
-                    {/* Player Card */}
-                    <div className="glass-card p-4 rounded-xl border border-white/10 space-y-2">
-                        <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('reg.player_profile')}</div>
-                        <div className="flex items-center justify-between">
-                            <span className="text-lg font-bold text-white max-w-[200px] truncate" title={savedData.playerName}>{savedData.playerName}</span>
-                            <span className={cn("px-2 py-1 rounded text-xs font-bold", savedData.mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400")}>
-                                {savedData.mode === "Under10" ? "U10" : "NMM"}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Main Deck */}
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between px-1">
-                            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">{t('reg.deck.main')}</h3>
-                            {savedData.mode === "Under10" && (
-                                <span className="text-xs font-bold text-primary">{savedData.totalPoints}/10 pts</span>
-                            )}
-                        </div>
-                        <div className="space-y-2">
-                            {savedData.mainBeys.map((bey: string, i: number) => (
-                                // Reusing BladeSlot but non-interactive
-                                <div key={i} className="relative flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-card/50">
-                                    <div className="relative w-10 h-10 shrink-0 bg-black/40 rounded-lg overflow-hidden flex items-center justify-center">
-                                        {/* @ts-ignore */}
-                                        {imageMap[bey] && <Image src={imageMap[bey]} alt={bey} fill className="object-cover" />}
-                                    </div>
-                                    <div className="font-bold text-sm text-foreground">{bey}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Reserve Decks */}
-                    {savedData.reserveDecks && savedData.reserveDecks.length > 0 && (
-                        <div className="space-y-4 pt-4 border-t border-white/5">
-                            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider px-1">{t('reg.deck.reserve')}</h3>
-                            {savedData.reserveDecks.map((deck: string[], dIdx: number) => (
-                                <div key={dIdx} className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
-                                    <div className="text-xs font-bold text-muted-foreground mb-2">{t('reg.deck.reserve_item', { n: dIdx + 1 })}</div>
-                                    {deck.map((bey: string, sIdx: number) => (
-                                        <div key={sIdx} className="flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded bg-black/40 relative overflow-hidden">
-                                                {/* @ts-ignore */}
-                                                {imageMap[bey] && <Image src={imageMap[bey]} alt={bey} fill className="object-cover" />}
-                                            </div>
-                                            <span className="text-sm font-medium opacity-80">{bey}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-xs text-yellow-200/80 text-center">
-                    {t('reg.final_warning')}
-                </div>
-            </div>
-        );
-    }
+    // Helper for visual selector
+    const currentSelectorDeck = selectingState && profiles[selectingState.profileIndex]
+        ? (selectingState.type === 'main' ? profiles[selectingState.profileIndex].mainBeys : profiles[selectingState.profileIndex].reserveDecks[selectingState.deckIndex])
+        : [];
 
     return (
-        <>
-            <form onSubmit={handleSubmit} className="space-y-8 animate-in slide-in-from-bottom-5 duration-500 pb-20">
-                <div className="flex justify-end">
+        <div className="pb-24 animate-in fade-in">
+            <div className="flex justify-end mb-4">
+                <button
+                    type="button"
+                    onClick={toggleLang}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 hover:bg-secondary text-xs font-medium transition-colors"
+                >
+                    <Globe className="h-3 w-3" />
+                    {lang === 'TH' ? 'EN' : 'ไทย'}
+                </button>
+            </div>
+
+            {/* Profile Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-4 hide-scrollbar">
+                {profiles.map((p, idx) => (
                     <button
-                        type="button"
-                        onClick={toggleLang}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 hover:bg-secondary text-xs font-medium transition-colors"
+                        key={p.internalId}
+                        onClick={() => setActiveTab(idx)}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all border",
+                            activeTab === idx
+                                ? "bg-primary text-black border-primary shadow-lg shadow-primary/20 scale-105"
+                                : "bg-secondary text-muted-foreground border-transparent hover:bg-secondary/80"
+                        )}
                     >
-                        <Globe className="h-3 w-3" />
-                        {lang === 'TH' ? 'EN' : 'ไทย'}
+                        <span>{p.name || `Player ${idx + 1}`}</span>
+                        {p.status === 'submitted' && <CheckCircle2 className="h-3 w-3 text-green-600" />}
                     </button>
-                </div>
+                ))}
+                <button
+                    onClick={addProfile}
+                    className="flex items-center justify-center w-8 h-8 rounded-full bg-secondary border border-white/10 text-muted-foreground hover:text-primary hover:border-primary transition-all shrink-0"
+                >
+                    <Plus className="h-4 w-4" />
+                </button>
+            </div>
+
+            {/* Active Profile Form */}
+            <div className="space-y-8 animate-in slide-in-from-right-4 duration-300" key={activeProfile.internalId}>
+
+                {/* Status Banner */}
+                {activeProfile.status === 'submitted' && (
+                    <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-xl flex items-center gap-3 text-green-400">
+                        <CheckCircle2 className="h-5 w-5" />
+                        <div>
+                            <p className="text-sm font-bold">{t('reg.complete')}</p>
+                            <p className="text-xs opacity-80">{t('reg.locked')}</p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Player Info */}
                 <div className="space-y-2">
-                    <label htmlFor="playerName" className="text-sm font-semibold text-muted-foreground uppercase tracking-wider ml-1">
-                        {t('reg.player_name')}
-                    </label>
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider ml-1">
+                            {t('reg.player_name')}
+                        </label>
+                        <button
+                            onClick={() => deleteProfile(activeTab)}
+                            className="text-xs text-destructive hover:underline flex items-center gap-1"
+                        >
+                            <Trash2 className="h-3 w-3" /> Remove Player
+                        </button>
 
-                    <input
-                        id="playerName"
-                        type="text"
-                        value={playerName}
-                        onChange={(e) => setPlayerName(e.target.value)}
-                        placeholder={t('reg.placeholder.name')}
-                        className="w-full rounded-lg border border-input bg-secondary px-4 py-3 font-medium text-foreground outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/50"
-                    />
+                    </div>
+
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={activeProfile.name}
+                            onChange={(e) => updateProfile(activeTab, { name: e.target.value })}
+                            disabled={activeProfile.status === 'submitted'}
+                            placeholder={t('reg.placeholder.name')}
+                            className="flex-1 rounded-lg border border-input bg-secondary px-4 py-3 font-medium text-foreground outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/50 disabled:opacity-50"
+                        />
+                        <button
+                            type="button"
+                            onClick={openPlayerList}
+                            className="bg-secondary hover:bg-secondary/80 text-foreground px-3 rounded-lg border border-input transition-colors disabled:opacity-50 flex items-center justify-center"
+                            title="View Registered Players"
+                        >
+                            <Eye className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    {/* Copy Combo Button */}
+                    {activeTab > 0 && activeProfile.status === 'draft' && (
+                        <button
+                            type="button"
+                            onClick={() => copyComboFromFirst(activeTab)}
+                            className="text-xs text-primary hover:underline flex items-center gap-1 ml-1"
+                        >
+                            Make combo same as Player 1
+                        </button>
+                    )}
                 </div>
 
-                {/* Mode Selection - Hide if fixed by tournament type */}
+                {/* Mode Selection (Shared or Per Profile? Based on Code, per profile) */}
                 {!tournamentType && (
                     <div className="grid grid-cols-2 gap-2 p-1 bg-secondary rounded-xl">
-                        <button type="button" onClick={() => setMode("Under10")} className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", mode === "Under10" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}>{t('reg.mode.u10')}</button>
-                        <button type="button" onClick={() => setMode("NoMoreMeta")} className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", mode === "NoMoreMeta" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}>{t('reg.mode.nmm')}</button>
+                        <button
+                            type="button"
+                            disabled={activeProfile.status === 'submitted'}
+                            onClick={() => updateProfile(activeTab, { mode: "Under10" })}
+                            className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", activeProfile.mode === "Under10" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}
+                        >
+                            {t('reg.mode.u10')}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={activeProfile.status === 'submitted'}
+                            onClick={() => updateProfile(activeTab, { mode: "NoMoreMeta" })}
+                            className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", activeProfile.mode === "NoMoreMeta" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}
+                        >
+                            {t('reg.mode.nmm')}
+                        </button>
                     </div>
                 )}
 
@@ -402,24 +493,28 @@ export default function RegistrationForm({
                 <div className="space-y-3">
                     <div className="flex items-center justify-between px-1">
                         <h3 className="text-lg font-bold text-foreground">{t('reg.deck.main')}</h3>
-                        {mode === "Under10" && (
+                        {activeProfile.mode === "Under10" && (
                             <span className={cn(
                                 "text-sm font-bold px-2 py-0.5 rounded",
-                                (validateDeck(mainBeys).points || 0) <= 10 ? "bg-primary/20 text-primary" : "bg-destructive/20 text-destructive"
+                                (validateDeck(activeProfile.mainBeys, activeProfile.mode).points || 0) <= 10 ? "bg-primary/20 text-primary" : "bg-destructive/20 text-destructive"
                             )}>
-                                {(validateDeck(mainBeys).points || 0)}/10 pts
+                                {(validateDeck(activeProfile.mainBeys, activeProfile.mode).points || 0)}/10 pts
                             </span>
                         )}
                     </div>
 
                     <div className="space-y-2">
-                        {mainBeys.map((bey, i) => (
+                        {activeProfile.mainBeys.map((bey, i) => (
                             <BladeSlot
                                 key={`main-${i}`}
                                 name={bey}
                                 type="main"
                                 slotIndex={i}
-                                onPress={() => setSelectingState({ type: 'main', deckIndex: 0, slotIndex: i })}
+                                mode={activeProfile.mode}
+                                onPress={() => {
+                                    if (activeProfile.status === 'submitted') return;
+                                    setSelectingState({ profileIndex: activeTab, type: 'main', deckIndex: 0, slotIndex: i })
+                                }}
                             />
                         ))}
                     </div>
@@ -429,25 +524,27 @@ export default function RegistrationForm({
                 <div className="space-y-6 pt-4 border-t border-border">
                     <div className="flex items-center justify-between px-1">
                         <h3 className="text-lg font-bold text-foreground">
-                            {t('reg.deck.reserve')} <span className="text-xs font-normal text-muted-foreground">({reserveDecks.length}/3)</span>
+                            {t('reg.deck.reserve')} <span className="text-xs font-normal text-muted-foreground">({activeProfile.reserveDecks.length}/3)</span>
                         </h3>
                     </div>
 
-                    {reserveDecks.map((deck, dIdx) => {
-                        const val = validateDeck(deck);
+                    {activeProfile.reserveDecks.map((deck, dIdx) => {
+                        const val = validateDeck(deck, activeProfile.mode);
                         return (
                             <div key={dIdx} className="space-y-2 bg-secondary/10 p-3 rounded-xl border border-border/50">
                                 <div className="flex items-center justify-between">
                                     <h4 className="text-sm font-bold text-muted-foreground uppercase">{t('reg.deck.reserve_item', { n: dIdx + 1 })}</h4>
                                     <div className="flex items-center gap-2">
-                                        {mode === "Under10" && (
+                                        {activeProfile.mode === "Under10" && (
                                             <span className={cn("text-xs font-bold", val.points! <= 10 ? "text-primary" : "text-destructive")}>
                                                 {val.points}/10
                                             </span>
                                         )}
-                                        <button type="button" onClick={() => removeReserveDeck(dIdx)} className="text-destructive hover:bg-destructive/10 p-1.5 rounded-full">
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+                                        {activeProfile.status === 'draft' && (
+                                            <button type="button" onClick={() => removeReserveDeck(activeTab, dIdx)} className="text-destructive hover:bg-destructive/10 p-1.5 rounded-full">
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                                 {deck.map((bey, sIdx) => (
@@ -457,17 +554,21 @@ export default function RegistrationForm({
                                         type="reserve"
                                         deckIndex={dIdx}
                                         slotIndex={sIdx}
-                                        onPress={() => setSelectingState({ type: 'reserve', deckIndex: dIdx, slotIndex: sIdx })}
+                                        mode={activeProfile.mode}
+                                        onPress={() => {
+                                            if (activeProfile.status === 'submitted') return;
+                                            setSelectingState({ profileIndex: activeTab, type: 'reserve', deckIndex: dIdx, slotIndex: sIdx })
+                                        }}
                                     />
                                 ))}
                             </div>
                         );
                     })}
 
-                    {reserveDecks.length < 3 && (
+                    {activeProfile.reserveDecks.length < 3 && activeProfile.status === 'draft' && (
                         <button
                             type="button"
-                            onClick={addReserveDeck}
+                            onClick={() => addReserveDeck(activeTab)}
                             className="w-full py-4 border-2 border-dashed border-border rounded-xl flex items-center justify-center gap-2 text-muted-foreground hover:bg-secondary/50 hover:border-primary/50 hover:text-primary transition-all font-bold"
                         >
                             <Plus className="h-5 w-5" />
@@ -476,47 +577,54 @@ export default function RegistrationForm({
                     )}
                 </div>
 
-                {/* Actions */}
-                <div className="sticky bottom-4 z-40 bg-background/80 backdrop-blur-lg p-4 -mx-4 border-t border-border/50 rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.2)]">
-                    {!validationResult.valid && (
-                        <div className="mb-4 flex items-center gap-2 text-sm text-destructive font-medium bg-destructive/10 p-3 rounded-lg">
-                            <AlertTriangle className="h-4 w-4" />
-                            {validationResult.section}: {validationResult.message}
-                        </div>
-                    )}
-                    {errorMSG && <div className="mb-4 text-sm text-destructive font-medium bg-destructive/10 p-3 rounded-lg">{errorMSG}</div>}
+            </div>
 
+            {/* Actions - Moved outside animation wrapper for stability */}
+            <div className="sticky bottom-4 z-50 bg-background/95 backdrop-blur-lg p-4 -mx-4 border-t border-border/50 rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.2)]">
+                {!validation.valid && (
+                    <div className="mb-4 flex items-center gap-2 text-sm text-destructive font-medium bg-destructive/10 p-3 rounded-lg">
+                        <AlertTriangle className="h-4 w-4" />
+                        {validation.section}: {validation.message}
+                    </div>
+                )}
+                {activeProfile.errorMsg && <div className="mb-4 text-sm text-destructive font-medium bg-destructive/10 p-3 rounded-lg">{activeProfile.errorMsg}</div>}
+
+                {activeProfile.status === 'draft' ? (
                     <button
-                        type="submit"
-                        disabled={!validationResult.valid || loading || !playerName}
+                        type="button"
+                        onClick={() => handleSubmit(activeTab)}
+                        disabled={!validation.valid || loading || !activeProfile.name.trim()}
                         className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-sm font-bold text-black shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
                     >
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('reg.btn.submit')}
                     </button>
-                </div>
-
-            </form>
+                ) : (
+                    <div className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-4 text-sm font-bold text-muted-foreground cursor-not-allowed">
+                        <CheckCircle2 className="h-4 w-4" /> Submitted
+                    </div>
+                )}
+            </div>
 
             {selectingState && (
                 <VisualSelector
                     label={selectingState.type === 'main' ? t('reg.selector.main', { n: selectingState.slotIndex + 1 }) : t('reg.selector.reserve', { d: selectingState.deckIndex + 1, n: selectingState.slotIndex + 1 })}
                     value={selectingState.type === 'main'
-                        ? mainBeys[selectingState.slotIndex]
-                        : reserveDecks[selectingState.deckIndex][selectingState.slotIndex]}
+                        ? (profiles[selectingState.profileIndex]?.mainBeys[selectingState.slotIndex] || "")
+                        : (profiles[selectingState.profileIndex]?.reserveDecks[selectingState.deckIndex][selectingState.slotIndex] || "")}
                     onChange={handleSelect}
                     onClose={() => setSelectingState(null)}
                     options={allBeys.map(opt => {
                         const effectiveBanList = (banList && banList.length > 0) ? banList : gameData.banList;
-                        const isBanned = mode !== "Under10" && effectiveBanList.includes(opt.name);
+                        const isBanned = activeProfile.mode !== "Under10" && effectiveBanList.includes(opt.name);
                         return {
                             ...opt,
                             blocked: isBanned
                         };
                     })}
                     maxPoint={(() => {
-                        if (mode !== 'Under10') return undefined;
+                        if (activeProfile.mode !== 'Under10') return undefined;
                         // Calculate current points for the ACTIVE deck being edited
-                        let currentDeck = selectingState.type === 'main' ? mainBeys : reserveDecks[selectingState.deckIndex];
+                        let currentDeck = currentSelectorDeck;
 
                         const currentTotal = currentDeck.reduce((sum, name, idx) => {
                             if (idx === selectingState.slotIndex) return sum;
@@ -528,6 +636,51 @@ export default function RegistrationForm({
                     })()}
                 />
             )}
-        </>
+
+            {/* Players List Modal */}
+            {showPlayerList && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
+                        <div className="p-4 border-b border-border flex items-center justify-between bg-secondary/20">
+                            <h3 className="font-bold text-foreground flex items-center gap-2">
+                                <Globe className="h-4 w-4 text-primary" />
+                                Registered Players
+                            </h3>
+                            <button onClick={() => setShowPlayerList(false)} className="p-1 rounded-full hover:bg-white/10 transition-colors">
+                                <X className="h-5 w-5 text-muted-foreground" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-muted-foreground/20">
+                            {loadingPlayers ? (
+                                <div className="flex flex-col items-center justify-center py-8 space-y-2 text-muted-foreground">
+                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                    <span className="text-xs font-medium">Loading...</span>
+                                </div>
+                            ) : existingPlayers.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground text-sm">
+                                    No players registered yet.
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-1">
+                                    {existingPlayers.map((name, idx) => (
+                                        <div key={idx} className="px-4 py-3 rounded-lg bg-secondary/10 border border-border/50 text-sm font-medium text-foreground flex items-center gap-3">
+                                            <span className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
+                                                {idx + 1}
+                                            </span>
+                                            {name}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-3 border-t border-border bg-secondary/10 text-center">
+                            <span className="text-xs text-muted-foreground">Total: {existingPlayers.length} Players</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

@@ -34,6 +34,8 @@ export const locales = {
         "reg.error.name": "กรุณากรอกชื่อของคุณ",
         "reg.error.failed": "การลงทะเบียนล้มเหลว",
         "reg.error.generic": "เกิดข้อผิดพลาดบางอย่าง",
+        "reg.error.name_exists": "ชื่อนี้ถูกใช้ไปแล้ว",
+        "reg.success.name_available": "ชื่อนี้ใช้ได้",
 
         // Admin
         "admin.title": "จัดการทัวร์นาเมนต์",
@@ -107,6 +109,8 @@ export const locales = {
         "reg.error.name": "Please enter your name.",
         "reg.error.failed": "Registration failed",
         "reg.error.generic": "Something went wrong.",
+        "reg.error.name_exists": "Name already exists",
+        "reg.success.name_available": "Name is available",
 
         // Admin
         "admin.title": "Tournament Manager",
