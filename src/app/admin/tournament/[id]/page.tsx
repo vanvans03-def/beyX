@@ -68,32 +68,27 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             const imageElements = Array.from(cardRef.current.getElementsByTagName("img"));
             console.log(`Found ${imageElements.length} images`);
 
-            // Wait for all images to load
+            // Force wait for all images to decode/paint
             await Promise.all(
-                imageElements.map((img) => {
-                    return new Promise<void>((resolve) => {
-                        if (img.complete && img.naturalHeight > 0) {
-                            resolve();
-                            return;
-                        }
-
-                        const timeout = setTimeout(() => resolve(), 5000);
-
-                        img.onload = () => {
-                            clearTimeout(timeout);
-                            resolve();
-                        };
-
-                        img.onerror = () => {
-                            clearTimeout(timeout);
-                            resolve();
-                        };
-                    });
+                imageElements.map(async (img) => {
+                    if (img.src && !img.complete) {
+                        await new Promise((resolve) => {
+                            img.onload = resolve;
+                            img.onerror = resolve;
+                            setTimeout(resolve, 2000); // Timeout
+                        });
+                    }
+                    try {
+                        // Crucial for iOS/Safari: Ensure image is decoded into memory
+                        await img.decode();
+                    } catch (e) {
+                        console.warn("Image decode failed", e);
+                    }
                 })
             );
 
             console.log('Images ready, waiting for paint...');
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 1500)); // Increased wait time
 
             console.log('Capturing with dom-to-image...');
 
@@ -106,7 +101,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     transform: 'scale(2)',
                     transformOrigin: 'top left',
                     width: `${cardRef.current.offsetWidth}px`,
-                    height: `${cardRef.current.offsetHeight}px`
+                    height: `${cardRef.current.offsetHeight}px`,
+                    // Ensure visibility during capture
+                    opacity: '1',
+                    visibility: 'visible'
                 },
                 width: cardRef.current.offsetWidth * 2,
                 height: cardRef.current.offsetHeight * 2
@@ -509,7 +507,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                         {/* HIDDEN RENDER CONTAINER FOR IMAGE GENERATION */}
                         {/* We use opacity: 0 instead of display: none or huge offset to ensure browser renders it for capture */}
-                        <div style={{ position: "fixed", top: 0, left: 0, zIndex: -50, opacity: 0, pointerEvents: "none" }}>
+                        <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
                             <div
                                 ref={cardRef}
                                 style={{ width: 1200, minHeight: 630, height: 'fit-content', backgroundColor: 'black', color: 'white', position: 'relative', display: 'flex' }}
