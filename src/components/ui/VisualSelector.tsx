@@ -81,7 +81,6 @@ export function VisualSelector({
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <input
-                        autoFocus
                         type="text"
                         placeholder="Search Blade..."
                         className="w-full bg-secondary rounded-lg py-2.5 pl-9 pr-4 text-sm font-medium outline-none border border-transparent focus:border-primary transition-all"
