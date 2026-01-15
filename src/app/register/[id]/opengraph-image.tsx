@@ -103,7 +103,6 @@ export default async function Image({ params }: { params: { id: string } }) {
                     </div>
 
                     <div style={{
-                        color: 'white',
                         fontSize: 60,
                         fontWeight: 900,
                         lineHeight: 1.1,
