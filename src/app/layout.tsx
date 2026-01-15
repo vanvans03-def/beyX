@@ -24,13 +24,6 @@ export const metadata: Metadata = {
     description: "Tournament Registration & Management Platform",
     url: '/',
     siteName: 'BeyX',
-    images: [
-      {
-        url: '/beyx-logo.png',
-        width: 800,
-        height: 600,
-      }
-    ],
     locale: 'th_TH',
     type: 'website',
   },
