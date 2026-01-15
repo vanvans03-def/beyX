@@ -59,7 +59,7 @@ export async function GET(request: Request) {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        backgroundColor: '#000',
+                        backgroundColor: '#111111',
                         position: 'relative',
                         overflow: 'hidden',
                         borderRight: '4px solid #4ade80',
@@ -102,7 +102,8 @@ export async function GET(request: Request) {
                         flexDirection: 'column',
                         justifyContent: 'center',
                         padding: '40px',
-                        backgroundImage: 'radial-gradient(circle at 80% 20%, #1a1a1a 0%, #000 70%)',
+                        backgroundColor: '#1A1A1A',
+                        backgroundImage: 'radial-gradient(circle at 80% 20%, #222 0%, #111 70%)',
                         color: 'white',
                     }}>
                         <div style={{
@@ -173,8 +174,8 @@ export async function GET(request: Request) {
                 </div>
             ),
             {
-                width: 2400,
-                height: 1260,
+                width: 1200,
+                height: 630,
             }
         );
     } catch (e: any) {
