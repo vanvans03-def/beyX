@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { getTournaments } from '@/lib/repository';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 // Image metadata
 export const alt = 'BeyX Tournament Info';
