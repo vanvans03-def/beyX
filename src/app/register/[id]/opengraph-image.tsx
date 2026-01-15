@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og';
-import { getTournaments } from '@/lib/repository';
+import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 
@@ -15,24 +15,27 @@ export const contentType = 'image/png';
 export default async function Image({ params }: { params: { id: string } }) {
     const { id } = await params;
 
-    // Fetch tournament data
-    // Note: getTournaments might need to be adapted for edge if it uses node-specifics, 
-    // but usually fetch works. If repository uses fs, we might need a direct fetch 
-    // or assume it's data-compatible. 
-    // SAFEST BET: Fallback strings if fetch fails or use basic styles first.
     let tournamentName = 'BEYBLADE X TOURNAMENT';
     let status = 'OPEN';
 
     try {
-        // We can't easily use the node-based repository in edge runtime if it uses 'fs' or 'pg' directly 
-        // without edge formatting. However, assuming API/Supabase calls are HTTP based or using
-        // standard fetch, it might pass.
-        // If 'getTournaments' is pure supabase-js, it likely works.
-        const tournaments = await getTournaments();
-        const t = tournaments.find(x => x.id === id);
-        if (t) {
-            tournamentName = t.name;
-            status = t.status || 'OPEN';
+        // Direct lightweight fetch to avoid loading heavy dependencies (Google Sheets, etc.)
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+
+        const { data } = await supabase
+            .from('tournaments')
+            .select('name, status')
+            .eq('id', id)
+            .single();
+
+        if (data) {
+            tournamentName = data.name;
+            status = data.status || 'OPEN';
+        } else {
+            console.log("OG: Tournament not found, using default.");
         }
     } catch (e) {
         console.error("OG Image Error:", e);
