@@ -142,7 +142,7 @@ export default async function Image({ params }: { params: { id: string } }) {
                     fontSize: 16,
                     letterSpacing: '2px',
                 }}>
-                    POWERED BY BEYX
+                    POWERED BY สายใต้ยิม
                 </div>
             </div>
         ),

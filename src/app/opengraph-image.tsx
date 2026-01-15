@@ -112,7 +112,7 @@ export default async function Image() {
                     fontSize: 16,
                     letterSpacing: '2px',
                 }}>
-                    POWERED BY BEYX
+                    POWERED BY สายใต้ยิม
                 </div>
             </div>
         ),

@@ -29,7 +29,7 @@ export async function generateMetadata(
         openGraph: {
             title: event.title,
             description: event.description || `Join ${event.title} at ${event.location}`,
-            images: event.image_url ? [event.image_url] : [],
+            images: [`/api/og?id=${event.id}`],
         },
     };
 }
