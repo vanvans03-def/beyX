@@ -27,7 +27,6 @@ export async function generateMetadata(
         openGraph: {
             title: `${tournament.name} - Registration Open`,
             description: `Click to register for ${tournament.name}. Status: ${tournament.status}.`,
-            images: ['/beyx-logo.png'], // We can make this dynamic if tournament has an image later
         },
     };
 }
