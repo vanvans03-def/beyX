@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Image from "next/image";
+import { ImageWithLoading } from "@/components/ui/ImageWithLoading";
 import { Search, X, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import imageMap from "@/data/image-map.json";
@@ -60,9 +61,14 @@ export function VisualSelector({
     }, [options, query, pointFilter]);
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-5">
+        <div
+            className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-5 touch-none"
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
+        >
             {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b border-border/50 bg-background/80 glass-card rounded-b-xl">
+            <div className="flex-none flex items-center justify-between p-3 border-b border-border/50 bg-background/80 glass-card rounded-b-xl z-10">
                 <div className="flex flex-col">
                     <h3 className="text-base font-bold text-foreground">Select {label}</h3>
                     <p className="text-[10px] text-muted-foreground">{filteredOptions.length} Blades</p>
@@ -76,7 +82,7 @@ export function VisualSelector({
             </div>
 
             {/* Controls */}
-            <div className="space-y-2 p-3 pb-0">
+            <div className="flex-none space-y-2 p-3 pb-0 z-10">
                 {/* Search */}
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -90,12 +96,12 @@ export function VisualSelector({
                 </div>
 
                 {/* Point Filters */}
-                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none no-scrollbar">
+                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none no-scrollbar touch-pan-x">
                     <button
                         type="button"
                         onClick={() => setPointFilter("ALL")}
                         className={cn(
-                            "px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all",
+                            "px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all shrink-0",
                             pointFilter === "ALL"
                                 ? "bg-primary text-black border-primary"
                                 : "bg-secondary text-muted-foreground border-border hover:bg-secondary/80"
@@ -109,7 +115,7 @@ export function VisualSelector({
                             type="button"
                             onClick={() => setPointFilter(pt)}
                             className={cn(
-                                "px-2.5 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all",
+                                "px-2.5 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap border transition-all shrink-0",
                                 pointFilter === pt
                                     ? "bg-primary/20 text-primary border-primary"
                                     : "bg-secondary text-muted-foreground border-border hover:bg-secondary/80"
@@ -122,7 +128,7 @@ export function VisualSelector({
             </div>
 
             {/* Grid - Made smaller (4 cols mobile, 5 sm, 6 md) */}
-            <div className="flex-1 overflow-y-auto p-3 grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 pb-20 content-start">
+            <div className="flex-1 overflow-y-auto p-3 grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 pb-24 content-start overscroll-contain touch-pan-y">
                 {filteredOptions.map((opt) => {
                     // @ts-ignore
                     const imgPath = imageMap[opt.name];
@@ -143,12 +149,13 @@ export function VisualSelector({
                         >
                             <div className="relative w-full aspect-square">
                                 {imgPath ? (
-                                    <Image
+                                    <ImageWithLoading
                                         src={imgPath}
                                         alt={opt.name}
                                         fill
                                         className="object-contain drop-shadow-md"
                                         sizes="(max-width: 768px) 25vw, 15vw"
+                                        loading="lazy"
                                     />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center bg-secondary rounded text-[8px] text-muted-foreground">

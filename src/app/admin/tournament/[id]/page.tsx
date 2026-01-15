@@ -90,7 +90,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             );
 
             console.log('Images ready, waiting for paint...');
-            await new Promise((resolve) => setTimeout(resolve, 1500)); // Increased wait time
+            console.log('Images ready, waiting for paint...');
+            await new Promise((resolve) => setTimeout(resolve, 4000)); // Increased wait time for better rendering (iOS safe)
 
             console.log('Capturing with html-to-image...');
 
@@ -421,7 +422,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }
 
     return (
-        <div className="min-h-screen bg-background p-4 md:p-6">
+        <div className="min-h-screen bg-background p-4 md:p-6" data-aos="fade-in" suppressHydrationWarning>
             <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
                 <header className="flex flex-col md:flex-row items-center justify-between gap-4 glass-card p-4 rounded-xl">
                     <div className="flex items-center gap-4 w-full md:w-auto">
@@ -612,58 +613,132 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             </div>
                         </div>
 
-                        {/* HIDDEN RENDER CONTAINER FOR INVITE CARD - Always simple QR layout */}
+                        {/* HIDDEN RENDER CONTAINER FOR INVITE CARD - Unified Layout */}
                         <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
                             <div
                                 ref={cardRef}
-                                style={{ width: 1200, height: 630, backgroundColor: 'black', color: 'white', position: 'relative', display: 'flex' }}
+                                style={{ width: 1200, minHeight: 630, height: 'fit-content', backgroundColor: 'black', color: 'white', position: 'relative', display: 'flex' }}
                             >
                                 {/* Dynamic Background */}
-                                <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
+                                <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
                                     <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
-                                    <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.1)' }} />
-                                    <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#2563eb]/20 rounded-full blur-[120px]" />
+                                    <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.05)' }} />
+                                    <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#2563eb]/10 rounded-full blur-[120px]" />
                                 </div>
 
-                                {/* Simple QR Layout */}
-                                <div style={{ flex: 1, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32, position: 'relative' }}>
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full z-[-1]" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full z-[-1] opacity-50" style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
+                                {/* Content Grid */}
+                                <div style={{ position: 'relative', zIndex: 10, display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', width: '100%', height: 'auto', alignItems: 'stretch' }}>
 
-                                    <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', filter: 'drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04)) drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1))' }}>
-                                        Tournament Invite
-                                    </p>
+                                    {/* Left Side: Tournament Info & Ban List */}
+                                    <div style={{ padding: 40, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                                        <div style={{ marginBottom: 24 }}>
+                                            <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', fontSize: '0.9rem' }}>
+                                                Tournament Invite
+                                            </p>
+                                            <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                                {tournament?.Name || "BEYBLADE X"}
+                                            </h1>
+                                            {tournament?.Type && (
+                                                <span style={{
+                                                    display: 'inline-block',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 800,
+                                                    color: tournament.Type === 'U10' ? '#60a5fa' : tournament.Type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '0.1em',
+                                                    padding: '4px 8px',
+                                                    borderRadius: 4,
+                                                    backgroundColor: 'rgba(255,255,255,0.05)',
+                                                    border: '1px solid rgba(255,255,255,0.1)'
+                                                }}>
+                                                    {tournament.Type} FORMAT
+                                                </span>
+                                            )}
+                                        </div>
 
-                                    <h1 style={{ fontSize: '4rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', marginBottom: 8, lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', padding: '0 16px', filter: 'drop-shadow(0 25px 25px rgba(0, 0, 0, 0.15))' }}>
-                                        {tournament?.Name || "BEYBLADE X"}
-                                    </h1>
+                                        {/* Ban List Mini-Grid */}
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
+                                                <AlertCircle style={{ width: 16, height: 16, color: '#ef4444' }} />
+                                                <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restricted Parts ({tournament?.BanList?.length || 0})</span>
+                                            </div>
 
+                                            {tournament?.BanList && tournament.BanList.length > 0 ? (
+                                                <div style={{
+                                                    display: 'grid',
+                                                    gridTemplateColumns: `repeat(${tournament.BanList.length > 30 ? 7 : tournament.BanList.length > 20 ? 6 : 5}, 1fr)`,
+                                                    gap: 8,
+                                                    alignContent: 'start'
+                                                }}>
+                                                    {tournament.BanList.map((bey: string, i: number) => {
+                                                        // @ts-ignore
+                                                        const hasImg = !!imageMap[bey];
+                                                        return (
+                                                            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                                                <div style={{
+                                                                    width: '100%',
+                                                                    aspectRatio: '1/1',
+                                                                    backgroundColor: 'rgba(255,255,255,0.05)',
+                                                                    borderRadius: 8,
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    padding: 4,
+                                                                    border: '1px solid rgba(255,255,255,0.1)'
+                                                                }}>
+                                                                    {hasImg ? (
+                                                                        // @ts-ignore
+                                                                        <img src={imageMap[bey]} alt={bey} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                                                    ) : (
+                                                                        <span style={{ fontSize: 8, opacity: 0.5 }}>IMG</span>
+                                                                    )}
+                                                                </div>
+                                                                <span style={{ fontSize: 7, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{bey}</span>
+                                                            </div>
+                                                        );
+                                                    })}
 
-                                    {tournament?.Type && (
-                                        <p style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>
-                                            {tournament.Type} FORMAT
+                                                </div>
+                                            ) : (
+                                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed rgba(255,255,255,0.1)', borderRadius: 12 }}>
+                                                    <span style={{ color: '#4b5563', fontSize: '0.9rem' }}>No Banned Parts</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Footer */}
+                                        <div style={{ marginTop: 'auto', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
+                                            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Right Side: QR Code */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                                        <div style={{
+                                            padding: 20,
+                                            backgroundColor: 'white',
+                                            borderRadius: 20,
+                                            boxShadow: '0 0 40px rgba(0,0,0,0.5)',
+                                            marginBottom: 24
+                                        }}>
+                                            <QRCodeSVG
+                                                value={`${origin || ''}/register/${id}`}
+                                                size={220}
+                                            />
+                                        </div>
+                                        <p style={{ fontSize: '1.2rem', color: '#fff', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                            Scan to Register
                                         </p>
-                                    )}
-
-                                    <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 24, boxShadow: '0 0 50px rgba(0,0,0,0.5)', border: '4px solid rgba(255,255,255,0.2)', marginBottom: 16 }}>
-                                        <QRCodeSVG
-                                            value={`${origin || ''}/register/${id}`}
-                                            size={320}
-                                        />
+                                        <p style={{ marginTop: 8, fontSize: '0.8rem', color: '#9ca3af', fontFamily: 'monospace' }}>
+                                            {origin ? `${origin.replace(/^https?:\/\//, '')}/register/${id}` : `.../register/${id}`}
+                                        </p>
                                     </div>
 
-                                    <p style={{ fontSize: '1.5rem', color: '#9ca3af', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                                        Scan to Register
-                                    </p>
-
-                                    <div style={{ position: 'absolute', bottom: 48, right: 48, opacity: 0.5 }}>
-                                        <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
-                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* HIDDEN RENDER CONTAINER FOR BAN LIST */}
+                        {/* Separate container for Ban List Export (kept as is) */}
                         {tournament?.BanList && tournament.BanList.length > 0 && (
                             <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
                                 <div

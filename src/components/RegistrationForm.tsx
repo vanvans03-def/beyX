@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, Plus, Trash2, Globe, Eye, X } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
+import { ImageWithLoading } from "@/components/ui/ImageWithLoading";
 import { useTranslation } from "@/hooks/useTranslation";
 
 type RegistrationMode = "Under10" | "NoMoreMeta";
@@ -377,7 +378,7 @@ export default function RegistrationForm({
                 {/* Image/Icon */}
                 <div className="relative w-12 h-12 shrink-0 bg-black/20 rounded-lg overflow-hidden flex items-center justify-center">
                     {name && imgPath ? (
-                        <Image src={imgPath} alt={name} fill className="object-cover" />
+                        <ImageWithLoading src={imgPath} alt={name} fill className="object-cover" />
                     ) : name ? (
                         <span className="text-[10px] font-bold text-muted-foreground break-all p-1 text-center">{name.substring(0, 3)}</span>
                     ) : (
@@ -420,7 +421,7 @@ export default function RegistrationForm({
         : [];
 
     return (
-        <div className="pb-24 animate-in fade-in">
+        <div className="pb-24" data-aos="fade-in" suppressHydrationWarning>
             <div className="flex justify-end mb-4">
                 <button
                     type="button"

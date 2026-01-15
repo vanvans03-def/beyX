@@ -51,7 +51,7 @@ export default async function EventsPage({ searchParams }: Props) {
                 <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px]" />
             </div>
 
-            <main className="relative z-10 max-w-4xl mx-auto p-6 space-y-8">
+            <main className="relative z-10 max-w-4xl mx-auto p-6 space-y-8" data-aos="fade-in" suppressHydrationWarning>
                 <header className="flex items-center justify-between">
                     <div>
                         <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white">

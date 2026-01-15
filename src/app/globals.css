@@ -4,32 +4,33 @@
   /* HSL Values for easier manipulation */
   --background: #050505;
   --foreground: #fafafa;
-  
+
   --card: #0a0a0a;
   --card-foreground: #fafafa;
-  
+
   --popover: #0a0a0a;
   --popover-foreground: #fafafa;
-  
-  --primary: #00ff94; /* Cyber Green */
+
+  --primary: #00ff94;
+  /* Cyber Green */
   --primary-foreground: #000000;
-  
+
   --secondary: #1a1a1a;
   --secondary-foreground: #fafafa;
-  
+
   --muted: #262626;
   --muted-foreground: #a3a3a3;
-  
+
   --accent: #262626;
   --accent-foreground: #fafafa;
-  
+
   --destructive: #ef4444;
   --destructive-foreground: #fafafa;
-  
+
   --border: #262626;
   --input: #262626;
   --ring: #00ff94;
-  
+
   --radius: 0.5rem;
 }
 
@@ -56,18 +57,32 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
-  
+
   /* Animations */
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
-  
+
+  /* Custom Animations */
+  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
   @keyframes accordion-down {
-    from { height: 0; }
-    to { height: var(--radix-accordion-content-height); }
+    from {
+      height: 0;
+    }
+
+    to {
+      height: var(--radix-accordion-content-height);
+    }
   }
+
   @keyframes accordion-up {
-    from { height: var(--radix-accordion-content-height); }
-    to { height: 0; }
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+
+    to {
+      height: 0;
+    }
   }
 }
 
@@ -87,7 +102,7 @@ body {
 }
 
 .glass-card {
-  background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
@@ -97,13 +112,16 @@ body {
 ::-webkit-scrollbar {
   width: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: var(--background); 
+  background: var(--background);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--muted); 
+  background: var(--muted);
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground); 
+  background: var(--muted-foreground);
 }

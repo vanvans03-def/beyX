@@ -16,7 +16,7 @@ export default async function Home() {
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.05]" />
       </div>
 
-      <main className="relative z-10 flex flex-col items-center text-center space-y-8 max-w-md w-full">
+      <main className="relative z-10 flex flex-col items-center text-center space-y-8 max-w-md w-full" data-aos="fade-in" suppressHydrationWarning>
         <div className="space-y-4">
           <h1 className="text-5xl font-black italic tracking-tighter text-white">
             BEYX <span className="text-primary">SYSTEM</span>

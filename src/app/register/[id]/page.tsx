@@ -45,7 +45,7 @@ export default async function RegisterPage({ params }: Props) {
                 <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.03]" />
             </div>
 
-            <main className="relative z-10 max-w-lg mx-auto min-h-screen px-6 py-12 flex flex-col">
+            <main className="relative z-10 max-w-lg mx-auto min-h-screen px-6 py-12 flex flex-col" data-aos="fade-in" suppressHydrationWarning>
                 {/* Header */}
                 <header className="flex flex-col items-center justify-center space-y-4 mb-8">
                     <div className="text-center space-y-1">
