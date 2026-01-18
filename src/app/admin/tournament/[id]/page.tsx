@@ -316,7 +316,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                 // Check if status changed from open to completed/closed
                 if (tournament?.Status !== remoteStatus) {
-                    setTournament(prev => ({ ...prev, ...json.data }));
+                    setTournament((prev: any) => ({ ...prev, ...json.data }));
 
                     if (remoteStatus === 'COMPLETED' || remoteStatus === 'CLOSED') {
                         // If tournament just finished remotely, fetch standings immediately
