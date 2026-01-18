@@ -12,6 +12,7 @@ export const locales = {
         "reg.btn.add_reserve": "เพิ่มเด็คสำรอง", // Add Reserve Deck
         "reg.btn.submit": "ยืนยันการลงทะเบียน", // Complete Registration,
         "reg.btn.loading": "กำลังบันทึก...",
+        "reg.btn.view_bracket": "ดูสายการแข่งขัน", // View Bracket
         "reg.alert.final": "การลงทะเบียนถือเป็นที่สิ้นสุด หากต้องการแก้ไขกรุณาติดต่อผู้จัดงาน",
         "reg.success": "ลงทะเบียนสำเร็จ",
         "reg.success.desc": "คุณได้ลงทะเบียนสำหรับการแข่งขันนี้แล้ว",
@@ -63,6 +64,38 @@ export const locales = {
         "detail.rules_title": "กฎกติกาการแข่งขัน",
         "detail.banned_parts": "ชิ้นส่วนที่ถูกแบน",
 
+        // Admin Tournament Control
+        "admin.control.title": "จัดการทัวร์นาเมนต์",
+        "admin.control.desc": "จัดการสายการแข่งขัน, สถานะ, และรีเซ็ตแทร็กเกอร์",
+        "admin.btn.end": "จบการแข่งขัน",
+        "admin.btn.completed": "จบการแข่งขันแล้ว",
+        "admin.btn.reset": "รีเซ็ต",
+        "admin.btn.setup": "ตั้งค่าสายแข่ง",
+        "admin.btn.generating": "กำลังสร้าง...",
+        "admin.btn.invite": "สร้างการ์ดเชิญ",
+        "admin.btn.creating_invite": "กำลังสร้าง...",
+
+        // Admin Settings Modal
+        "admin.settings.title": "ตั้งค่าทัวร์นาเมนต์",
+        "admin.settings.format": "รูปแบบการแข่งขัน",
+        "admin.settings.shuffle": "สุ่ม / สลับตำแหน่งผู้เล่น",
+        "admin.settings.player_count": "กำลังสร้างสายสำหรับ {count} ผู้เล่น",
+        "admin.settings.start": "เริ่มการแข่งขัน",
+        "admin.settings.creating_challonge": "กำลังเชื่อมต่อ Challonge...",
+
+        "admin.matches.title": "การแข่งขันที่กำลังแข่ง",
+        "admin.matches.refresh": "รีเฟรชผล",
+        "admin.matches.loading": "กำลังโหลด...",
+        "admin.matches.empty": "ไม่พบการแข่งขัน",
+        "admin.matches.round": "รอบที่ {n}",
+        "admin.matches.win": "ชนะ",
+
+        "admin.modal.invite_created": "สร้างการ์ดเชิญสำเร็จ",
+        "admin.modal.ban_created": "สร้างรูป Ban List สำเร็จ",
+        "admin.modal.close": "ปิด",
+        "admin.modal.download": "ดาวน์โหลดรูปภาพ",
+        "admin.modal.download_ban": "ดาวน์โหลด Ban List",
+
         // Tournament Types
         "type.U10": "U10",
         "type.NoMoreMeta": "No More Meta",
@@ -87,6 +120,7 @@ export const locales = {
         "reg.btn.add_reserve": "Add Reserve Deck",
         "reg.btn.submit": "Complete Registration",
         "reg.btn.loading": "Registering...",
+        "reg.btn.view_bracket": "View Bracket",
         "reg.alert.final": "Registration is final. Contact the Tournament Organizer for changes.",
         "reg.success": "Registration Complete",
         "reg.success.desc": "You are registered for this tournament.",
@@ -137,6 +171,38 @@ export const locales = {
         "detail.type": "Type",
         "detail.rules_title": "Tournament Rules",
         "detail.banned_parts": "Banned Parts",
+
+        // Admin Tournament Control
+        "admin.control.title": "Tournament Control",
+        "admin.control.desc": "Manage bracket, status, and reset tracker.",
+        "admin.btn.end": "End Tournament",
+        "admin.btn.completed": "Completed",
+        "admin.btn.reset": "Reset",
+        "admin.btn.setup": "Setup Tournament",
+        "admin.btn.generating": "Generating...",
+        "admin.btn.invite": "Create Invite Card",
+        "admin.btn.creating_invite": "Creating...",
+
+        // Admin Settings Modal
+        "admin.settings.title": "Tournament Settings",
+        "admin.settings.format": "Format",
+        "admin.settings.shuffle": "Randomize / Shuffle Participants",
+        "admin.settings.player_count": "Creating bracket for {count} players.",
+        "admin.settings.start": "Start Tournament",
+        "admin.settings.creating_challonge": "Creating on Challonge...",
+
+        "admin.matches.title": "Active Matches",
+        "admin.matches.refresh": "Refresh Matches",
+        "admin.matches.loading": "Loading matches...",
+        "admin.matches.empty": "No active matches found.",
+        "admin.matches.round": "Round {n}",
+        "admin.matches.win": "Win",
+
+        "admin.modal.invite_created": "Invite Card Created",
+        "admin.modal.ban_created": "Ban List Image Created",
+        "admin.modal.close": "Close",
+        "admin.modal.download": "Download Image",
+        "admin.modal.download_ban": "Download Ban List",
 
         // Tournament Types
         "type.U10": "U10",

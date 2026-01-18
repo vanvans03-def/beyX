@@ -6,10 +6,11 @@ import { v4 as uuidv4 } from 'uuid';
 export type Tournament = {
     id: string;
     name: string;
-    status: 'OPEN' | 'CLOSED';
+    status: 'OPEN' | 'CLOSED' | 'STARTED' | 'COMPLETED';
     created_at: Date;
     type: 'U10' | 'NoMoreMeta' | 'Open';
     ban_list: string[];
+    challonge_url?: string;
 };
 
 export type Registration = {
@@ -45,8 +46,6 @@ export async function setSystemSetting<T>(key: string, value: T) {
     if (error) throw new Error(error.message);
 }
 
-// --- Tournaments ---
-
 export async function getTournaments(): Promise<Tournament[]> {
     const { data, error } = await supabaseAdmin
         .from('tournaments')
@@ -64,7 +63,8 @@ export async function getTournaments(): Promise<Tournament[]> {
         status: r.status,
         created_at: new Date(r.created_at),
         type: r.type || 'U10', // Default for legacy data
-        ban_list: r.ban_list || []
+        ban_list: r.ban_list || [],
+        challonge_url: r.challonge_url
     }));
 }
 
@@ -86,7 +86,8 @@ export async function getTournament(id: string): Promise<Tournament | null> {
         status: data.status,
         created_at: new Date(data.created_at),
         type: data.type || 'U10',
-        ban_list: data.ban_list || []
+        ban_list: data.ban_list || [],
+        challonge_url: data.challonge_url
     };
 }
 
@@ -138,6 +139,17 @@ export async function updateTournamentStatus(id: string, status: 'OPEN' | 'CLOSE
     // } catch (e) {
     //     console.error("Sheets Error (updateTournamentStatus):", e);
     // }
+}
+
+export async function resetTournamentBracket(id: string) {
+    const { error } = await supabaseAdmin
+        .from('tournaments')
+        .update({ status: 'OPEN', challonge_url: null })
+        .eq('id', id);
+
+    if (error) {
+        throw new Error(error.message);
+    }
 }
 
 // --- Registrations ---

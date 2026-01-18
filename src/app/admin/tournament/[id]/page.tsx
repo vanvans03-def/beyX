@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit } from "lucide-react";
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
 import { QRCodeSVG } from "qrcode.react";
@@ -12,6 +12,9 @@ import { Download, Share2, ImageIcon } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
+import TournamentBracket from "@/components/TournamentBracket";
+import { toast } from "sonner";
+import StandingsTable from "@/components/StandingsTable";
 
 type Registration = {
     TournamentID: string;
@@ -25,6 +28,21 @@ type Registration = {
     Main_Bey3: string;
     TotalPoints: string;
     Reserve_Data: string;
+};
+
+type Match = {
+    id: number;
+    state: string; // "open", "pending", "complete"
+    player1_id: number;
+    player2_id: number;
+    winner_id: number | null;
+    scores_csv: string;
+    round: number;
+    identifier: string; // "A", "B", etc.
+    player1?: { name: string; misc?: string };
+    player2?: { name: string; misc?: string };
+    completed_at?: string;
+    updated_at?: string;
 };
 
 export default function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,6 +67,24 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [generatingBanList, setGeneratingBanList] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [banListImage, setBanListImage] = useState<string | null>(null);
+    const [bracketUrl, setBracketUrl] = useState<string>("");
+    const [generatingBracket, setGeneratingBracket] = useState(false);
+
+    // New States for Enhancements
+    const [matches, setMatches] = useState<Match[]>([]);
+    const [standings, setStandings] = useState<any[]>([]);
+    const [loadingMatches, setLoadingMatches] = useState(false);
+    const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+    const [tournamentType, setTournamentType] = useState("single elimination");
+    const [isShuffle, setIsShuffle] = useState(true);
+    const [isQuickAdvance, setIsQuickAdvance] = useState(true); // Default to true
+    const [isQuickMode, setIsQuickMode] = useState(false);
+    const [historyOpen, setHistoryOpen] = useState(false); // History Modal State
+    const [editingMatchId, setEditingMatchId] = useState<number | null>(null); // Track which match in history is being edited
+
+    // Config for Scoring
+    const [scoreInputs, setScoreInputs] = useState<Record<number, { p1: string, p2: string }>>({});
+
     const [origin, setOrigin] = useState("");
 
     useEffect(() => {
@@ -56,6 +92,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             setOrigin(window.location.origin);
         }
     }, []);
+
+    // Helper to clean URL for component prop if needed, though current component handles suffix
+    const removeModuleSuffix = (url: string) => url.replace(/\/module$/, '');
 
     const handleGeneratePreview = async () => {
         if (cardRef.current === null) return;
@@ -256,6 +295,230 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         }
     };
 
+    const fetchStandings = async () => {
+        try {
+            const res = await fetch(`/api/admin/tournaments/${id}/standings`);
+            const json = await res.json();
+            if (json.success) {
+                setStandings(json.data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch standings", e);
+        }
+    };
+
+    const pollTournamentStatus = async () => {
+        try {
+            const res = await fetch(`/api/admin/tournaments?id=${id}`);
+            const json = await res.json();
+            if (json.success && json.data) {
+                const remoteStatus = json.data.Status;
+
+                // Check if status changed from open to completed/closed
+                if (tournament?.Status !== remoteStatus) {
+                    setTournament(prev => ({ ...prev, ...json.data }));
+
+                    if (remoteStatus === 'COMPLETED' || remoteStatus === 'CLOSED') {
+                        // If tournament just finished remotely, fetch standings immediately
+                        fetchStandings();
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Failed to poll status", e);
+        }
+    };
+
+    const fetchMatches = async (url: string, silent = false) => {
+        if (!silent) setLoadingMatches(true);
+        try {
+            const res = await fetch(`/api/admin/matches?tournamentUrl=${encodeURIComponent(url)}`);
+            const json = await res.json();
+            if (json.matches) {
+                // Check if we need to update to avoid re-renders if data is same (NextJS state update optimization might handle it, but good to be safe)
+                // For now, simple set
+                setMatches(json.matches);
+            }
+        } catch (e) {
+            console.error("Failed to fetch matches", e);
+        } finally {
+            if (!silent) setLoadingMatches(false);
+        }
+    };
+
+    const confirmUpdateMatch = async (matchId: number, scores: string, winnerId: number) => {
+        if (!bracketUrl) return;
+        try {
+            const res = await fetch('/api/admin/matches', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tournamentUrl: bracketUrl,
+                    matchId,
+                    scoresCsv: scores,
+                    winnerId
+                })
+            });
+            if (!res.ok) throw new Error("Failed to update match");
+
+            fetchMatches(bracketUrl);
+            fetchMatches(bracketUrl);
+            toast.success("Match result updated successfully!");
+        } catch (e) {
+            console.error(e);
+            setModalConfig({
+                isOpen: true,
+                title: "Error",
+                desc: "Failed to update match result.",
+                type: "alert",
+                variant: "destructive"
+            });
+        }
+    };
+
+    const handleUpdateMatch = (matchId: number, scores: string, winnerId: number, playerName: string) => {
+        // No hiding scores logic anymore
+        if (isQuickMode) {
+            // Skip confirmation in Quick Mode
+            confirmUpdateMatch(matchId, scores, winnerId);
+        } else {
+            setModalConfig({
+                isOpen: true,
+                title: "Confirm Winner",
+                desc: `Are you sure you want to declare ${playerName} as the winner with score ${scores}?`,
+                type: "confirm",
+                onConfirm: () => {
+                    setModalConfig(prev => ({ ...prev, isOpen: false }));
+                    confirmUpdateMatch(matchId, scores, winnerId);
+                }
+            });
+        }
+    };
+
+    const handleGenerateBracket = async () => {
+        if (!tournament?.Name) return;
+        setSettingsModalOpen(false); // Close modal
+        setGeneratingBracket(true);
+        try {
+            // Prepare players list
+            const players = data.map(r => ({
+                username: r.PlayerName,
+                beyblade_combo: `${r.Main_Bey1} / ${r.Main_Bey2} / ${r.Main_Bey3}`
+            }));
+
+            const res = await fetch('/api/generate-bracket', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    roomName: tournament.Name,
+                    players,
+                    type: tournamentType,
+                    shuffle: isShuffle,
+                    quickAdvance: isQuickAdvance,
+                    tournamentId: id // Send ID to save URL
+                })
+            });
+
+            const json = await res.json();
+
+            if (!res.ok) {
+                throw new Error(json.error || 'Failed to generate bracket');
+            }
+
+            setBracketUrl(json.url);
+            fetchMatches(json.url); // Load matches immediately
+
+            toast.success("Tournament bracket created successfully!");
+
+        } catch (error: any) {
+            console.error('Bracket generation failed:', error);
+            setModalConfig({
+                isOpen: true,
+                title: "Error",
+                desc: error.message || "Failed to generate bracket",
+                type: "alert",
+                variant: 'destructive'
+            });
+        } finally {
+            setGeneratingBracket(false);
+        }
+    };
+
+    const handleEndTournament = async () => {
+        setModalConfig({
+            isOpen: true,
+            title: "End Tournament?",
+            desc: "This will close the tournament and mark it as completed.",
+            type: "confirm",
+            onConfirm: async () => {
+                setModalConfig(prev => ({ ...prev, isOpen: false }));
+                try {
+                    const res = await fetch('/api/admin/tournaments', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tournamentId: id, status: 'CLOSED' })
+                    });
+
+                    const json = await res.json();
+
+                    if (!res.ok) {
+                        throw new Error(json.error || json.message || "Failed to end tournament");
+                    }
+
+                    // Force refresh full dataset to get status update
+                    setTournament((prev: any) => ({ ...prev, Status: 'CLOSED' }));
+                    fetchStandings();
+                    toast.success("Tournament ended successfully.");
+                } catch (e: any) {
+                    console.error("End tournament error:", e);
+                    let msg = e.message || "Failed to end tournament";
+                    if (msg.includes("Challonge Error")) {
+                        msg = msg.replace("Challonge Error: ", "");
+                    }
+                    toast.error("Error ending tournament", {
+                        description: msg
+                    });
+                }
+            }
+        });
+    };
+
+    const handleResetTournament = async () => {
+        setModalConfig({
+            isOpen: true,
+            title: "Reset Tournament?",
+            desc: "WARNING: This will delete the current bracket link and reset the status to OPEN. This allows you to regenerate the bracket or add more players.",
+            type: "confirm",
+            variant: "destructive",
+            confirmText: "Reset & Delete Bracket Link",
+            onConfirm: async () => {
+                setModalConfig(prev => ({ ...prev, isOpen: false }));
+                try {
+                    await fetch('/api/admin/tournaments/reset', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tournamentId: id })
+                    });
+                    // Immediately clear local state
+                    setBracketUrl("");
+                    setMatches([]);
+                    setStandings([]);
+                    fetchData(); // Refresh all
+                    toast.success("Reset Complete: Tournament has been reset to OPEN.");
+                } catch (e) {
+                    console.error(e);
+                    setModalConfig({
+                        isOpen: true,
+                        title: "Error",
+                        desc: "Failed to reset tournament.",
+                        type: "alert",
+                        variant: "destructive"
+                    });
+                }
+            }
+        });
+    }
+
     // Modal State
     const [modalConfig, setModalConfig] = useState<{
         isOpen: boolean;
@@ -263,6 +526,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         desc?: string;
         type: "alert" | "confirm";
         variant?: "default" | "destructive";
+        confirmText?: string;
         onConfirm?: () => void;
     }>({
         isOpen: false,
@@ -291,6 +555,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
             if (tourJson.success) {
                 setTournament(tourJson.data);
+                // Check both cases just to be safe, but API returns ChallongeUrl
+                const url = tourJson.data.ChallongeUrl || tourJson.data.challonge_url;
+                if (url) {
+                    console.log("Restoring bracket URL:", url);
+                    setBracketUrl(url);
+                    // Load matches if URL exists
+                    fetchMatches(url);
+                    fetchStandings();
+                } else {
+                    setBracketUrl(""); // Reset if no URL
+                }
             }
 
             setLastRefreshed(new Date());
@@ -409,6 +684,36 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     let fontSize = "text-xs";
     let iconSize = "p-2";
 
+    // Filter matches
+    // Filter active matches: Only show matches that are 'open' (ready to play)
+    // Pending matches (waiting for opponents) are hidden as per user request
+    const activeMatches = matches.filter(m => m.state === 'open');
+    const historyMatches = matches
+        .filter(m => m.state === 'complete')
+        .sort((a, b) => new Date(b.completed_at || b.updated_at || "").getTime() - new Date(a.completed_at || a.updated_at || "").getTime());
+
+    // Polling active matches
+    // Polling active matches & Tournament Status
+    useEffect(() => {
+        // If tournament is already completed locally, we don't need to poll status anymore, 
+        // OR we might want to poll just in case it gets reset? 
+        // The user requirement is primarily about "ending" it.
+        // If it's closed, we stop match polling, but we might want to keep checking if it gets reset?
+        // Let's keep it simple: poll matches if open. Poll status always (or until closed?)
+
+        const interval = setInterval(() => {
+            // Poll matches if we have a bracket and it's not closed
+            if (bracketUrl && tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') {
+                fetchMatches(bracketUrl, true);
+            }
+
+            // Poll tournament status
+            pollTournamentStatus();
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [bracketUrl, tournament?.Status]);
+
     if (banListCount > 20) {
         gridCols = "grid-cols-6";
         gap = "gap-3";
@@ -420,6 +725,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         fontSize = "text-[10px]";
         iconSize = "p-2";
     }
+
+
 
     return (
         <div className="min-h-screen bg-background p-4 md:p-6" data-aos="fade-in" suppressHydrationWarning>
@@ -467,6 +774,379 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 </header>
 
                 {/* Sharing & Info Section */}
+                {/* Bracket Section - If URL exists */}
+                {bracketUrl && (
+                    <TournamentBracket challongeUrl={bracketUrl} />
+                )}
+
+                {/* Standings Section */}
+                {standings.length > 0 && (
+                    <div className="bg-secondary/20 border border-white/10 rounded-xl p-4 mt-6">
+                        <h3 className="text-lg font-bold flex items-center gap-2 mb-4">
+                            <Trophy className="h-5 w-5 text-yellow-500" />
+                            Final Standings
+                        </h3>
+                        <StandingsTable standings={standings} />
+                    </div>
+                )}
+
+                {/* Match Management Section */}
+                {bracketUrl && (
+                    <div className="bg-secondary/20 border border-white/10 rounded-xl p-4 mt-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <Trophy className="h-5 w-5 text-yellow-500" />
+                                {t('admin.matches.title')}
+                            </h3>
+                            <div className="flex items-center gap-2">
+                                {/* History Button */}
+                                <button
+                                    onClick={() => setHistoryOpen(true)}
+                                    className="flex items-center gap-2 px-3 py-1 bg-secondary rounded-lg text-xs font-bold transition-all border border-transparent hover:border-white/10"
+                                >
+                                    <Clock className="h-4 w-4" />
+                                    <span>History</span>
+                                </button>
+                                <button
+                                    onClick={() => fetchMatches(bracketUrl)}
+                                    className="text-xs px-3 py-1 bg-secondary hover:bg-secondary/80 rounded transition-colors"
+                                >
+                                    {t('admin.matches.refresh')}
+                                </button>
+                            </div>
+                        </div>
+
+                        {loadingMatches ? (
+                            <div className="text-center py-8 text-muted-foreground">{t('admin.matches.loading')}</div>
+                        ) : activeMatches.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">{t('admin.matches.empty')}</div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {activeMatches.map((match) => (
+                                    <div key={match.id} className="bg-background/50 border border-white/5 p-4 rounded-lg flex flex-col gap-3">
+                                        <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider text-center">
+                                            {t('admin.matches.round').replace('{n}', match.round.toString())}
+                                        </div>
+
+                                        <div className="flex items-center justify-between gap-2">
+                                            {/* Player 1 */}
+                                            <div className={`flex-1 text-center p-2 rounded relative group ${match.winner_id === match.player1_id ? 'bg-green-500/20 text-green-400' : 'bg-secondary/40'}`}>
+                                                <div className="font-bold text-sm truncate">{match.player1?.name || "???"}</div>
+
+                                                {/* Quick Win Button P1 */}
+                                                {isQuickMode && !match.winner_id && (
+                                                    <button
+                                                        onClick={() => handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1")}
+                                                        className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 bg-green-500/80 flex items-center justify-center rounded transition-opacity"
+                                                        title="Quick Win (1-0)"
+                                                    >
+                                                        <CheckCircle className="h-8 w-8 text-white drop-shadow-md" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="text-xs font-bold text-muted-foreground">VS</div>
+                                            {/* Player 2 */}
+                                            <div className={`flex-1 text-center p-2 rounded relative group ${match.winner_id === match.player2_id ? 'bg-green-500/20 text-green-400' : 'bg-secondary/40'}`}>
+                                                <div className="font-bold text-sm truncate">{match.player2?.name || "???"}</div>
+
+                                                {/* Quick Win Button P2 */}
+                                                {isQuickMode && !match.winner_id && (
+                                                    <button
+                                                        onClick={() => handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2")}
+                                                        className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 bg-green-500/80 flex items-center justify-center rounded transition-opacity"
+                                                        title="Quick Win (0-1)"
+                                                    >
+                                                        <CheckCircle className="h-8 w-8 text-white drop-shadow-md" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Scoring Controls - Hidden in Quick Mode unless already scored or wanted */}
+                                        {!isQuickMode && (
+                                            <>
+                                                <div className="flex items-center justify-center gap-2 mt-2">
+                                                    <input
+                                                        type="number"
+                                                        className="w-12 bg-black/40 border border-white/10 rounded text-center text-sm p-1"
+                                                        placeholder="0"
+                                                        value={scoreInputs[match.id]?.p1 || ''}
+                                                        onChange={(e) => setScoreInputs(prev => ({
+                                                            ...prev, [match.id]: { ...prev[match.id], p1: e.target.value }
+                                                        }))}
+                                                    />
+                                                    <span className="text-muted-foreground text-xs">-</span>
+                                                    <input
+                                                        type="number"
+                                                        className="w-12 bg-black/40 border border-white/10 rounded text-center text-sm p-1"
+                                                        placeholder="0"
+                                                        value={scoreInputs[match.id]?.p2 || ''}
+                                                        onChange={(e) => setScoreInputs(prev => ({
+                                                            ...prev, [match.id]: { ...prev[match.id], p2: e.target.value }
+                                                        }))}
+                                                    />
+                                                </div>
+
+                                                <div className="flex gap-2 mt-1">
+                                                    <button
+                                                        onClick={() => {
+                                                            const s = scoreInputs[match.id];
+                                                            const scoreStr = (s?.p1 && s?.p2) ? `${s.p1}-${s.p2}` : "0-0";
+                                                            handleUpdateMatch(match.id, scoreStr, match.player1_id, match.player1?.name || "Player 1");
+                                                        }}
+                                                        className="flex-1 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 text-xs py-1 rounded transition-colors"
+                                                    >
+                                                        P1 {t('admin.matches.win')}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const s = scoreInputs[match.id];
+                                                            const scoreStr = (s?.p1 && s?.p2) ? `${s.p1}-${s.p2}` : "0-0";
+                                                            handleUpdateMatch(match.id, scoreStr, match.player2_id, match.player2?.name || "Player 2");
+                                                        }}
+                                                        className="flex-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 text-xs py-1 rounded transition-colors"
+                                                    >
+                                                        P2 {t('admin.matches.win')}
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="glass-card p-4 md:p-6 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-secondary rounded-full">
+                            <Trophy className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg text-foreground">{t('admin.control.title')}</h3>
+                            <p className="text-sm text-muted-foreground">{t('admin.control.desc')}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                        {bracketUrl ? (
+                            <>
+                                <button
+                                    onClick={handleEndTournament}
+                                    disabled={tournament?.Status === 'CLOSED'}
+                                    className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-green-500/20 text-white hover:text-green-400 px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10 disabled:opacity-50"
+                                >
+                                    <CheckCircle className="h-4 w-4" />
+                                    {tournament?.Status === 'COMPLETED' ? t('admin.btn.completed') : t('admin.btn.end')}
+                                </button>
+                                <button
+                                    onClick={handleResetTournament}
+                                    className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-destructive/20 text-white hover:text-destructive px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    {t('admin.btn.reset')}
+                                </button>
+                            </>
+                        ) : (
+                            <button
+                                onClick={() => setSettingsModalOpen(true)}
+                                disabled={generatingBracket || !data.length}
+                                className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-gradient-to-r from-orange-400 to-red-500 text-white px-5 py-2.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {generatingBracket ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        {t('admin.btn.generating')}
+                                    </>
+                                ) : (
+                                    <>
+                                        <Trophy className="h-4 w-4" />
+                                        {t('admin.btn.setup')}
+                                    </>
+                                )}
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Settings Modal */}
+                {settingsModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                        <div className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md space-y-4 relative">
+                            <button
+                                onClick={() => setSettingsModalOpen(false)}
+                                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+                            >
+                                <XCircle className="h-5 w-5" />
+                            </button>
+
+                            <h2 className="text-xl font-bold flex items-center gap-2">
+                                <Trophy className="h-5 w-5 text-primary" />
+                                {t('admin.settings.title')}
+                            </h2>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">{t('admin.settings.format')}</label>
+                                    <select
+                                        value={tournamentType}
+                                        onChange={(e) => setTournamentType(e.target.value)}
+                                        className="w-full bg-secondary border border-transparent rounded-lg p-2 text-sm"
+                                    >
+                                        <option value="single elimination">Single Elimination</option>
+                                        <option value="double elimination">Double Elimination</option>
+                                        <option value="swiss">Swiss</option>
+                                        <option value="round robin">Round Robin</option>
+                                    </select>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="shuffle"
+                                        checked={isShuffle}
+                                        onChange={(e) => setIsShuffle(e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-600"
+                                    />
+                                    <label htmlFor="shuffle" className="text-sm">{t('admin.settings.shuffle')}</label>
+                                </div>
+
+                                <div className="p-3 bg-secondary/50 rounded-lg text-xs text-muted-foreground border border-white/5">
+                                    {t('admin.settings.player_count').replace('{count}', data.length.toString())}
+                                </div>
+
+                                <button
+                                    onClick={handleGenerateBracket}
+                                    disabled={generatingBracket}
+                                    className="w-full py-3 bg-gradient-to-r from-primary to-blue-600 text-white font-bold rounded-lg hover:shadow-lg transition-all"
+                                >
+                                    {generatingBracket ? t('admin.settings.creating_challonge') : t('admin.settings.start')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* History Modal */}
+                {historyOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                        <div className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-2xl space-y-4 relative max-h-[80vh] flex flex-col">
+                            <button
+                                onClick={() => {
+                                    setHistoryOpen(false);
+                                    setEditingMatchId(null);
+                                }}
+                                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+                            >
+                                <XCircle className="h-5 w-5" />
+                            </button>
+
+                            <h2 className="text-xl font-bold flex items-center gap-2">
+                                <Clock className="h-5 w-5 text-primary" />
+                                Match History
+                            </h2>
+
+                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                {historyMatches.length === 0 ? (
+                                    <div className="text-center py-8 text-muted-foreground">No completed matches yet.</div>
+                                ) : (
+                                    historyMatches.map(match => (
+                                        <div key={match.id} className="bg-secondary/30 p-3 rounded flex items-center justify-between border border-white/5">
+                                            <div className="flex flex-col gap-1 text-sm flex-1">
+                                                <div className="text-xs text-muted-foreground uppercase">Round {match.round}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={match.winner_id === match.player1_id ? "font-bold text-green-400" : ""}>{match.player1?.name}</span>
+                                                    <span className="text-muted-foreground">vs</span>
+                                                    <span className={match.winner_id === match.player2_id ? "font-bold text-green-400" : ""}>{match.player2?.name}</span>
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">Score: {match.scores_csv}</div>
+                                            </div>
+
+                                            {editingMatchId === match.id ? (
+                                                <div className="flex items-center gap-2 animate-in fade-in zoom-in">
+                                                    <input
+                                                        type="number"
+                                                        className="w-10 bg-black/40 border border-white/10 rounded text-center text-sm p-1"
+                                                        placeholder="0"
+                                                        value={scoreInputs[match.id]?.p1 || match.scores_csv.split('-')[0] || '0'}
+                                                        onChange={(e) => setScoreInputs(prev => ({
+                                                            ...prev, [match.id]: { ...prev[match.id], p1: e.target.value }
+                                                        }))}
+                                                    />
+                                                    <span>-</span>
+                                                    <input
+                                                        type="number"
+                                                        className="w-10 bg-black/40 border border-white/10 rounded text-center text-sm p-1"
+                                                        placeholder="0"
+                                                        value={scoreInputs[match.id]?.p2 || match.scores_csv.split('-')[1] || '0'}
+                                                        onChange={(e) => setScoreInputs(prev => ({
+                                                            ...prev, [match.id]: { ...prev[match.id], p2: e.target.value }
+                                                        }))}
+                                                    />
+                                                    <div className="flex flex-col gap-1">
+                                                        <button
+                                                            onClick={() => {
+                                                                const s = scoreInputs[match.id];
+                                                                const currentP1 = s?.p1 ?? match.scores_csv.split('-')[0] ?? '0';
+                                                                const currentP2 = s?.p2 ?? match.scores_csv.split('-')[1] ?? '0';
+                                                                const scoreStr = `${currentP1}-${currentP2}`;
+
+                                                                confirmUpdateMatch(match.id, scoreStr, match.player1_id);
+                                                                setEditingMatchId(null);
+                                                            }}
+                                                            className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded hover:bg-green-500/30 w-24 flex justify-center items-center"
+                                                            title={match.player1?.name || "Player 1"}
+                                                        >
+                                                            <span className="truncate max-w-[80px]">{match.player1?.name || "Player 1"}</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const s = scoreInputs[match.id];
+                                                                const currentP1 = s?.p1 ?? match.scores_csv.split('-')[0] ?? '0';
+                                                                const currentP2 = s?.p2 ?? match.scores_csv.split('-')[1] ?? '0';
+                                                                const scoreStr = `${currentP1}-${currentP2}`;
+
+                                                                confirmUpdateMatch(match.id, scoreStr, match.player2_id);
+                                                                setEditingMatchId(null);
+                                                            }}
+                                                            className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded hover:bg-green-500/30 w-24 flex justify-center items-center"
+                                                            title={match.player2?.name || "Player 2"}
+                                                        >
+                                                            <span className="truncate max-w-[80px]">{match.player2?.name || "Player 2"}</span>
+                                                        </button>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setEditingMatchId(null)}
+                                                        className="text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        <XCircle className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ) : (tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') && (
+                                                <button
+                                                    onClick={() => {
+                                                        const parts = match.scores_csv.split('-');
+                                                        setScoreInputs(prev => ({
+                                                            ...prev,
+                                                            [match.id]: { p1: parts[0] || '0', p2: parts[1] || '0' }
+                                                        }));
+                                                        setEditingMatchId(match.id);
+                                                    }}
+                                                    className="p-2 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors"
+                                                    title="Edit Result"
+                                                >
+                                                    <Edit className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Rules & Info */}
                     <div className="glass-card p-6 rounded-xl space-y-6">
@@ -544,12 +1224,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     {generating ? (
                                         <>
                                             <Loader2 className="h-3 w-3 animate-spin" />
-                                            Creating...
+                                            {t('admin.btn.creating_invite')}
                                         </>
                                     ) : (
                                         <>
                                             <ImageIcon className="h-3 w-3" />
-                                            Create Invite Card
+                                            {t('admin.btn.invite')}
                                         </>
                                     )}
                                 </button>
@@ -942,14 +1622,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     type={modalConfig.type}
                     variant={modalConfig.variant}
                     onConfirm={modalConfig.onConfirm}
-                    confirmText={modalConfig.variant === 'destructive' ? 'Delete' : 'OK'}
+                    confirmText={modalConfig.confirmText || (modalConfig.variant === 'destructive' ? t('gen.delete') : 'OK')}
                 />
 
                 {/* IMAGE PREVIEW MODAL */}
                 <Modal
                     isOpen={!!previewImage}
                     onClose={() => setPreviewImage(null)}
-                    title="Invite Card Created"
+                    title={t('admin.modal.invite_created')}
                     type="custom"
                 >
                     <div className="flex flex-col gap-6">
@@ -968,14 +1648,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 onClick={() => setPreviewImage(null)}
                                 className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors"
                             >
-                                Close
+                                {t('admin.modal.close')}
                             </button>
                             <button
                                 onClick={handleSaveImage}
                                 className="px-6 py-2 rounded-lg text-sm font-bold text-black bg-primary hover:bg-primary/90 transition-colors shadow-lg shadow-black/20 flex items-center gap-2"
                             >
                                 <Download className="h-4 w-4" />
-                                Download Image
+                                {t('admin.modal.download')}
                             </button>
                         </div>
                     </div>
@@ -985,7 +1665,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 <Modal
                     isOpen={!!banListImage}
                     onClose={() => setBanListImage(null)}
-                    title="Ban List Image Created"
+                    title={t('admin.modal.ban_created')}
                     type="custom"
                 >
                     <div className="flex flex-col gap-6">
@@ -1003,14 +1683,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 onClick={() => setBanListImage(null)}
                                 className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors"
                             >
-                                Close
+                                {t('admin.modal.close')}
                             </button>
                             <button
                                 onClick={handleSaveBanList}
                                 className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-red-500 to-orange-500 hover:opacity-90 transition-opacity shadow-lg shadow-black/20 flex items-center gap-2"
                             >
                                 <Download className="h-4 w-4" />
-                                Download Ban List
+                                {t('admin.modal.download_ban')}
                             </button>
                         </div>
                     </div>

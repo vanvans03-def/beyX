@@ -1,8 +1,7 @@
-"use client";
-
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
     isOpen: boolean;
@@ -29,7 +28,12 @@ export function Modal({
     cancelText = "Cancel",
     variant = "default"
 }: ModalProps) {
+    const [mounted, setMounted] = useState(false);
     const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     useEffect(() => {
         if (isOpen) {
@@ -42,11 +46,12 @@ export function Modal({
         }
     }, [isOpen]);
 
+    if (!mounted) return null;
     if (!visible && !isOpen) return null;
 
-    return (
+    return createPortal(
         <div className={cn(
-            "fixed inset-0 z-50 flex items-center justify-center px-4 transition-all duration-300",
+            "fixed inset-0 z-[9999] flex items-center justify-center px-4 transition-all duration-300",
             isOpen ? "opacity-100" : "opacity-0"
         )}>
             {/* Backdrop */}
@@ -107,6 +112,7 @@ export function Modal({
                     </div>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

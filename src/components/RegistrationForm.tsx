@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { VisualSelector } from "@/components/ui/VisualSelector";
 import gameData from "@/data/game-data.json";
 import { cn } from "@/lib/utils";
-import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, Plus, Trash2, Globe, Eye, X } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, Plus, Trash2, Globe, Eye, X, XCircle } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { ImageWithLoading } from "@/components/ui/ImageWithLoading";
@@ -117,7 +117,7 @@ export default function RegistrationForm({
     }, [tournamentType]);
 
     // Handle Tournament Closed
-    if (tournamentStatus === 'CLOSED' && profiles.length === 0 /* If no existing profiles, show closed */) {
+    if ((tournamentStatus === 'CLOSED' || tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED') && profiles.length === 0 /* If no existing profiles, show closed */) {
         return (
             <div className="flex flex-col items-center justify-center space-y-6 py-10 animate-in fade-in zoom-in-95 grayscale">
                 <div className="rounded-full bg-secondary p-6 ring-4 ring-white/10">
@@ -450,12 +450,16 @@ export default function RegistrationForm({
                         {p.status === 'submitted' && <CheckCircle2 className="h-3 w-3 text-green-600" />}
                     </button>
                 ))}
-                <button
-                    onClick={addProfile}
-                    className="flex items-center justify-center w-8 h-8 rounded-full bg-secondary border border-white/10 text-muted-foreground hover:text-primary hover:border-primary transition-all shrink-0"
-                >
-                    <Plus className="h-4 w-4" />
-                </button>
+
+                {/* Add Player Button - Only show if Open */}
+                {(!tournamentStatus || tournamentStatus === 'OPEN') && (
+                    <button
+                        onClick={addProfile}
+                        className="flex items-center justify-center w-8 h-8 rounded-full bg-secondary border border-white/10 text-muted-foreground hover:text-primary hover:border-primary transition-all shrink-0"
+                    >
+                        <Plus className="h-4 w-4" />
+                    </button>
+                )}
             </div>
 
             {/* Active Profile Form */}
@@ -472,13 +476,24 @@ export default function RegistrationForm({
                     </div>
                 )}
 
+                {/* Registration Closed Banner for existing profiles */}
+                {(tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED') && activeProfile.status === 'draft' && (
+                    <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-xl flex items-center gap-3 text-destructive">
+                        <AlertTriangle className="h-5 w-5" />
+                        <div>
+                            <p className="text-sm font-bold">Registration Closed</p>
+                            <p className="text-xs opacity-80">This tournament has started or ended.</p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Player Info */}
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
                         <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider ml-1">
                             {t('reg.player_name')}
                         </label>
-                        {profiles.length > 1 && activeProfile.status === 'draft' && (
+                        {profiles.length > 1 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && (
                             <button
                                 onClick={() => deleteProfile(activeTab)}
                                 className="text-xs text-destructive hover:underline flex items-center gap-1"
@@ -494,7 +509,7 @@ export default function RegistrationForm({
                             type="text"
                             value={activeProfile.name}
                             onChange={(e) => updateProfile(activeTab, { name: e.target.value })}
-                            disabled={activeProfile.status === 'submitted'}
+                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')}
                             placeholder={t('reg.placeholder.name')}
                             className="flex-1 rounded-lg border border-input bg-secondary px-4 py-3 font-medium text-foreground outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/50 disabled:opacity-50"
                         />
@@ -509,7 +524,7 @@ export default function RegistrationForm({
                     </div>
 
                     {/* Copy Combo Button */}
-                    {activeTab > 0 && activeProfile.status === 'draft' && (
+                    {activeTab > 0 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && (
                         <button
                             type="button"
                             onClick={() => copyComboFromFirst(activeTab)}
@@ -525,7 +540,7 @@ export default function RegistrationForm({
                     <div className="grid grid-cols-2 gap-2 p-1 bg-secondary rounded-xl">
                         <button
                             type="button"
-                            disabled={activeProfile.status === 'submitted'}
+                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')}
                             onClick={() => updateProfile(activeTab, { mode: "Under10" })}
                             className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", activeProfile.mode === "Under10" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}
                         >
@@ -533,7 +548,7 @@ export default function RegistrationForm({
                         </button>
                         <button
                             type="button"
-                            disabled={activeProfile.status === 'submitted'}
+                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')}
                             onClick={() => updateProfile(activeTab, { mode: "NoMoreMeta" })}
                             className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", activeProfile.mode === "NoMoreMeta" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}
                         >
@@ -565,7 +580,7 @@ export default function RegistrationForm({
                                 slotIndex={i}
                                 mode={activeProfile.mode}
                                 onPress={() => {
-                                    if (activeProfile.status === 'submitted') return;
+                                    if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')) return;
                                     setSelectingState({ profileIndex: activeTab, type: 'main', deckIndex: 0, slotIndex: i })
                                 }}
                             />
@@ -593,7 +608,7 @@ export default function RegistrationForm({
                                                 {val.points}/10
                                             </span>
                                         )}
-                                        {activeProfile.status === 'draft' && (
+                                        {activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && (
                                             <button type="button" onClick={() => removeReserveDeck(activeTab, dIdx)} className="text-destructive hover:bg-destructive/10 p-1.5 rounded-full">
                                                 <Trash2 className="h-4 w-4" />
                                             </button>
@@ -609,7 +624,7 @@ export default function RegistrationForm({
                                         slotIndex={sIdx}
                                         mode={activeProfile.mode}
                                         onPress={() => {
-                                            if (activeProfile.status === 'submitted') return;
+                                            if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')) return;
                                             setSelectingState({ profileIndex: activeTab, type: 'reserve', deckIndex: dIdx, slotIndex: sIdx })
                                         }}
                                     />
@@ -618,7 +633,7 @@ export default function RegistrationForm({
                         );
                     })}
 
-                    {activeProfile.reserveDecks.length < 3 && activeProfile.status === 'draft' && (
+                    {activeProfile.reserveDecks.length < 3 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && (
                         <button
                             type="button"
                             onClick={() => addReserveDeck(activeTab)}
@@ -650,18 +665,24 @@ export default function RegistrationForm({
                 )}
 
                 {activeProfile.status === 'draft' ? (
-                    <button
-                        type="button"
-                        onClick={handleSubmit}
-                        disabled={loading}
-                        className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-sm font-bold text-black shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
-                    >
-                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> :
-                            (profiles.filter(p => p.status === 'draft').length > 1
-                                ? `${t('reg.btn.submit')} All (${profiles.filter(p => p.status === 'draft').length})`
-                                : t('reg.btn.submit'))
-                        }
-                    </button>
+                    (!tournamentStatus || tournamentStatus === 'OPEN') ? (
+                        <button
+                            type="button"
+                            onClick={handleSubmit}
+                            disabled={loading}
+                            className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-sm font-bold text-black shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
+                        >
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                                (profiles.filter(p => p.status === 'draft').length > 1
+                                    ? `${t('reg.btn.submit')} All (${profiles.filter(p => p.status === 'draft').length})`
+                                    : t('reg.btn.submit'))
+                            }
+                        </button>
+                    ) : (
+                        <div className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-4 text-sm font-bold text-muted-foreground cursor-not-allowed">
+                            <XCircle className="h-4 w-4" /> Registration Closed
+                        </div>
+                    )
                 ) : (
                     <div className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-4 text-sm font-bold text-muted-foreground cursor-not-allowed">
                         <CheckCircle2 className="h-4 w-4" /> Submitted

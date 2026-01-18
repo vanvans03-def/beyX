@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createTournament, getTournaments, getTournament, updateTournamentStatus } from "@/lib/repository";
+import { finalizeTournament } from "@/lib/challonge";
 
 export async function GET(req: Request) {
     try {
@@ -17,7 +18,8 @@ export async function GET(req: Request) {
                 Status: data.status,
                 CreatedAt: data.created_at.toISOString(),
                 Type: data.type,
-                BanList: data.ban_list
+                BanList: data.ban_list,
+                ChallongeUrl: data.challonge_url
             };
             return NextResponse.json({ success: true, data: mapped });
         } else {
@@ -29,7 +31,8 @@ export async function GET(req: Request) {
                 Status: d.status,
                 CreatedAt: d.created_at.toISOString(),
                 Type: d.type,
-                BanList: d.ban_list
+                BanList: d.ban_list,
+                ChallongeUrl: d.challonge_url
             }));
             return NextResponse.json({ success: true, data: mapped });
         }
@@ -51,7 +54,8 @@ export async function POST(req: Request) {
             Status: newT.status,
             CreatedAt: newT.created_at.toISOString(),
             Type: newT.type,
-            BanList: newT.ban_list
+            BanList: newT.ban_list,
+            ChallongeUrl: newT.challonge_url
         };
         return NextResponse.json({ success: true, data: mapped });
     } catch (e: any) {
@@ -64,6 +68,41 @@ export async function PATCH(req: Request) {
     try {
         const body = await req.json();
         if (!body.tournamentId || !body.status) throw new Error("ID and Status required");
+
+        if (body.status === 'CLOSED') {
+            // Check if there is a Challonge URL associated
+            const tournament = await getTournament(body.tournamentId);
+            if (tournament?.challonge_url) {
+                // Extract identifier: https://challonge.com/bb_123 -> bb_123
+                const identifier = tournament.challonge_url.split('/').pop();
+                if (identifier) {
+                    try {
+                        await finalizeTournament(identifier);
+                    } catch (err: any) {
+                        console.error('Challonge Finalize Error:', err.response?.data || err.message);
+                        // If it's 422, it might be open matches or already finalized
+                        if (err.response?.status === 422) {
+                            const challongeErrors = err.response?.data?.errors;
+                            if (challongeErrors) {
+                                // Check if it's just "already finalized"
+                                const isAlreadyDone = challongeErrors.some((e: string) =>
+                                    (typeof e === 'string') && (e.toLowerCase().includes('complete') || e.toLowerCase().includes('finalized'))
+                                );
+
+                                if (isAlreadyDone) {
+                                    console.log('Tournament already finalized on Challonge, proceeding to update local status.');
+                                    // Swallow error to allow local DB update
+                                } else {
+                                    throw new Error(`Challonge Error: ${challongeErrors.join(', ')}`);
+                                }
+                            }
+                        } else {
+                            throw err; // Re-throw other errors
+                        }
+                    }
+                }
+            }
+        }
 
         await updateTournamentStatus(body.tournamentId, body.status);
         return NextResponse.json({ success: true, data: { status: body.status } });
