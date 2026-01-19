@@ -51,12 +51,12 @@ export function Modal({
 
     return createPortal(
         <div className={cn(
-            "fixed inset-0 z-[9999] flex items-center justify-center px-4 transition-all duration-300",
+            "fixed inset-0 z-[9999] flex items-start justify-center px-4 pt-20 overflow-y-auto transition-all duration-300",
             isOpen ? "opacity-100" : "opacity-0"
         )}>
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                className="fixed inset-0 bg-black/60"
                 onClick={onClose}
             />
 

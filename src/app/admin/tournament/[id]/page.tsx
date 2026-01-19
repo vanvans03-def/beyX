@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit } from "lucide-react";
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
@@ -15,6 +15,8 @@ import { Modal } from "@/components/ui/Modal";
 import TournamentBracket from "@/components/TournamentBracket";
 import { toast } from "sonner";
 import StandingsTable from "@/components/StandingsTable";
+import RegistrationTable from "@/components/RegistrationTable";
+import { supabase } from "@/lib/supabase";
 
 type Registration = {
     TournamentID: string;
@@ -337,7 +339,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             if (json.matches) {
                 // Check if we need to update to avoid re-renders if data is same (NextJS state update optimization might handle it, but good to be safe)
                 // For now, simple set
-                setMatches(json.matches);
+                setMatches(prev => {
+                    const isSame = JSON.stringify(prev) === JSON.stringify(json.matches);
+                    return isSame ? prev : json.matches;
+                });
             }
         } catch (e) {
             console.error("Failed to fetch matches", e);
@@ -356,12 +361,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     tournamentUrl: bracketUrl,
                     matchId,
                     scoresCsv: scores,
-                    winnerId
+                    winnerId,
+                    tournamentId: id
                 })
             });
             if (!res.ok) throw new Error("Failed to update match");
 
-            fetchMatches(bracketUrl);
             fetchMatches(bracketUrl);
             toast.success("Match result updated successfully!");
         } catch (e) {
@@ -394,6 +399,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             });
         }
     };
+
+
+
+    // Initial fetch handled by other useEffect, but ensures we are live 
 
     const handleGenerateBracket = async () => {
         if (!tournament?.Name) return;
@@ -534,9 +543,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         type: "alert"
     });
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async (silent = false) => {
         if (!id) return;
-        setLoading(true);
+        if (!silent) setLoading(true);
         try {
             const [regRes, tourRes] = await Promise.all([
                 fetch(`/api/admin/registrations?tournamentId=${id}`),
@@ -561,14 +570,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     console.log("Restoring bracket URL:", url);
                     setBracketUrl(url);
                     // Load matches if URL exists
-                    fetchMatches(url);
+                    fetchMatches(url, silent);
                     fetchStandings();
                 } else {
                     setBracketUrl(""); // Reset if no URL
                 }
             }
 
-            setLastRefreshed(new Date());
+            if (!silent) setLastRefreshed(new Date());
         } catch (err) {
             console.error(err);
             setModalConfig({
@@ -579,9 +588,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 variant: "destructive"
             });
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
-    };
+    }, [id]);
 
     useEffect(() => {
         if (id) fetchData();
@@ -598,7 +607,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         });
     };
 
-    const handleDelete = (row: Registration) => {
+    const handleDelete = useCallback((row: Registration) => {
         setModalConfig({
             isOpen: true,
             title: "Delete Registration?",
@@ -625,53 +634,58 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 }
             }
         });
-    };
+    }, [fetchData]);
 
-    const validateRow = (row: Registration) => {
-        const mainBeys = [row.Main_Bey1, row.Main_Bey2, row.Main_Bey3];
-        // Parse reserves
-        let reserveDecks: string[][] = [];
-        try {
-            reserveDecks = JSON.parse(row.Reserve_Data);
-            // Handle legacy format (single array of strings) if any
-            if (reserveDecks.length > 0 && typeof reserveDecks[0] === 'string') {
-                // @ts-ignore
-                reserveDecks = [reserveDecks];
-            }
-        } catch (e) { }
+    // Realtime Subscription
+    useEffect(() => {
+        if (!id) return;
 
-        const checkDeck = (deck: string[]) => {
-            if (row.Mode === "Under10") {
-                const pointsMap: Record<string, number> = {};
-                Object.entries(gameData.points).forEach(([pt, names]) => {
-                    names.forEach(name => pointsMap[name] = parseInt(pt));
-                });
-                const pts = deck.reduce((sum, name) => sum + (pointsMap[name] || 0), 0);
-                if (pts > 10) return { valid: false, msg: `${pts}/10` };
-                return { valid: true, msg: "OK" };
-            } else {
-                const banned = deck.filter(name => gameData.banList.includes(name));
-                if (banned.length > 0) return { valid: false, msg: "Banned" };
-                return { valid: true, msg: "OK" };
-            }
+        const channel = supabase
+            .channel(`admin-tournament-${id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'registrations',
+                    filter: `tournament_id=eq.${id}`
+                },
+                (payload) => {
+                    console.log('Realtime registration change:', payload);
+                    fetchData(true);
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'tournaments',
+                    filter: `id=eq.${id}`
+                },
+                (payload) => {
+                    console.log('Realtime tournament update:', payload);
+                    fetchData(true);
+                }
+            )
+            .on(
+                'broadcast',
+                { event: 'match-update' },
+                (payload) => {
+                    console.log('Realtime match update received:', payload);
+                    if (bracketUrl) {
+                        fetchMatches(bracketUrl, true);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
         };
+    }, [id, fetchData, bracketUrl]);
 
-        const mainVal = checkDeck(mainBeys);
-        if (!mainVal.valid) return { status: "fail", msg: `Main: ${mainVal.msg}` };
-
-        // Check Reserves
-        for (let i = 0; i < reserveDecks.length; i++) {
-            const deck = reserveDecks[i];
-            // Skip empty decks if any (shouldn't happen with proper validation)
-            if (!deck || deck.length === 0) continue;
-
-            // Adjust for legacy (if deck is not array of strings? handled above)
-            const resVal = checkDeck(deck);
-            if (!resVal.valid) return { status: "fail", msg: `Res ${i + 1}: ${resVal.msg}` };
-        }
-
-        return { status: "pass", msg: "OK" };
-    };
+    // validateRow moved to RegistrationTable component
 
     const filteredData = data.filter(r =>
         r.PlayerName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -695,24 +709,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     // Polling active matches
     // Polling active matches & Tournament Status
     useEffect(() => {
-        // If tournament is already completed locally, we don't need to poll status anymore, 
-        // OR we might want to poll just in case it gets reset? 
-        // The user requirement is primarily about "ending" it.
-        // If it's closed, we stop match polling, but we might want to keep checking if it gets reset?
-        // Let's keep it simple: poll matches if open. Poll status always (or until closed?)
-
         const interval = setInterval(() => {
             // Poll matches if we have a bracket and it's not closed
-            if (bracketUrl && tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') {
-                fetchMatches(bracketUrl, true);
-            }
+            // if (bracketUrl && tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') {
+            //     fetchMatches(bracketUrl, true);
+            // }
 
-            // Poll tournament status
+            // Poll tournament status & registrations (fallback)
             pollTournamentStatus();
+            fetchData(true);
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [bracketUrl, tournament?.Status]);
+    }, [bracketUrl, tournament?.Status, fetchData]);
 
     if (banListCount > 20) {
         gridCols = "grid-cols-6";
@@ -756,7 +765,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                     <div className="flex gap-2 w-full md:w-auto justify-end">
                         <button
-                            onClick={fetchData}
+                            onClick={() => fetchData()}
                             disabled={loading}
                             className="flex items-center gap-2 px-4 py-2 bg-secondary rounded-lg hover:bg-secondary/80 text-sm font-medium transition-colors"
                         >
@@ -950,7 +959,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             </>
                         ) : (
                             <button
-                                onClick={() => setSettingsModalOpen(true)}
+                                onClick={() => {
+                                    fetchData(true);
+                                    setSettingsModalOpen(true);
+                                }}
                                 disabled={generatingBracket || !data.length}
                                 className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-gradient-to-r from-orange-400 to-red-500 text-white px-5 py-2.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -972,8 +984,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                 {/* Settings Modal */}
                 {settingsModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                        <div className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md space-y-4 relative">
+                    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 p-4 pt-20 overflow-y-auto">
+                        <div className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md space-y-4 relative animate-in fade-in zoom-in duration-200 mb-20">
                             <button
                                 onClick={() => setSettingsModalOpen(false)}
                                 className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
@@ -1030,8 +1042,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                 {/* History Modal */}
                 {historyOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                        <div className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-2xl space-y-4 relative max-h-[80vh] flex flex-col">
+                    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 p-4 pt-20 overflow-y-auto">
+                        <div className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-2xl space-y-4 relative max-h-[80vh] flex flex-col mb-20">
                             <button
                                 onClick={() => {
                                     setHistoryOpen(false);
@@ -1294,132 +1306,134 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </div>
 
                         {/* HIDDEN RENDER CONTAINER FOR INVITE CARD - Unified Layout */}
-                        <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
-                            <div
-                                ref={cardRef}
-                                style={{ width: 1200, minHeight: 630, height: 'fit-content', backgroundColor: 'black', color: 'white', position: 'relative', display: 'flex' }}
-                            >
-                                {/* Dynamic Background */}
-                                <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-                                    <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
-                                    <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.05)' }} />
-                                    <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#2563eb]/10 rounded-full blur-[120px]" />
-                                </div>
+                        {(generating || generatingBanList) && (
+                            <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
+                                <div
+                                    ref={cardRef}
+                                    style={{ width: 1200, minHeight: 630, height: 'fit-content', backgroundColor: 'black', color: 'white', position: 'relative', display: 'flex' }}
+                                >
+                                    {/* Dynamic Background */}
+                                    <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+                                        <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
+                                        <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.05)' }} />
+                                        <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#2563eb]/10 rounded-full blur-[120px]" />
+                                    </div>
 
-                                {/* Content Grid */}
-                                <div style={{ position: 'relative', zIndex: 10, display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', width: '100%', height: 'auto', alignItems: 'stretch' }}>
+                                    {/* Content Grid */}
+                                    <div style={{ position: 'relative', zIndex: 10, display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', width: '100%', height: 'auto', alignItems: 'stretch' }}>
 
-                                    {/* Left Side: Tournament Info & Ban List */}
-                                    <div style={{ padding: 40, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                                        <div style={{ marginBottom: 24 }}>
-                                            <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', fontSize: '0.9rem' }}>
-                                                Tournament Invite
-                                            </p>
-                                            <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                {tournament?.Name || "BEYBLADE X"}
-                                            </h1>
-                                            {tournament?.Type && (
-                                                <span style={{
-                                                    display: 'inline-block',
-                                                    fontSize: '0.8rem',
-                                                    fontWeight: 800,
-                                                    color: tournament.Type === 'U10' ? '#60a5fa' : tournament.Type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
-                                                    textTransform: 'uppercase',
-                                                    letterSpacing: '0.1em',
-                                                    padding: '4px 8px',
-                                                    borderRadius: 4,
-                                                    backgroundColor: 'rgba(255,255,255,0.05)',
-                                                    border: '1px solid rgba(255,255,255,0.1)'
-                                                }}>
-                                                    {tournament.Type} FORMAT
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {/* Ban List Mini-Grid */}
-                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
-                                                <AlertCircle style={{ width: 16, height: 16, color: '#ef4444' }} />
-                                                <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restricted Parts ({tournament?.BanList?.length || 0})</span>
+                                        {/* Left Side: Tournament Info & Ban List */}
+                                        <div style={{ padding: 40, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                                            <div style={{ marginBottom: 24 }}>
+                                                <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', fontSize: '0.9rem' }}>
+                                                    Tournament Invite
+                                                </p>
+                                                <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                                    {tournament?.Name || "BEYBLADE X"}
+                                                </h1>
+                                                {tournament?.Type && (
+                                                    <span style={{
+                                                        display: 'inline-block',
+                                                        fontSize: '0.8rem',
+                                                        fontWeight: 800,
+                                                        color: tournament.Type === 'U10' ? '#60a5fa' : tournament.Type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.1em',
+                                                        padding: '4px 8px',
+                                                        borderRadius: 4,
+                                                        backgroundColor: 'rgba(255,255,255,0.05)',
+                                                        border: '1px solid rgba(255,255,255,0.1)'
+                                                    }}>
+                                                        {tournament.Type} FORMAT
+                                                    </span>
+                                                )}
                                             </div>
 
-                                            {tournament?.BanList && tournament.BanList.length > 0 ? (
-                                                <div style={{
-                                                    display: 'grid',
-                                                    gridTemplateColumns: `repeat(${tournament.BanList.length > 30 ? 7 : tournament.BanList.length > 20 ? 6 : 5}, 1fr)`,
-                                                    gap: 8,
-                                                    alignContent: 'start'
-                                                }}>
-                                                    {tournament.BanList.map((bey: string, i: number) => {
-                                                        // @ts-ignore
-                                                        const hasImg = !!imageMap[bey];
-                                                        return (
-                                                            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                                                                <div style={{
-                                                                    width: '100%',
-                                                                    aspectRatio: '1/1',
-                                                                    backgroundColor: 'rgba(255,255,255,0.05)',
-                                                                    borderRadius: 8,
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center',
-                                                                    padding: 4,
-                                                                    border: '1px solid rgba(255,255,255,0.1)'
-                                                                }}>
-                                                                    {hasImg ? (
-                                                                        // @ts-ignore
-                                                                        <img src={imageMap[bey]} alt={bey} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                                                    ) : (
-                                                                        <span style={{ fontSize: 8, opacity: 0.5 }}>IMG</span>
-                                                                    )}
+                                            {/* Ban List Mini-Grid */}
+                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
+                                                    <AlertCircle style={{ width: 16, height: 16, color: '#ef4444' }} />
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restricted Parts ({tournament?.BanList?.length || 0})</span>
+                                                </div>
+
+                                                {tournament?.BanList && tournament.BanList.length > 0 ? (
+                                                    <div style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: `repeat(${tournament.BanList.length > 30 ? 7 : tournament.BanList.length > 20 ? 6 : 5}, 1fr)`,
+                                                        gap: 8,
+                                                        alignContent: 'start'
+                                                    }}>
+                                                        {tournament.BanList.map((bey: string, i: number) => {
+                                                            // @ts-ignore
+                                                            const hasImg = !!imageMap[bey];
+                                                            return (
+                                                                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                                                    <div style={{
+                                                                        width: '100%',
+                                                                        aspectRatio: '1/1',
+                                                                        backgroundColor: 'rgba(255,255,255,0.05)',
+                                                                        borderRadius: 8,
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        padding: 4,
+                                                                        border: '1px solid rgba(255,255,255,0.1)'
+                                                                    }}>
+                                                                        {hasImg ? (
+                                                                            // @ts-ignore
+                                                                            <img src={imageMap[bey]} alt={bey} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                                                        ) : (
+                                                                            <span style={{ fontSize: 8, opacity: 0.5 }}>IMG</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span style={{ fontSize: 7, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{bey}</span>
                                                                 </div>
-                                                                <span style={{ fontSize: 7, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{bey}</span>
-                                                            </div>
-                                                        );
-                                                    })}
+                                                            );
+                                                        })}
 
-                                                </div>
-                                            ) : (
-                                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed rgba(255,255,255,0.1)', borderRadius: 12 }}>
-                                                    <span style={{ color: '#4b5563', fontSize: '0.9rem' }}>No Banned Parts</span>
-                                                </div>
-                                            )}
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed rgba(255,255,255,0.1)', borderRadius: 12 }}>
+                                                        <span style={{ color: '#4b5563', fontSize: '0.9rem' }}>No Banned Parts</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Footer */}
+                                            <div style={{ marginTop: 'auto', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
+                                                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                            </div>
                                         </div>
 
-                                        {/* Footer */}
-                                        <div style={{ marginTop: 'auto', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
-                                            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                        {/* Right Side: QR Code */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                                            <div style={{
+                                                padding: 20,
+                                                backgroundColor: 'white',
+                                                borderRadius: 20,
+                                                boxShadow: '0 0 40px rgba(0,0,0,0.5)',
+                                                marginBottom: 24
+                                            }}>
+                                                <QRCodeSVG
+                                                    value={`${origin || ''}/register/${id}`}
+                                                    size={220}
+                                                />
+                                            </div>
+                                            <p style={{ fontSize: '1.2rem', color: '#fff', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                                Scan to Register
+                                            </p>
+                                            <p style={{ marginTop: 8, fontSize: '0.8rem', color: '#9ca3af', fontFamily: 'monospace' }}>
+                                                {origin ? `${origin.replace(/^https?:\/\//, '')}/register/${id}` : `.../register/${id}`}
+                                            </p>
                                         </div>
+
                                     </div>
-
-                                    {/* Right Side: QR Code */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                                        <div style={{
-                                            padding: 20,
-                                            backgroundColor: 'white',
-                                            borderRadius: 20,
-                                            boxShadow: '0 0 40px rgba(0,0,0,0.5)',
-                                            marginBottom: 24
-                                        }}>
-                                            <QRCodeSVG
-                                                value={`${origin || ''}/register/${id}`}
-                                                size={220}
-                                            />
-                                        </div>
-                                        <p style={{ fontSize: '1.2rem', color: '#fff', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                                            Scan to Register
-                                        </p>
-                                        <p style={{ marginTop: 8, fontSize: '0.8rem', color: '#9ca3af', fontFamily: 'monospace' }}>
-                                            {origin ? `${origin.replace(/^https?:\/\//, '')}/register/${id}` : `.../register/${id}`}
-                                        </p>
-                                    </div>
-
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Separate container for Ban List Export (kept as is) */}
-                        {tournament?.BanList && tournament.BanList.length > 0 && (
+                        {(generatingBanList && tournament?.BanList && tournament.BanList.length > 0) && (
                             <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
                                 <div
                                     ref={banListRef}
@@ -1480,139 +1494,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     </div>
                 </div>
 
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center min-h-[400px] glass-card rounded-xl">
-                        <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-                        <h3 className="text-xl font-bold italic tracking-tighter text-white animate-pulse">
-                            FETCHING <span className="text-primary">DATA</span>
-                        </h3>
-                    </div>
-                ) : (
-                    <div className="glass-card rounded-xl overflow-hidden overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-secondary/50 text-muted-foreground uppercase text-xs font-bold tracking-wider">
-                                <tr>
-                                    <th className="p-4 whitespace-nowrap">Time</th>
-                                    <th className="p-4 whitespace-nowrap">Player</th>
-                                    <th className="p-4 whitespace-nowrap">Mode</th>
-                                    <th className="p-4 whitespace-nowrap">Main Deck</th>
-                                    <th className="p-4 whitespace-nowrap">Reserves</th>
-                                    <th className="p-4 whitespace-nowrap">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                                {(() => {
-                                    // Pre-calculate device counts
-                                    const deviceCounts: Record<string, number> = {};
-                                    filteredData.forEach(r => {
-                                        deviceCounts[r.DeviceUUID] = (deviceCounts[r.DeviceUUID] || 0) + 1;
-                                    });
+                <RegistrationTable
+                    data={data}
+                    loading={loading}
+                    searchQuery={searchQuery}
+                    onDelete={handleDelete}
+                />
 
-                                    // Helper for consistent color
-                                    const getDeviceColor = (uuid: string) => {
-                                        let hash = 0;
-                                        for (let i = 0; i < uuid.length; i++) hash = uuid.charCodeAt(i) + ((hash << 5) - hash);
-                                        const hue = Math.abs(hash % 360);
-                                        return `hsl(${hue}, 70%, 60%)`;
-                                    };
 
-                                    return filteredData.map((row, i) => {
-                                        const validation = validateRow(row);
-                                        const isMulti = (deviceCounts[row.DeviceUUID] || 0) > 1;
-                                        const deviceColor = isMulti ? getDeviceColor(row.DeviceUUID) : undefined;
-
-                                        let reserveDecks: string[][] = [];
-                                        try {
-                                            const parsed = JSON.parse(row.Reserve_Data);
-                                            if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-                                                // Legacy single deck
-                                                reserveDecks = [parsed as string[]];
-                                            } else {
-                                                reserveDecks = parsed;
-                                            }
-                                        } catch (e) { }
-
-                                        return (
-                                            <tr key={i} className="hover:bg-accent/5 transition-colors group">
-                                                <td className="p-4 whitespace-nowrap text-muted-foreground">
-                                                    {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </td>
-                                                <td className="p-4 font-medium text-foreground whitespace-nowrap">
-                                                    <div className="flex items-center gap-2">
-                                                        {row.PlayerName}
-                                                        {isMulti && (
-                                                            <div
-                                                                className="flex items-center justify-center p-1 rounded-full bg-white/10"
-                                                                title={`Multi-player Device: ${row.DeviceUUID.substring(0, 4)}...`}
-                                                                style={{ color: deviceColor }}
-                                                            >
-                                                                <Users className="h-3.5 w-3.5" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="p-4 whitespace-nowrap">
-                                                    <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
-                                                        {row.Mode === "Under10" ? "U10" : "NMM"}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-xs space-y-1 min-w-[200px]">
-                                                    <div className="flex gap-1 flex-wrap">
-                                                        {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => (
-                                                            <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap">
-                                                                {b}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </td>
-                                                <td className="p-4 text-xs space-y-2 min-w-[200px]">
-                                                    {reserveDecks.map((deck, idx) => (
-                                                        <div key={idx} className="flex gap-1 items-center opacity-80 flex-wrap">
-                                                            <span className="text-[9px] w-4 text-muted-foreground">#{idx + 1}</span>
-                                                            {deck.map((b, bIdx) => (
-                                                                <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap">
-                                                                    {b}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    ))}
-                                                </td>
-                                                <td className="p-4 whitespace-nowrap">
-                                                    <div className="flex items-center justify-between gap-4">
-                                                        <div className="flex items-center gap-2">
-                                                            {validation.status === "pass" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                            {validation.status === "fail" && <XCircle className="h-4 w-4 text-red-500" />}
-                                                            <span className={`font-bold ${validation.status === "pass" ? "text-green-500" :
-                                                                validation.status === "fail" ? "text-red-500" : "text-yellow-500"
-                                                                }`}>
-                                                                {validation.msg}
-                                                            </span>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => handleDelete(row)}
-                                                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 text-muted-foreground hover:text-red-500 transition-all"
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                })()}
-                                {filteredData.length === 0 && !loading && (
-                                    <tr>
-                                        <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                                            No matching registrations found.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                )}
 
                 <Modal
                     isOpen={modalConfig.isOpen}

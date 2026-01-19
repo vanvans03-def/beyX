@@ -21,9 +21,9 @@ const TournamentBracket: React.FC<TournamentBracketProps> = ({
     const isMinimal = variant === 'minimal';
 
     return (
-        <div className={`w-full ${isMinimal ? 'h-full flex flex-col' : 'border-2 border-gray-200 rounded-lg overflow-hidden mb-6 mt-2'} ${className}`}>
+        <div className={`w-full ${isMinimal ? 'h-full flex flex-col relative' : 'border border-white/10 bg-black/20 rounded-lg overflow-hidden mb-6 mt-2 relative'} ${className}`}>
             {!isMinimal && (
-                <h2 className="text-xl font-bold p-4 bg-gray-800 text-white">
+                <h2 className="text-xl font-bold p-4 bg-secondary/50 text-foreground border-b border-white/5 mx-2 my-2 rounded-t-lg">
                     Tournament Bracket
                 </h2>
             )}
@@ -49,8 +49,8 @@ const TournamentBracket: React.FC<TournamentBracketProps> = ({
                 title="Tournament Bracket"
             ></iframe>
 
-            <div className={`text-center text-sm text-gray-500 ${isMinimal ? 'py-1 bg-black/80' : 'mt-2 p-2'}`}>
-                <a href={challongeUrl} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 underline">
+            <div className={`text-center text-sm text-muted-foreground ${isMinimal ? 'absolute bottom-0 right-0 z-10 bg-black/80 px-2 py-0.5 text-[10px] rounded-tl-lg pointer-events-auto' : 'p-2 bg-black/40 border-t border-white/5'}`}>
+                <a href={challongeUrl} target="_blank" rel="noopener noreferrer" className="hover:text-primary underline transition-colors">
                     View full bracket on Challonge.com
                 </a>
             </div>
