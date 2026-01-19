@@ -353,6 +353,20 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const confirmUpdateMatch = async (matchId: number, scores: string, winnerId: number) => {
         if (!bracketUrl) return;
+
+        // Optimistic Update
+        setMatches(prev => prev.map(m => {
+            if (m.id === matchId) {
+                return {
+                    ...m,
+                    state: 'complete', // Mark as complete visually
+                    winner_id: winnerId,
+                    scores_csv: scores
+                };
+            }
+            return m;
+        }));
+
         try {
             const res = await fetch('/api/admin/matches', {
                 method: 'PUT',
@@ -367,10 +381,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             });
             if (!res.ok) throw new Error("Failed to update match");
 
-            fetchMatches(bracketUrl);
+            // Silent refresh to sync data without flicker
+            fetchMatches(bracketUrl, true);
             toast.success("Match result updated successfully!");
         } catch (e) {
             console.error(e);
+            // Revert or just refresh to get true state
+            fetchMatches(bracketUrl, true);
             setModalConfig({
                 isOpen: true,
                 title: "Error",
@@ -832,93 +849,110 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {activeMatches.map((match) => (
-                                    <div key={match.id} className="bg-background/50 border border-white/5 p-4 rounded-lg flex flex-col gap-3">
-                                        <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider text-center">
+                                    <div key={match.id} className="bg-background/50 border border-white/20 hover:border-primary/30 p-4 rounded-xl flex flex-col gap-3 transition-colors shadow-sm">
+                                        <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider text-center flex items-center justify-center gap-2">
+                                            <span className="w-8 h-[1px] bg-white/10"></span>
                                             {t('admin.matches.round').replace('{n}', match.round.toString())}
+                                            <span className="w-8 h-[1px] bg-white/10"></span>
                                         </div>
 
                                         <div className="flex items-center justify-between gap-2">
                                             {/* Player 1 */}
-                                            <div className={`flex-1 text-center p-2 rounded relative group ${match.winner_id === match.player1_id ? 'bg-green-500/20 text-green-400' : 'bg-secondary/40'}`}>
-                                                <div className="font-bold text-sm truncate">{match.player1?.name || "???"}</div>
+                                            <button
+                                                className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
+                                                    ${match.winner_id === match.player1_id
+                                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                                        : 'bg-secondary/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 border border-transparent hover:border-blue-500/30 cursor-pointer'
+                                                    }`}
+                                                onClick={() => {
+                                                    if (!isQuickMode) {
+                                                        const s = scoreInputs[match.id];
+                                                        const scoreStr = (s?.p1 && s?.p2) ? `${s.p1}-${s.p2}` : "0-0";
+                                                        handleUpdateMatch(match.id, scoreStr, match.player1_id, match.player1?.name || "Player 1");
+                                                    }
+                                                }}
+                                            >
+                                                <div className="font-bold text-sm truncate w-full">{match.player1?.name || "???"}</div>
+                                                <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal">Click to Win</span>
 
-                                                {/* Quick Win Button P1 */}
+                                                {/* Quick Win Button P1 (Still keep for Quick Mode overlay if needed, or rely on main click) */}
                                                 {isQuickMode && !match.winner_id && (
-                                                    <button
-                                                        onClick={() => handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1")}
-                                                        className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 bg-green-500/80 flex items-center justify-center rounded transition-opacity"
-                                                        title="Quick Win (1-0)"
+                                                    <div
+                                                        className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 bg-green-500/90 flex items-center justify-center rounded-lg transition-opacity"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation(); // Prevent double trigger if parent has click
+                                                            handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1");
+                                                        }}
                                                     >
-                                                        <CheckCircle className="h-8 w-8 text-white drop-shadow-md" />
-                                                    </button>
+                                                        <span className="font-bold text-black flex items-center gap-1">
+                                                            <CheckCircle className="h-4 w-4" /> Win 1-0
+                                                        </span>
+                                                    </div>
                                                 )}
-                                            </div>
-                                            <div className="text-xs font-bold text-muted-foreground">VS</div>
+                                            </button>
+
+                                            <div className="text-xs font-bold text-muted-foreground px-1">VS</div>
+
                                             {/* Player 2 */}
-                                            <div className={`flex-1 text-center p-2 rounded relative group ${match.winner_id === match.player2_id ? 'bg-green-500/20 text-green-400' : 'bg-secondary/40'}`}>
-                                                <div className="font-bold text-sm truncate">{match.player2?.name || "???"}</div>
+                                            <button
+                                                className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
+                                                    ${match.winner_id === match.player2_id
+                                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                                        : 'bg-secondary/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-transparent hover:border-red-500/30 cursor-pointer'
+                                                    }`}
+                                                onClick={() => {
+                                                    if (!isQuickMode) {
+                                                        const s = scoreInputs[match.id];
+                                                        const scoreStr = (s?.p1 && s?.p2) ? `${s.p1}-${s.p2}` : "0-0";
+                                                        handleUpdateMatch(match.id, scoreStr, match.player2_id, match.player2?.name || "Player 2");
+                                                    }
+                                                }}
+                                            >
+                                                <div className="font-bold text-sm truncate w-full">{match.player2?.name || "???"}</div>
+                                                <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal">Click to Win</span>
 
                                                 {/* Quick Win Button P2 */}
                                                 {isQuickMode && !match.winner_id && (
-                                                    <button
-                                                        onClick={() => handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2")}
-                                                        className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 bg-green-500/80 flex items-center justify-center rounded transition-opacity"
-                                                        title="Quick Win (0-1)"
+                                                    <div
+                                                        className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 bg-green-500/90 flex items-center justify-center rounded-lg transition-opacity"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2");
+                                                        }}
                                                     >
-                                                        <CheckCircle className="h-8 w-8 text-white drop-shadow-md" />
-                                                    </button>
+                                                        <span className="font-bold text-black flex items-center gap-1">
+                                                            <CheckCircle className="h-4 w-4" /> Win 0-1
+                                                        </span>
+                                                    </div>
                                                 )}
-                                            </div>
+                                            </button>
                                         </div>
 
-                                        {/* Scoring Controls - Hidden in Quick Mode unless already scored or wanted */}
+                                        {/* Scoring Controls - Only inputs now */}
                                         {!isQuickMode && (
-                                            <>
-                                                <div className="flex items-center justify-center gap-2 mt-2">
-                                                    <input
-                                                        type="number"
-                                                        className="w-12 bg-black/40 border border-white/10 rounded text-center text-sm p-1"
-                                                        placeholder="0"
-                                                        value={scoreInputs[match.id]?.p1 || ''}
-                                                        onChange={(e) => setScoreInputs(prev => ({
-                                                            ...prev, [match.id]: { ...prev[match.id], p1: e.target.value }
-                                                        }))}
-                                                    />
-                                                    <span className="text-muted-foreground text-xs">-</span>
-                                                    <input
-                                                        type="number"
-                                                        className="w-12 bg-black/40 border border-white/10 rounded text-center text-sm p-1"
-                                                        placeholder="0"
-                                                        value={scoreInputs[match.id]?.p2 || ''}
-                                                        onChange={(e) => setScoreInputs(prev => ({
-                                                            ...prev, [match.id]: { ...prev[match.id], p2: e.target.value }
-                                                        }))}
-                                                    />
-                                                </div>
-
-                                                <div className="flex gap-2 mt-1">
-                                                    <button
-                                                        onClick={() => {
-                                                            const s = scoreInputs[match.id];
-                                                            const scoreStr = (s?.p1 && s?.p2) ? `${s.p1}-${s.p2}` : "0-0";
-                                                            handleUpdateMatch(match.id, scoreStr, match.player1_id, match.player1?.name || "Player 1");
-                                                        }}
-                                                        className="flex-1 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 text-xs py-1 rounded transition-colors"
-                                                    >
-                                                        P1 {t('admin.matches.win')}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            const s = scoreInputs[match.id];
-                                                            const scoreStr = (s?.p1 && s?.p2) ? `${s.p1}-${s.p2}` : "0-0";
-                                                            handleUpdateMatch(match.id, scoreStr, match.player2_id, match.player2?.name || "Player 2");
-                                                        }}
-                                                        className="flex-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 text-xs py-1 rounded transition-colors"
-                                                    >
-                                                        P2 {t('admin.matches.win')}
-                                                    </button>
-                                                </div>
-                                            </>
+                                            <div className="flex items-center justify-center gap-2 mt-1 pb-2">
+                                                <input
+                                                    type="number"
+                                                    className="w-12 bg-black/40 border border-white/10 rounded-md text-center text-sm p-1.5 focus:border-primary/50 outline-none transition-colors"
+                                                    placeholder="0"
+                                                    value={scoreInputs[match.id]?.p1 || ''}
+                                                    onChange={(e) => setScoreInputs(prev => ({
+                                                        ...prev, [match.id]: { ...prev[match.id], p1: e.target.value }
+                                                    }))}
+                                                    onClick={(e) => e.stopPropagation()} // Prevent triggering player click if overlap
+                                                />
+                                                <span className="text-muted-foreground text-xs font-bold">-</span>
+                                                <input
+                                                    type="number"
+                                                    className="w-12 bg-black/40 border border-white/10 rounded-md text-center text-sm p-1.5 focus:border-primary/50 outline-none transition-colors"
+                                                    placeholder="0"
+                                                    value={scoreInputs[match.id]?.p2 || ''}
+                                                    onChange={(e) => setScoreInputs(prev => ({
+                                                        ...prev, [match.id]: { ...prev[match.id], p2: e.target.value }
+                                                    }))}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            </div>
                                         )}
                                     </div>
                                 ))}
