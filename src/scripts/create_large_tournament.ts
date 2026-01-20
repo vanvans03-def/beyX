@@ -16,12 +16,13 @@ async function getAdminUserId() {
     // But repository doesn't have getUserByName.
 
     // Let's just use PG client for clarity in script
+    const connectionString = process.env.POSTGRES_URL_NON_POOLING?.replace("sslmode=require", "") || "";
     const client = new Client({
-        connectionString: process.env.POSTGRES_URL_NON_POOLING,
+        connectionString,
         ssl: { rejectUnauthorized: false }
     });
     await client.connect();
-    const res = await client.query("SELECT id FROM users WHERE username = 'admin'");
+    const res = await client.query("SELECT id FROM users WHERE username = 'admin2'");
     await client.end();
     return res.rows[0]?.id;
 }

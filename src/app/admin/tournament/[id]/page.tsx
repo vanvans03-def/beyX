@@ -7,7 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -83,22 +83,85 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [isShuffle, setIsShuffle] = useState(true);
     const [isQuickAdvance, setIsQuickAdvance] = useState(true); // Default to true
     const [isQuickMode, setIsQuickMode] = useState(false);
-    const [historyOpen, setHistoryOpen] = useState(false); // History Modal State
+    const [historyTooltip, setHistoryTooltip] = useState<{ x: number, y: number } | null>(null); // Replaces historyOpen
     const [editingMatchId, setEditingMatchId] = useState<number | null>(null); // Track which match in history is being edited
+
 
     // Config for Scoring
     const [scoreInputs, setScoreInputs] = useState<Record<number, { p1: string, p2: string }>>({});
+
+    // Combo Display Settings
+    const [showPlayerCombo, setShowPlayerCombo] = useState(true);
+    // Replace modal state with tooltip state
+    const [hoveredCombo, setHoveredCombo] = useState<{ x: number, y: number, data: Registration, deckIndex: number } | null>(null);
+
+    // Toggle tooltip logic
+    const handleShowCombo = (e: React.MouseEvent, reg: Registration) => {
+        e.stopPropagation();
+
+        // If clicking the same button, close it
+        if (hoveredCombo?.data.PlayerName === reg.PlayerName) {
+            setHoveredCombo(null);
+            return;
+        }
+
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        // Position hint: slightly below and right aligned or centered
+        // Position hint: slightly below and right aligned or centered
+        setHoveredCombo({
+            x: rect.left + window.scrollX,
+            y: rect.bottom + window.scrollY + 10,
+            data: reg,
+            deckIndex: 0 // Start at Main Deck (0)
+        });
+    };
+
+    // Close on click elsewhere (via event listener or backdrop)
+    useEffect(() => {
+        const handleClickOutside = () => setHoveredCombo(null);
+        if (hoveredCombo) {
+            window.addEventListener('click', handleClickOutside);
+        }
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, [hoveredCombo]);
 
     const [origin, setOrigin] = useState("");
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
             setOrigin(window.location.origin);
+            // Load settings
+            const savedShowCombo = localStorage.getItem(`tournament_settings_${id}_showCombo`);
+            if (savedShowCombo !== null) {
+                setShowPlayerCombo(savedShowCombo === 'true');
+            }
         }
-    }, []);
+    }, [id]);
 
     // Helper to clean URL for component prop if needed, though current component handles suffix
     const removeModuleSuffix = (url: string) => url.replace(/\/module$/, '');
+
+    const handleShowHistory = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (historyTooltip) {
+            setHistoryTooltip(null);
+            return;
+        }
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setHistoryTooltip({
+            x: rect.left + window.scrollX,
+            y: rect.bottom + window.scrollY + 10
+        });
+    };
+
+    // Close tooltip on click outside
+    useEffect(() => {
+        const handleClickOutside = () => {
+            if (historyTooltip) setHistoryTooltip(null);
+        };
+        if (historyTooltip) window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, [historyTooltip]);
 
     const handleGeneratePreview = async () => {
         if (cardRef.current === null) return;
@@ -427,6 +490,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         if (!tournament?.Name) return;
         setSettingsModalOpen(false); // Close modal
         setGeneratingBracket(true);
+        // Save settings
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(`tournament_settings_${id}_showCombo`, String(showPlayerCombo));
+        }
+
         try {
             // Prepare players list
             const players = data.map(r => ({
@@ -860,8 +928,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </div>
                                 {/* History Button */}
                                 <button
-                                    onClick={() => setHistoryOpen(true)}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-secondary rounded-lg text-xs font-bold transition-all border border-transparent hover:border-white/10 whitespace-nowrap"
+                                    onClick={handleShowHistory}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap ${historyTooltip ? "bg-primary text-black border-primary" : "bg-secondary border-transparent hover:border-white/10"}`}
                                 >
                                     <Clock className="h-4 w-4" />
                                     <span className="hidden sm:inline">History</span>
@@ -923,7 +991,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                                         <div className="flex items-center justify-between gap-2">
                                             {/* Player 1 */}
-                                            <button
+                                            <div
+                                                role="button"
+                                                tabIndex={0}
                                                 className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
                                                     ${match.winner_id === match.player1_id
                                                         ? 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -932,15 +1002,57 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 onClick={() => {
                                                     handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1");
                                                 }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1");
+                                                    }
+                                                }}
                                             >
                                                 <div className="font-bold text-sm truncate w-full">{match.player1?.name || "???"}</div>
+                                                {showPlayerCombo && (
+                                                    <div className="text-[10px] text-muted-foreground w-full truncate">
+                                                        {(() => {
+                                                            const p1Reg = data.find(r => r.PlayerName === match.player1?.name);
+                                                            if (!p1Reg) return null;
+                                                            return (
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <span>{p1Reg.Main_Bey1}</span>
+                                                                    {(p1Reg.Main_Bey2 || p1Reg.Main_Bey3) && (
+                                                                        <button
+                                                                            onClick={(e) => handleShowCombo(e, p1Reg)}
+                                                                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p1Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
+                                                                        >
+                                                                            <Eye className="w-3 h-3" />
+                                                                            {t('admin.matches.view_all') || "View All"}
+                                                                            {tournament?.Type === 'U10' && (() => {
+                                                                                const decks = [p1Reg.Main_Bey1, p1Reg.Main_Bey2, p1Reg.Main_Bey3].filter(Boolean);
+                                                                                let total = 0;
+                                                                                decks.forEach(d => {
+                                                                                    for (const [pt, names] of Object.entries((gameData as any).points)) {
+                                                                                        if ((names as string[]).includes(d)) {
+                                                                                            total += parseInt(pt);
+                                                                                            break;
+                                                                                        }
+                                                                                    }
+                                                                                });
+                                                                                return <span className={total > 10 ? "text-red-500" : "text-green-500"}>({total}/10)</span>;
+                                                                            })()}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                )}
                                                 <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal">Click to Win</span>
-                                            </button>
+                                            </div>
 
                                             <div className="text-xs font-bold text-muted-foreground px-1">VS</div>
 
                                             {/* Player 2 */}
-                                            <button
+                                            <div
+                                                role="button"
+                                                tabIndex={0}
                                                 className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
                                                     ${match.winner_id === match.player2_id
                                                         ? 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -949,10 +1061,50 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 onClick={() => {
                                                     handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2");
                                                 }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2");
+                                                    }
+                                                }}
                                             >
                                                 <div className="font-bold text-sm truncate w-full">{match.player2?.name || "???"}</div>
+                                                {showPlayerCombo && (
+                                                    <div className="text-[10px] text-muted-foreground w-full truncate">
+                                                        {(() => {
+                                                            const p2Reg = data.find(r => r.PlayerName === match.player2?.name);
+                                                            if (!p2Reg) return null;
+                                                            return (
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <span>{p2Reg.Main_Bey1}</span>
+                                                                    {(p2Reg.Main_Bey2 || p2Reg.Main_Bey3) && (
+                                                                        <button
+                                                                            onClick={(e) => handleShowCombo(e, p2Reg)}
+                                                                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p2Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
+                                                                        >
+                                                                            <Eye className="w-3 h-3" />
+                                                                            {t('admin.matches.view_all') || "View All"}
+                                                                            {tournament?.Type === 'U10' && (() => {
+                                                                                const decks = [p2Reg.Main_Bey1, p2Reg.Main_Bey2, p2Reg.Main_Bey3].filter(Boolean);
+                                                                                let total = 0;
+                                                                                decks.forEach(d => {
+                                                                                    for (const [pt, names] of Object.entries((gameData as any).points)) {
+                                                                                        if ((names as string[]).includes(d)) {
+                                                                                            total += parseInt(pt);
+                                                                                            break;
+                                                                                        }
+                                                                                    }
+                                                                                });
+                                                                                return <span className={total > 10 ? "text-red-500" : "text-green-500"}>({total}/10)</span>;
+                                                                            })()}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                )}
                                                 <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal">Click to Win</span>
-                                            </button>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
@@ -1058,6 +1210,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     <label htmlFor="shuffle" className="text-sm">{t('admin.settings.shuffle')}</label>
                                 </div>
 
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="showCombo"
+                                        checked={showPlayerCombo}
+                                        onChange={(e) => setShowPlayerCombo(e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-600"
+                                    />
+                                    <label htmlFor="showCombo" className="text-sm">Show Player Combo (In Match)</label>
+                                </div>
+
                                 <div className="p-3 bg-secondary/50 rounded-lg text-xs text-muted-foreground border border-white/5">
                                     {t('admin.settings.player_count').replace('{count}', data.length.toString())}
                                 </div>
@@ -1074,26 +1237,28 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     </div>
                 )}
 
-                {/* History Modal */}
-                {historyOpen && (
-                    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 p-4 pt-20 overflow-y-auto">
-                        <div className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-2xl space-y-4 relative max-h-[80vh] flex flex-col mb-20">
-                            <button
-                                onClick={() => {
-                                    setHistoryOpen(false);
-                                    setEditingMatchId(null);
-                                }}
-                                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
-                            >
-                                <XCircle className="h-5 w-5" />
-                            </button>
+                {/* History Tooltip */}
+                {historyTooltip && (
+                    <div
+                        className="fixed z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-right"
+                        style={{
+                            left: Math.min(historyTooltip.x, window.innerWidth - 380), // Ensure it fits on screen
+                            top: historyTooltip.y
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="bg-popover/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 w-[360px] max-h-[500px] flex flex-col text-popover-foreground">
+                            <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
+                                <h4 className="font-bold text-sm flex items-center gap-2">
+                                    <Clock className="h-4 w-4 text-primary" />
+                                    Match History
+                                </h4>
+                                <button onClick={() => setHistoryTooltip(null)} className="text-muted-foreground hover:text-foreground">
+                                    <XCircle className="h-4 w-4" />
+                                </button>
+                            </div>
 
-                            <h2 className="text-xl font-bold flex items-center gap-2">
-                                <Clock className="h-5 w-5 text-primary" />
-                                Match History
-                            </h2>
-
-                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                            <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                                 {historyMatches.length === 0 ? (
                                     <div className="text-center py-8 text-muted-foreground">No completed matches yet.</div>
                                 ) : (
@@ -1148,12 +1313,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         </button>
                                                         <button
                                                             onClick={() => {
-                                                                const s = scoreInputs[match.id];
-                                                                const currentP1 = s?.p1 ?? match.scores_csv.split('-')[0] ?? '0';
-                                                                const currentP2 = s?.p2 ?? match.scores_csv.split('-')[1] ?? '0';
-                                                                const scoreStr = `${currentP1}-${currentP2}`;
-
-                                                                confirmUpdateMatch(match.id, scoreStr, match.player2_id);
+                                                                setHistoryTooltip(null);
                                                                 setEditingMatchId(null);
                                                             }}
                                                             className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded hover:bg-green-500/30 w-24 flex justify-center items-center"
@@ -1189,6 +1349,148 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     ))
                                 )}
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Tooltip Card Overlay for Player Combo */}
+                {hoveredCombo && (
+                    <div
+                        className="fixed z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-left"
+                        style={{
+                            left: Math.min(hoveredCombo.x, window.innerWidth - 300), // Prevent overflow right
+                            top: hoveredCombo.y
+                        }}
+                        onClick={(e) => e.stopPropagation()} // Prevent close when clicking inside
+                    >
+                        <div className="bg-popover/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 w-[280px] text-popover-foreground">
+                            {(() => {
+                                // Parse Decks Logic
+                                const mainDeck = [hoveredCombo.data.Main_Bey1, hoveredCombo.data.Main_Bey2, hoveredCombo.data.Main_Bey3].filter(Boolean);
+                                let reserveDecks: string[][] = [];
+                                try {
+                                    const parsed = JSON.parse(hoveredCombo.data.Reserve_Data || "[]");
+                                    // Handle legacy single-array vs multi-array
+                                    if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+                                        reserveDecks = [parsed as unknown as string[]];
+                                    } else {
+                                        reserveDecks = parsed;
+                                    }
+                                } catch (e) {
+                                    // Ignore parse errors, just show main deck
+                                }
+
+                                const allDecks = [mainDeck, ...reserveDecks].filter(d => d && d.length > 0);
+                                const currentDeck = allDecks[hoveredCombo.deckIndex] || [];
+                                const isMain = hoveredCombo.deckIndex === 0;
+
+                                // Navigation Handlers
+                                const handlePrev = (e: React.MouseEvent) => {
+                                    e.stopPropagation();
+                                    if (hoveredCombo.deckIndex > 0) {
+                                        setHoveredCombo(prev => prev ? ({ ...prev, deckIndex: prev.deckIndex - 1 }) : null);
+                                    }
+                                };
+
+                                const handleNext = (e: React.MouseEvent) => {
+                                    e.stopPropagation();
+                                    if (hoveredCombo.deckIndex < allDecks.length - 1) {
+                                        setHoveredCombo(prev => prev ? ({ ...prev, deckIndex: prev.deckIndex + 1 }) : null);
+                                    }
+                                };
+
+                                return (
+                                    <>
+                                        <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
+                                            <h4 className="font-bold text-sm flex items-center gap-2">
+                                                <Users className="h-4 w-4 text-primary" />
+                                                <div className="flex flex-col">
+                                                    <span>{hoveredCombo.data.PlayerName}</span>
+                                                    <span className="text-[10px] text-muted-foreground font-normal">
+                                                        {isMain ? "Main Deck" : `Reserve Deck ${hoveredCombo.deckIndex}`}
+                                                    </span>
+                                                </div>
+                                            </h4>
+                                            <button onClick={() => setHoveredCombo(null)} className="text-muted-foreground hover:text-foreground">
+                                                <XCircle className="h-4 w-4" />
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            {(() => {
+                                                let totalScore = 0;
+                                                return (
+                                                    <>
+                                                        {currentDeck.map((bey, idx) => {
+                                                            const point = tournament?.Type === 'U10' ? (() => {
+                                                                for (const [pt, names] of Object.entries((gameData as any).points)) {
+                                                                    if ((names as string[]).includes(bey)) return parseInt(pt);
+                                                                }
+                                                                return null;
+                                                            })() : null;
+                                                            if (point !== null) totalScore += point;
+
+                                                            return (
+                                                                <div key={idx} className="flex items-center justify-between text-xs p-2 bg-secondary/50 rounded border border-white/5">
+                                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                        {/* Lazy Image */}
+                                                                        {(() => {
+                                                                            const imgUrl = (imageMap as any)[bey];
+                                                                            if (imgUrl) {
+                                                                                return <img src={imgUrl} alt={bey} className="w-8 h-8 object-contain" loading="lazy" />;
+                                                                            }
+                                                                            return null;
+                                                                        })()}
+                                                                        <span className="font-medium truncate" title={bey}>{bey}</span>
+                                                                    </div>
+                                                                    {point !== null && (
+                                                                        <span className="font-bold text-[10px] bg-yellow-500/10 text-yellow-500 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                                            {point}p
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        {tournament?.Type === 'U10' && (
+                                                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-white/10">
+                                                                <span className="text-xs text-muted-foreground font-bold">Total</span>
+                                                                <span className={`text-sm font-black ${totalScore > 10 ? 'text-destructive' : 'text-green-400'}`}>
+                                                                    {totalScore}/10
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+                                        </div >
+
+                                        {/* Navigation Controls */}
+                                        {
+                                            allDecks.length > 1 && (
+                                                <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
+                                                    <button
+                                                        onClick={handlePrev}
+                                                        disabled={hoveredCombo.deckIndex === 0}
+                                                        className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                                                    >
+                                                        <ArrowLeft className="h-4 w-4" />
+                                                    </button>
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                        {hoveredCombo.deckIndex + 1} / {allDecks.length}
+                                                    </span>
+                                                    <button
+                                                        onClick={handleNext}
+                                                        disabled={hoveredCombo.deckIndex === allDecks.length - 1}
+                                                        className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                                                    >
+                                                        <ArrowLeft className="h-4 w-4 rotate-180" />
+                                                    </button>
+                                                </div>
+                                            )
+                                        }
+                                    </>
+                                );
+                            })()}
                         </div>
                     </div>
                 )}

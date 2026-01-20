@@ -89,6 +89,7 @@ export const locales = {
         "admin.matches.empty": "ไม่พบการแข่งขัน",
         "admin.matches.round": "รอบที่ {n}",
         "admin.matches.win": "ชนะ",
+        "admin.matches.view_all": "ดูทั้งหมด",
 
         "admin.modal.invite_created": "สร้างการ์ดเชิญสำเร็จ",
         "admin.modal.ban_created": "สร้างรูป Ban List สำเร็จ",
@@ -197,6 +198,7 @@ export const locales = {
         "admin.matches.empty": "No active matches found.",
         "admin.matches.round": "Round {n}",
         "admin.matches.win": "Win",
+        "admin.matches.view_all": "View All",
 
         "admin.modal.invite_created": "Invite Card Created",
         "admin.modal.ban_created": "Ban List Image Created",
