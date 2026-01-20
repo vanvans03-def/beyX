@@ -1016,8 +1016,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             if (!p1Reg) return null;
                                                             return (
                                                                 <div className="flex flex-col items-center gap-1">
-                                                                    <span>{p1Reg.Main_Bey1}</span>
-                                                                    {(p1Reg.Main_Bey2 || p1Reg.Main_Bey3) && (
+                                                                    {p1Reg.Main_Bey1 && (
                                                                         <button
                                                                             onClick={(e) => handleShowCombo(e, p1Reg)}
                                                                             className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p1Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
@@ -1075,8 +1074,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             if (!p2Reg) return null;
                                                             return (
                                                                 <div className="flex flex-col items-center gap-1">
-                                                                    <span>{p2Reg.Main_Bey1}</span>
-                                                                    {(p2Reg.Main_Bey2 || p2Reg.Main_Bey3) && (
+                                                                    {p2Reg.Main_Bey1 && (
                                                                         <button
                                                                             onClick={(e) => handleShowCombo(e, p2Reg)}
                                                                             className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p2Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
