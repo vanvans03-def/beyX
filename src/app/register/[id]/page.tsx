@@ -1,7 +1,7 @@
 import TournamentViewerButton from "@/components/TournamentViewerButton";
 import RegistrationForm from "@/components/RegistrationForm";
-import { getTournament } from "@/lib/repository";
-import { Metadata, ResolvingMetadata } from "next";
+import { getTournament, getUserApiKey } from "@/lib/repository";
+import type { Metadata, ResolvingMetadata } from "next";
 import StandingsTable from "@/components/StandingsTable";
 import { getTournamentStandings } from "@/lib/challonge";
 import RealtimeTournamentWrapper from "@/components/RealtimeTournamentWrapper";
@@ -23,8 +23,11 @@ export default async function RegisterPage({ params }: Props) {
     let standings = null;
     if ((tournament.status === 'COMPLETED' || tournament.status === 'CLOSED') && tournament.challonge_url) {
         const code = tournament.challonge_url.split('/').pop();
-        if (code) {
-            standings = await getTournamentStandings(code);
+        if (code && tournament.user_id) {
+            const apiKey = await getUserApiKey(tournament.user_id);
+            if (apiKey) {
+                standings = await getTournamentStandings(apiKey, code);
+            }
         }
     }
 
