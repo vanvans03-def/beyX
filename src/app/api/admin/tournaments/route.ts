@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
-import { createTournament, getTournaments, getTournament, updateTournamentStatus } from "@/lib/repository";
+import { createTournament, getTournaments, getTournament, updateTournamentStatus, getUserApiKey } from "@/lib/repository";
 import { finalizeTournament } from "@/lib/challonge";
 
 export async function GET(req: Request) {
     try {
+        const userId = req.headers.get('x-user-id');
+        if (!userId) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+
         const { searchParams } = new URL(req.url);
         const id = searchParams.get("id");
 
@@ -11,6 +14,11 @@ export async function GET(req: Request) {
             // Fetch single
             const data = await getTournament(id);
             if (!data) return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+
+            // Verify Ownership
+            if (data.user_id && data.user_id !== userId) {
+                return NextResponse.json({ success: false, message: "Unauthorized access to tournament" }, { status: 403 });
+            }
 
             const mapped = {
                 TournamentID: data.id,
@@ -23,8 +31,8 @@ export async function GET(req: Request) {
             };
             return NextResponse.json({ success: true, data: mapped });
         } else {
-            // Fetch all
-            const data = await getTournaments();
+            // Fetch all for current user
+            const data = await getTournaments(userId);
             const mapped = data.map(d => ({
                 TournamentID: d.id,
                 Name: d.name,
@@ -43,10 +51,13 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
+        const userId = req.headers.get('x-user-id');
+        if (!userId) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+
         const body = await req.json();
         if (!body.name) throw new Error("Name is required");
 
-        const newT = await createTournament(body.name, body.type, body.ban_list);
+        const newT = await createTournament(body.name, userId, body.type, body.ban_list);
         // Map back to PascalCase
         const mapped = {
             TournamentID: newT.id,
@@ -66,18 +77,30 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
     try {
+        const userId = req.headers.get('x-user-id');
+        if (!userId) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+
         const body = await req.json();
         if (!body.tournamentId || !body.status) throw new Error("ID and Status required");
 
+        // Verify Ownership
+        const tournament = await getTournament(body.tournamentId);
+        if (!tournament) throw new Error("Tournament not found");
+        if (tournament.user_id && tournament.user_id !== userId) {
+            return NextResponse.json({ success: false, message: "Unauthorized access to tournament" }, { status: 403 });
+        }
+
         if (body.status === 'CLOSED') {
             // Check if there is a Challonge URL associated
-            const tournament = await getTournament(body.tournamentId);
             if (tournament?.challonge_url) {
                 // Extract identifier: https://challonge.com/bb_123 -> bb_123
                 const identifier = tournament.challonge_url.split('/').pop();
                 if (identifier) {
                     try {
-                        await finalizeTournament(identifier);
+                        const apiKey = await getUserApiKey(userId);
+                        if (!apiKey) throw new Error("Challonge API Key not found for user");
+
+                        await finalizeTournament(apiKey, identifier);
                     } catch (err: any) {
                         console.error('Challonge Finalize Error:', err.response?.data || err.message);
                         // If it's 422, it might be open matches or already finalized

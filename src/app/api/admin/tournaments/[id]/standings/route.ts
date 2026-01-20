@@ -1,10 +1,13 @@
 
 import { NextResponse } from "next/server";
-import { getTournament } from "@/lib/repository";
+import { getTournament, getUserApiKey } from "@/lib/repository";
 import { getTournamentStandings } from "@/lib/challonge";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const userId = req.headers.get('x-user-id');
+        if (!userId) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+
         const { id } = await params;
         const tournament = await getTournament(id);
 
@@ -12,12 +15,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             return NextResponse.json({ success: false, message: "Tournament not linked to Challonge" }, { status: 404 });
         }
 
+        // Verify Ownership
+        if (tournament.user_id && tournament.user_id !== userId) {
+            return NextResponse.json({ success: false, message: "Unauthorized access to tournament" }, { status: 403 });
+        }
+
         const identifier = tournament.challonge_url.split('/').pop();
         if (!identifier) {
             return NextResponse.json({ success: false, message: "Invalid Challonge URL" }, { status: 400 });
         }
 
-        const standings = await getTournamentStandings(identifier);
+        const apiKey = await getUserApiKey(userId);
+        if (!apiKey) throw new Error("Challonge API Key not found for user");
+
+        const standings = await getTournamentStandings(apiKey, identifier);
         return NextResponse.json({ success: true, data: standings });
 
     } catch (error: any) {

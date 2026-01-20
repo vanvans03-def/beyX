@@ -89,7 +89,20 @@ export async function POST(request: Request) {
         if (!tournamentId) throw new Error("Missing Tournament ID");
 
         // Server-side validation
-        // ... (Keep existing checks, maybe extend for multi-deck later)
+        // Fetch Tournament Status to prevent race conditions
+        const { data: tournament, error: tournamentError } = await supabaseAdmin
+            .from('tournaments')
+            .select('status, challonge_url')
+            .eq('id', tournamentId)
+            .single();
+
+        if (tournamentError || !tournament) {
+            return NextResponse.json({ success: false, message: "Tournament not found" }, { status: 404 });
+        }
+
+        if (tournament.status === 'STARTED' || tournament.status === 'COMPLETED' || tournament.status === 'CLOSED' || !!tournament.challonge_url) {
+            return NextResponse.json({ success: false, message: "ไม่สามารถลงทะเบียนได้ การแข่งเริ่มไปแล้ว" }, { status: 400 });
+        }
 
         const registrationData = {
             tournament_id: tournamentId,

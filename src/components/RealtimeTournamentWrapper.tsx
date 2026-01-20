@@ -124,6 +124,7 @@ export default function RealtimeTournamentWrapper({ initialTournament, tournamen
                             tournamentStatus={tournament?.status} // Realtime status passed here
                             tournamentType={tournament?.type}
                             banList={tournament?.ban_list}
+                            challongeUrl={tournament?.challonge_url}
                         />
                     )}
                 </div>

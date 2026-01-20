@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { setupAndStartTournament } from '@/lib/challonge';
 import { createClient } from '@supabase/supabase-js';
+import { getUserApiKey } from '@/lib/repository';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,16 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
     try {
+        const userId = request.headers.get('x-user-id');
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized: Missing User ID' }, { status: 401 });
+        }
+
+        const apiKey = await getUserApiKey(userId);
+        if (!apiKey) {
+            return NextResponse.json({ error: 'Challonge API Key not configured. Please add it in the admin dashboard.' }, { status: 403 });
+        }
+
         const { roomName, players, type, shuffle, tournamentId, quickAdvance } = await request.json(); // tournamentId is our DB UUID
 
         if (!roomName) {
@@ -19,7 +30,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Players list is required and must be an array' }, { status: 400 });
         }
 
-        const result = await setupAndStartTournament(roomName, players, { type, shuffle, quickAdvance });
+        const result = await setupAndStartTournament(apiKey, roomName, players, { type, shuffle, quickAdvance });
 
         // Save to Database if tournamentId provided
         if (tournamentId) {
@@ -37,6 +48,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ url: result.url, raw_url: result.raw_url });
     } catch (error: any) {
         console.error('API Error:', error);
+
+        // Handle Axios 401 specifically
+        if (error.response?.status === 401) {
+            return NextResponse.json(
+                { error: 'Invalid Challonge API Key. Please check your settings.' },
+                { status: 401 }
+            );
+        }
+
         return NextResponse.json(
             { error: error.message || 'Failed to generate bracket' },
             { status: 500 }

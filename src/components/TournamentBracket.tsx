@@ -16,7 +16,7 @@ const TournamentBracket: React.FC<TournamentBracketProps> = ({
     // Convert normal URL to module URL for embedding
     // Normal: https://challonge.com/bb_12345
     // Embed: https://challonge.com/bb_12345/module
-    const embedUrl = `${challongeUrl}/module`;
+    const embedUrl = `${challongeUrl}/module?theme=2`;
 
     const isMinimal = variant === 'minimal';
 

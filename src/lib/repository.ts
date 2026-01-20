@@ -11,6 +11,7 @@ export type Tournament = {
     type: 'U10' | 'NoMoreMeta' | 'Open';
     ban_list: string[];
     challonge_url?: string;
+    user_id?: string; // Added for ownership check
 };
 
 export type Registration = {
@@ -46,10 +47,14 @@ export async function setSystemSetting<T>(key: string, value: T) {
     if (error) throw new Error(error.message);
 }
 
-export async function getTournaments(): Promise<Tournament[]> {
+// [SECURE] Must provide userId to list own tournaments
+export async function getTournaments(userId: string): Promise<Tournament[]> {
+    if (!userId) throw new Error("Unauthorized: userId required");
+
     const { data, error } = await supabaseAdmin
         .from('tournaments')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -64,7 +69,8 @@ export async function getTournaments(): Promise<Tournament[]> {
         created_at: new Date(r.created_at),
         type: r.type || 'U10', // Default for legacy data
         ban_list: r.ban_list || [],
-        challonge_url: r.challonge_url
+        challonge_url: r.challonge_url,
+        user_id: r.user_id
     }));
 }
 
@@ -87,11 +93,14 @@ export async function getTournament(id: string): Promise<Tournament | null> {
         created_at: new Date(data.created_at),
         type: data.type || 'U10',
         ban_list: data.ban_list || [],
-        challonge_url: data.challonge_url
+        challonge_url: data.challonge_url,
+        user_id: data.user_id
     };
 }
 
-export async function createTournament(name: string, type: 'U10' | 'NoMoreMeta' | 'Open' = 'U10', ban_list: string[] = []): Promise<Tournament> {
+export async function createTournament(name: string, userId: string, type: 'U10' | 'NoMoreMeta' | 'Open' = 'U10', ban_list: string[] = []): Promise<Tournament> {
+    if (!userId) throw new Error("Unauthorized: Cannot create tournament without userId");
+
     const id = uuidv4();
     const status = 'OPEN';
     const created_at = new Date();
@@ -99,14 +108,16 @@ export async function createTournament(name: string, type: 'U10' | 'NoMoreMeta' 
     // 1. Supabase
     const { error } = await supabaseAdmin
         .from('tournaments')
-        .insert([{
+        .insert({
             id,
             name,
             status,
-            created_at: created_at.toISOString(),
+            created_at,
             type,
-            ban_list
-        }]);
+            ban_list,
+            user_id: userId
+        });
+
 
     if (error) {
         throw new Error(`Supabase Insert Failed: ${error.message}`);
@@ -147,10 +158,21 @@ export async function resetTournamentBracket(id: string) {
         .update({ status: 'OPEN', challonge_url: null })
         .eq('id', id);
 
-    if (error) {
-        throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 }
+
+// Helper to get User's API Key
+export async function getUserApiKey(userId: string): Promise<string | null> {
+    const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('challonge_api_key')
+        .eq('id', userId)
+        .single();
+
+    if (error || !data) return null;
+    return data.challonge_api_key;
+}
+
 
 // --- Registrations ---
 

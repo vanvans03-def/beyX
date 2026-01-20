@@ -22,13 +22,15 @@ export default function RegistrationForm({
     tournamentName,
     tournamentStatus,
     tournamentType,
-    banList
+    banList,
+    challongeUrl
 }: {
     tournamentId: string,
     tournamentName?: string,
     tournamentStatus?: string,
     tournamentType?: string,
-    banList?: string[]
+    banList?: string[],
+    challongeUrl?: string
 }) {
     // Validation Logic Note:
     // We validate each deck INDIVIDUALLY.
@@ -117,7 +119,7 @@ export default function RegistrationForm({
     }, [tournamentType]);
 
     // Handle Tournament Closed
-    if ((tournamentStatus === 'CLOSED' || tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED') && profiles.length === 0 /* If no existing profiles, show closed */) {
+    if ((tournamentStatus === 'CLOSED' || tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || !!challongeUrl) && profiles.length === 0 /* If no existing profiles, show closed */) {
         return (
             <div className="flex flex-col items-center justify-center space-y-6 py-10 animate-in fade-in zoom-in-95 grayscale">
                 <div className="rounded-full bg-secondary p-6 ring-4 ring-white/10">
@@ -318,7 +320,7 @@ export default function RegistrationForm({
                     body: JSON.stringify(payload),
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(`${p.name}: ${data.message || t('reg.error.failed')}`);
+                if (!res.ok) throw new Error(data.message || t('reg.error.failed'));
                 return { originalIndex: p.originalIndex, success: true };
             }));
 
@@ -336,10 +338,12 @@ export default function RegistrationForm({
         } catch (err: any) {
             // If one failed, we might want to handle partials?
             // For now, just show the error on the active tab or globally?
-            // The catch block catches the first error from Promise.all if strict, 
-            // but Promise.all fails fast. We might want Promise.allSettled ideally, 
-            // but to keep it simple, if one fails, we show alert.
-            console.error("Batch submit error", err);
+
+            // Suppress console error for known blocking messages to avoid alarm
+            if (!err.message?.includes("ไม่สามารถลงทะเบียนได้")) {
+                console.error("Batch submit error", err);
+            }
+
             // Show error on the currently active profile if it's one of the drafts?
             // Or just a specific error message.
             updateProfile(activeTab, { errorMsg: err.message || t('reg.error.generic') });
@@ -452,7 +456,7 @@ export default function RegistrationForm({
                 ))}
 
                 {/* Add Player Button - Only show if Open */}
-                {(!tournamentStatus || tournamentStatus === 'OPEN') && (
+                {(!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && (
                     <button
                         onClick={addProfile}
                         className="flex items-center justify-center w-8 h-8 rounded-full bg-secondary border border-white/10 text-muted-foreground hover:text-primary hover:border-primary transition-all shrink-0"
@@ -477,7 +481,7 @@ export default function RegistrationForm({
                 )}
 
                 {/* Registration Closed Banner for existing profiles */}
-                {(tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED') && activeProfile.status === 'draft' && (
+                {(tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl) && activeProfile.status === 'draft' && (
                     <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-xl flex items-center gap-3 text-destructive">
                         <AlertTriangle className="h-5 w-5" />
                         <div>
@@ -493,7 +497,7 @@ export default function RegistrationForm({
                         <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider ml-1">
                             {t('reg.player_name')}
                         </label>
-                        {profiles.length > 1 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && (
+                        {profiles.length > 1 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && (
                             <button
                                 onClick={() => deleteProfile(activeTab)}
                                 className="text-xs text-destructive hover:underline flex items-center gap-1"
@@ -509,7 +513,7 @@ export default function RegistrationForm({
                             type="text"
                             value={activeProfile.name}
                             onChange={(e) => updateProfile(activeTab, { name: e.target.value })}
-                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')}
+                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)}
                             placeholder={t('reg.placeholder.name')}
                             className="flex-1 rounded-lg border border-input bg-secondary px-4 py-3 font-medium text-foreground outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/50 disabled:opacity-50"
                         />
@@ -524,7 +528,7 @@ export default function RegistrationForm({
                     </div>
 
                     {/* Copy Combo Button */}
-                    {activeTab > 0 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && (
+                    {activeTab > 0 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && (
                         <button
                             type="button"
                             onClick={() => copyComboFromFirst(activeTab)}
@@ -540,7 +544,7 @@ export default function RegistrationForm({
                     <div className="grid grid-cols-2 gap-2 p-1 bg-secondary rounded-xl">
                         <button
                             type="button"
-                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')}
+                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)}
                             onClick={() => updateProfile(activeTab, { mode: "Under10" })}
                             className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", activeProfile.mode === "Under10" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}
                         >
@@ -548,7 +552,7 @@ export default function RegistrationForm({
                         </button>
                         <button
                             type="button"
-                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')}
+                            disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)}
                             onClick={() => updateProfile(activeTab, { mode: "NoMoreMeta" })}
                             className={cn("py-2.5 text-sm font-bold rounded-lg transition-all", activeProfile.mode === "NoMoreMeta" ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:bg-background/50")}
                         >
@@ -580,7 +584,7 @@ export default function RegistrationForm({
                                 slotIndex={i}
                                 mode={activeProfile.mode}
                                 onPress={() => {
-                                    if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')) return;
+                                    if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)) return;
                                     setSelectingState({ profileIndex: activeTab, type: 'main', deckIndex: 0, slotIndex: i })
                                 }}
                             />
@@ -608,7 +612,7 @@ export default function RegistrationForm({
                                                 {val.points}/10
                                             </span>
                                         )}
-                                        {activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && (
+                                        {activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && (
                                             <button type="button" onClick={() => removeReserveDeck(activeTab, dIdx)} className="text-destructive hover:bg-destructive/10 p-1.5 rounded-full">
                                                 <Trash2 className="h-4 w-4" />
                                             </button>
@@ -624,7 +628,7 @@ export default function RegistrationForm({
                                         slotIndex={sIdx}
                                         mode={activeProfile.mode}
                                         onPress={() => {
-                                            if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED')) return;
+                                            if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)) return;
                                             setSelectingState({ profileIndex: activeTab, type: 'reserve', deckIndex: dIdx, slotIndex: sIdx })
                                         }}
                                     />
@@ -633,7 +637,7 @@ export default function RegistrationForm({
                         );
                     })}
 
-                    {activeProfile.reserveDecks.length < 3 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && (
+                    {activeProfile.reserveDecks.length < 3 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && (
                         <button
                             type="button"
                             onClick={() => addReserveDeck(activeTab)}
@@ -665,7 +669,7 @@ export default function RegistrationForm({
                 )}
 
                 {activeProfile.status === 'draft' ? (
-                    (!tournamentStatus || tournamentStatus === 'OPEN') ? (
+                    (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl ? (
                         <button
                             type="button"
                             onClick={handleSubmit}

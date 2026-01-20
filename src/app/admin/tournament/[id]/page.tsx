@@ -7,7 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -65,6 +65,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const cardRef = useRef<HTMLDivElement>(null);
     const banListRef = useRef<HTMLDivElement>(null);
+    const activeMatchesRef = useRef<HTMLDivElement>(null);
 
     const [generating, setGenerating] = useState(false);
     const [generatingBanList, setGeneratingBanList] = useState(false);
@@ -459,13 +460,22 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
         } catch (error: any) {
             console.error('Bracket generation failed:', error);
-            setModalConfig({
-                isOpen: true,
-                title: "Error",
-                desc: error.message || "Failed to generate bracket",
-                type: "alert",
-                variant: 'destructive'
-            });
+
+            const errorMessage = error.message;
+
+            // Check if it's an API Key related error
+            if (errorMessage && (errorMessage.includes("API Key") || errorMessage.includes("401"))) {
+                setModalConfig({
+                    isOpen: true,
+                    title: "Challonge Authorization Failed",
+                    desc: "Unable to connect to Challonge. Please check that your API Key is correct in the Admin Dashboard settings.",
+                    type: "alert",
+                    variant: 'destructive'
+                });
+            } else {
+                toast.error(errorMessage || "Failed to generate bracket");
+            }
+
         } finally {
             setGeneratingBracket(false);
         }
@@ -857,6 +867,28 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     <span className="hidden sm:inline">History</span>
                                 </button>
                                 <button
+                                    onClick={() => {
+                                        if (activeMatchesRef.current) {
+                                            activeMatchesRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }
+                                    }}
+                                    className="p-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-transparent hover:border-white/10"
+                                    title="Scroll to Top"
+                                >
+                                    <ArrowUp className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (activeMatchesRef.current) {
+                                            activeMatchesRef.current.scrollTo({ top: activeMatchesRef.current.scrollHeight, behavior: 'smooth' });
+                                        }
+                                    }}
+                                    className="p-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-transparent hover:border-white/10"
+                                    title="Scroll to Bottom"
+                                >
+                                    <ArrowDown className="h-4 w-4" />
+                                </button>
+                                <button
                                     onClick={() => fetchMatches(bracketUrl)}
                                     className="text-xs px-3 py-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors whitespace-nowrap"
                                 >
@@ -870,7 +902,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         ) : activeMatches.length === 0 ? (
                             <div className="text-center py-8 text-muted-foreground">{t('admin.matches.empty')}</div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div
+
+                                ref={activeMatchesRef}
+                                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[800px] overflow-y-auto custom-scrollbar pr-2"
+                            >
                                 {activeMatches.map((match) => (
                                     <div key={match.id} className="bg-background/50 border border-white/20 hover:border-primary/30 p-4 rounded-xl flex flex-col gap-3 transition-colors shadow-sm">
                                         <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider text-center flex items-center justify-center gap-2">
@@ -1582,6 +1618,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </div>
                     </div>
                 </Modal>
+
+                {/* Generic Alert/Confirm Modal */}
+                <Modal
+                    isOpen={modalConfig.isOpen}
+                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    title={modalConfig.title}
+                    description={modalConfig.desc}
+                    type={modalConfig.type}
+                    variant={modalConfig.variant}
+                    onConfirm={modalConfig.onConfirm}
+                />
             </div>
         </div >
     );

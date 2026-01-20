@@ -1,8 +1,7 @@
-
 import axios from 'axios';
 
 // Basic Config
-const API_KEY = process.env.CHALLONGE_API_KEY;
+// API Key is now passed dynamically per user
 const BASE_URL = 'https://api.challonge.com/v1';
 
 interface TournamentResponse {
@@ -45,14 +44,11 @@ interface ChallongeParticipant {
 
 /**
  * 1. Create Tournament
- * @param name - Tournament Name
- * @param urlPath - Unique URL Path
- * @param type - single elimination, double elimination, swiss, round robin
  */
-async function createTournament(name: string, urlPath: string, type: string = 'single elimination', quickAdvance: boolean = false) {
+async function createTournament(apiKey: string, name: string, urlPath: string, type: string = 'single elimination', quickAdvance: boolean = false) {
     try {
         const response = await axios.post<TournamentResponse>(`${BASE_URL}/tournaments.json`, {
-            api_key: API_KEY,
+            api_key: apiKey,
             tournament: {
                 name: name,
                 url: urlPath,
@@ -72,10 +68,8 @@ async function createTournament(name: string, urlPath: string, type: string = 's
 
 /**
  * 2. Add Participants (Bulk Add)
- * @param tournamentId - Tournament ID from step 1
- * @param participants - List of players
  */
-async function addParticipants(tournamentId: number, participants: Participant[]) {
+async function addParticipants(apiKey: string, tournamentId: number, participants: Participant[]) {
     const formattedParticipants = participants.map(p => ({
         name: p.username,
         misc: p.beyblade_combo
@@ -83,7 +77,7 @@ async function addParticipants(tournamentId: number, participants: Participant[]
 
     try {
         await axios.post(`${BASE_URL}/tournaments/${tournamentId}/participants/bulk_add.json`, {
-            api_key: API_KEY,
+            api_key: apiKey,
             participants: formattedParticipants
         });
     } catch (error: any) {
@@ -94,12 +88,11 @@ async function addParticipants(tournamentId: number, participants: Participant[]
 
 /**
  * 2.5 Shuffle Participants
- * @param tournamentId
  */
-async function randomizeParticipants(tournamentId: number) {
+async function randomizeParticipants(apiKey: string, tournamentId: number) {
     try {
         await axios.post(`${BASE_URL}/tournaments/${tournamentId}/participants/randomize.json`, {
-            api_key: API_KEY
+            api_key: apiKey
         });
     } catch (error: any) {
         console.error('Error shuffling participants:', error.response?.data || error.message);
@@ -110,12 +103,11 @@ async function randomizeParticipants(tournamentId: number) {
 
 /**
  * 3. Start Tournament (Generate Bracket)
- * @param tournamentId 
  */
-async function startTournament(tournamentId: number) {
+async function startTournament(apiKey: string, tournamentId: number) {
     try {
         await axios.post(`${BASE_URL}/tournaments/${tournamentId}/start.json`, {
-            api_key: API_KEY
+            api_key: apiKey
         });
     } catch (error: any) {
         console.error('Error starting tournament:', error.response?.data || error.message);
@@ -125,30 +117,33 @@ async function startTournament(tournamentId: number) {
 
 // Main Setup Function
 export async function setupAndStartTournament(
+    apiKey: string,
     roomName: string,
     players: Participant[],
     options: { type?: string; shuffle?: boolean; quickAdvance?: boolean } = {}
 ) {
+    if (!apiKey) throw new Error("Challonge API Key is missing");
+
     // Generate random URL so it's unique
     const urlPath = `bb_${Date.now()}`;
     const type = options.type || 'single elimination';
 
     // 1. Create
-    const tournament = await createTournament(roomName, urlPath, type, options.quickAdvance);
+    const tournament = await createTournament(apiKey, roomName, urlPath, type, options.quickAdvance);
 
     // 2. Add Players
     if (players.length > 0) {
-        await addParticipants(tournament.id, players);
+        await addParticipants(apiKey, tournament.id, players);
     }
 
     // 2.5 Shuffle if requested
     if (options.shuffle) {
-        await randomizeParticipants(tournament.id);
+        await randomizeParticipants(apiKey, tournament.id);
     }
 
     // 3. Start
     if (players.length >= 2) {
-        await startTournament(tournament.id);
+        await startTournament(apiKey, tournament.id);
     } else {
         console.warn("Not enough players to start the tournament automatically.");
     }
@@ -164,16 +159,17 @@ export async function setupAndStartTournament(
 /**
  * Get Open Matches for Admin
  */
-export async function getMatches(tournamentIdentifier: string) {
+export async function getMatches(apiKey: string, tournamentIdentifier: string) {
+    if (!apiKey) throw new Error("Challonge API Key is missing");
     try {
         // Get matches
         const matchesRes = await axios.get(`${BASE_URL}/tournaments/${tournamentIdentifier}/matches.json`, {
-            params: { api_key: API_KEY, state: 'all' }
+            params: { api_key: apiKey, state: 'all' }
         });
 
         // Get participants to map names
         const participantsRes = await axios.get(`${BASE_URL}/tournaments/${tournamentIdentifier}/participants.json`, {
-            params: { api_key: API_KEY }
+            params: { api_key: apiKey }
         });
 
         const participantsMap = new Map<number, ChallongeParticipant>();
@@ -199,10 +195,11 @@ export async function getMatches(tournamentIdentifier: string) {
 /**
  * Update Match Score and Winner
  */
-export async function updateMatch(tournamentIdentifier: string, matchId: number, scoresCsv: string, winnerId: number) {
+export async function updateMatch(apiKey: string, tournamentIdentifier: string, matchId: number, scoresCsv: string, winnerId: number) {
+    if (!apiKey) throw new Error("Challonge API Key is missing");
     try {
         await axios.put(`${BASE_URL}/tournaments/${tournamentIdentifier}/matches/${matchId}.json`, {
-            api_key: API_KEY,
+            api_key: apiKey,
             match: {
                 scores_csv: scoresCsv,
                 winner_id: winnerId
@@ -217,10 +214,11 @@ export async function updateMatch(tournamentIdentifier: string, matchId: number,
 /**
  * Finalize Tournament (Close it)
  */
-export async function finalizeTournament(tournamentIdentifier: string) {
+export async function finalizeTournament(apiKey: string, tournamentIdentifier: string) {
+    if (!apiKey) throw new Error("Challonge API Key is missing");
     try {
         await axios.post(`${BASE_URL}/tournaments/${tournamentIdentifier}/finalize.json`, {
-            api_key: API_KEY
+            api_key: apiKey
         });
     } catch (error: any) {
         console.error('Error finalizing tournament:', error.response?.data || error.message);
@@ -231,10 +229,11 @@ export async function finalizeTournament(tournamentIdentifier: string) {
 /**
  * Get Tournament Standings
  */
-export async function getTournamentStandings(tournamentIdentifier: string) {
+export async function getTournamentStandings(apiKey: string, tournamentIdentifier: string) {
+    if (!apiKey) throw new Error("Challonge API Key is missing");
     try {
         const response = await axios.get(`${BASE_URL}/tournaments/${tournamentIdentifier}/participants.json`, {
-            params: { api_key: API_KEY }
+            params: { api_key: apiKey }
         });
 
         // Filter valid participants and sort by final_rank

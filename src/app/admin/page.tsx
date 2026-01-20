@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock } from "lucide-react";
+import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
+import { toast } from "sonner";
 import { useTranslation } from "@/hooks/useTranslation";
 import { Globe } from "lucide-react";
 import gameData from "@/data/game-data.json";
@@ -23,12 +24,16 @@ type Tournament = {
 export default function AdminPage() {
     const router = useRouter();
     const { t, lang, toggleLang } = useTranslation();
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Prevent flash
-    const [passwordInput, setPasswordInput] = useState("");
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [events, setEvents] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<'tournaments' | 'events'>('tournaments');
+    const [userProfile, setUserProfile] = useState<{ username: string, shop_name: string, challonge_api_key?: string } | null>(null);
+    const [isEditingShop, setIsEditingShop] = useState(false);
+    const [shopNameInput, setShopNameInput] = useState("");
+
+    // API Key Edit State
+    const [isEditingKey, setIsEditingKey] = useState(false);
+    const [apiKeyInput, setApiKeyInput] = useState("");
 
     // Event Form State
     const [newEvent, setNewEvent] = useState({
@@ -78,30 +83,59 @@ export default function AdminPage() {
         type: "alert"
     });
 
-    // Auth Check
+    // Auth Check - Removed legacy client-side check as Middleware handles it now.
     useEffect(() => {
-        const saved = sessionStorage.getItem("admin_auth");
-        if (saved === "CYEAH") {
-            setIsAuthenticated(true);
-            fetchTournaments();
-        }
-        setIsCheckingAuth(false);
+        fetchTournaments();
+        fetchProfile();
     }, []);
 
-    const handleLogin = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (passwordInput === "CYEAH") {
-            setIsAuthenticated(true);
-            sessionStorage.setItem("admin_auth", "CYEAH");
-            fetchTournaments();
-        } else {
-            setModalConfig({
-                isOpen: true,
-                title: "Access Denied",
-                desc: "Incorrect password. Please try again.",
-                type: "alert"
+    const fetchProfile = async () => {
+        try {
+            const res = await fetch("/api/admin/profile");
+            const json = await res.json();
+            if (json.success) {
+                setUserProfile(json.user);
+                setShopNameInput(json.user.shop_name || json.user.username);
+                setApiKeyInput(json.user.challonge_api_key || "");
+            }
+        } catch (e) {
+            console.error("Failed to fetch profile", e);
+        }
+    };
+
+    const handleUpdateShopName = async () => {
+        if (!shopNameInput.trim()) return;
+        try {
+            const res = await fetch("/api/admin/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ shop_name: shopNameInput })
             });
-            setPasswordInput("");
+            if (res.ok) {
+                setUserProfile(prev => prev ? { ...prev, shop_name: shopNameInput } : null);
+                setIsEditingShop(false);
+                toast.success("Shop name updated successfully");
+            }
+        } catch (e) {
+            toast.error("Failed to update shop name");
+        }
+    };
+
+    const handleUpdateApiKey = async () => {
+        if (!apiKeyInput.trim()) return;
+        try {
+            const res = await fetch("/api/admin/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ challonge_api_key: apiKeyInput })
+            });
+            if (res.ok) {
+                setUserProfile(prev => prev ? { ...prev, challonge_api_key: apiKeyInput } : null);
+                setIsEditingKey(false);
+                toast.success("API Key updated successfully");
+            }
+        } catch (e) {
+            toast.error("Failed to update API Key");
         }
     };
 
@@ -138,19 +172,17 @@ export default function AdminPage() {
     const [eventSystemActive, setEventSystemActive] = useState(true);
 
     useEffect(() => {
-        if (isAuthenticated) {
-            // Fetch system status
-            fetch("/api/settings?key=event_system_active")
-                .then(r => r.json())
-                .then(d => {
-                    if (d.success) setEventSystemActive(d.value);
-                })
-                .catch(e => console.error("Failed to fetch settings", e));
+        // Fetch system status
+        fetch("/api/settings?key=event_system_active")
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) setEventSystemActive(d.value);
+            })
+            .catch(e => console.error("Failed to fetch settings", e));
 
-            if (activeTab === 'tournaments') fetchTournaments();
-            else fetchEvents();
-        }
-    }, [activeTab, isAuthenticated]);
+        if (activeTab === 'tournaments') fetchTournaments();
+        else fetchEvents();
+    }, [activeTab]);
 
     const handleToggleEventSystem = async () => {
         const newValue = !eventSystemActive;
@@ -197,12 +229,25 @@ export default function AdminPage() {
                 setNewTournamentName("");
                 setCustomBanListInput(defaultBanList.join(", ")); // Reset
                 fetchTournaments();
+            } else {
+                // Handle specific errors like Challonge Connection
+                if (json.error && json.error.includes("Challonge")) {
+                    setModalConfig({
+                        isOpen: true,
+                        title: "Challonge Connection Failed",
+                        desc: "Could not create tournament on Challonge. Please check your API Key in the dashboard header.",
+                        type: "alert",
+                        variant: "destructive"
+                    });
+                } else {
+                    throw new Error(json.error || "Failed");
+                }
             }
-        } catch (e) {
+        } catch (e: any) {
             setModalConfig({
                 isOpen: true,
                 title: "Error",
-                desc: "Failed to create tournament.",
+                desc: e.message || "Failed to create tournament.",
                 type: "alert",
                 variant: "destructive"
             });
@@ -376,45 +421,12 @@ export default function AdminPage() {
         });
     };
 
+
     const filteredTournaments = tournaments.filter(t =>
         t.Name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    if (isCheckingAuth) {
-        return null; // or a simple spinner, but null is fine to prevent flash
-    }
-
-    if (!isAuthenticated) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-background p-4">
-                <form onSubmit={handleLogin} className="w-full max-w-sm glass-card p-8 rounded-2xl space-y-6 text-center">
-                    <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
-                        <LockKeyhole className="h-8 w-8 text-primary" />
-                    </div>
-                    <h1 className="text-xl font-bold">Admin Access</h1>
-                    <input
-                        type="password"
-                        placeholder="Enter Password"
-                        value={passwordInput}
-                        onChange={e => setPasswordInput(e.target.value)}
-                        className="w-full bg-secondary/50 border border-input rounded-lg px-4 py-3 text-center outline-none focus:border-primary transition-colors"
-                    />
-                    <button type="submit" className="w-full bg-primary text-black font-bold py-3 rounded-lg hover:bg-primary/90">
-                        Login
-                    </button>
-                </form>
-                {/* Auth Modal */}
-                <Modal
-                    isOpen={modalConfig.isOpen}
-                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
-                    title={modalConfig.title}
-                    description={modalConfig.desc}
-                    type={modalConfig.type}
-                    variant={modalConfig.variant}
-                />
-            </div>
-        );
-    }
+    // Removed legacy auth UI block
 
     return (
         <div className="min-h-screen bg-background relative">
@@ -437,9 +449,64 @@ export default function AdminPage() {
                         }
                     `}} />
                         <div className="flex items-center gap-4">
-                            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent text-center md:text-left">
-                                {t('admin.title')}
-                            </h1>
+                            <div className="flex flex-col">
+                                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent text-center md:text-left">
+                                    {t('admin.title')}
+                                </h1>
+                                {userProfile && (
+                                    <div className="flex flex-col gap-1 mt-1">
+                                        {/* Shop Name Edit */}
+                                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                                            {isEditingShop ? (
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        value={shopNameInput}
+                                                        onChange={e => setShopNameInput(e.target.value)}
+                                                        className="bg-black/20 border border-white/10 rounded px-2 py-0.5 text-white text-sm outline-none focus:border-primary"
+                                                    />
+                                                    <button onClick={handleUpdateShopName} className="text-green-400 hover:text-green-300"><Check className="w-4 h-4" /></button>
+                                                    <button onClick={() => setIsEditingShop(false)} className="text-red-400 hover:text-red-300"><X className="w-4 h-4" /></button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <Store className="w-4 h-4" />
+                                                    <span>{userProfile.shop_name}</span>
+                                                    <button onClick={() => setIsEditingShop(true)} className="text-gray-500 hover:text-white transition-colors">
+                                                        <Pencil className="w-3 h-3" />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {/* API Key Edit */}
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            {isEditingKey ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-1 bg-black/20 border border-white/10 rounded px-2 py-0.5">
+                                                        <Key className="w-3 h-3 text-primary" />
+                                                        <input
+                                                            value={apiKeyInput}
+                                                            onChange={e => setApiKeyInput(e.target.value)}
+                                                            className="bg-transparent text-white text-xs outline-none w-[150px]"
+                                                            placeholder="Challonge API Key"
+                                                        />
+                                                    </div>
+                                                    <button onClick={handleUpdateApiKey} className="text-green-400 hover:text-green-300"><Check className="w-3 h-3" /></button>
+                                                    <button onClick={() => setIsEditingKey(false)} className="text-red-400 hover:text-red-300"><X className="w-3 h-3" /></button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <Key className="w-3 h-3" />
+                                                    <span>Status: {userProfile.challonge_api_key ? "Key Configured" : "No Key"}</span>
+                                                    <button onClick={() => setIsEditingKey(true)} className="text-gray-500 hover:text-white transition-colors underline">
+                                                        Edit API Key
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             <button onClick={toggleLang} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
                                 <Globe className="h-5 w-5 text-muted-foreground" />
                                 <span className="sr-only">Switch Language</span>
@@ -481,17 +548,28 @@ export default function AdminPage() {
                             </div>
                         )}
 
-                        <button
-                            onClick={() => {
-                                sessionStorage.removeItem("admin_auth");
-                                setIsAuthenticated(false);
-                                setTournaments([]);
-                                router.push("/");
-                            }}
-                            className="text-xs text-muted-foreground hover:text-destructive underline"
-                        >
-                            Logout
-                        </button>
+                        <div className="flex items-center gap-4">
+                            <Link
+                                href="/admin/users/create"
+                                className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5"
+                            >
+                                <UserPlus className="w-4 h-4" />
+                                <span>Add Shop</span>
+                            </Link>
+
+                            <button
+                                onClick={async () => {
+                                    // Logout via API to clear cookie
+                                    await fetch('/api/auth/logout', { method: 'POST' });
+                                    // Proper logout:
+                                    document.cookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+                                    router.push("/");
+                                }}
+                                className="text-xs text-muted-foreground hover:text-destructive underline"
+                            >
+                                Logout
+                            </button>
+                        </div>
                     </header>
 
                     {activeTab === 'tournaments' ? (
