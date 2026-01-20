@@ -26,6 +26,7 @@ export default function LoginPage() {
 
             if (res.ok && data.success) {
                 toast.success("Welcome back!");
+                router.refresh(); // Update client-side authentication state
                 router.push(data.redirectTo);
             } else {
                 toast.error(data.error || 'Login failed');

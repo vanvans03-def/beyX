@@ -563,6 +563,7 @@ export default function AdminPage() {
                                     await fetch('/api/auth/logout', { method: 'POST' });
                                     // Proper logout:
                                     document.cookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+                                    router.refresh();
                                     router.push("/");
                                 }}
                                 className="text-xs text-muted-foreground hover:text-destructive underline"
