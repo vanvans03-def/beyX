@@ -7,7 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import StandingsTable from "@/components/StandingsTable";
 import RegistrationTable from "@/components/RegistrationTable";
 import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 
 type Registration = {
     TournamentID: string;
@@ -89,6 +90,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     // Config for Scoring
     const [scoreInputs, setScoreInputs] = useState<Record<number, { p1: string, p2: string }>>({});
+    const [updatingMatchIds, setUpdatingMatchIds] = useState<number[]>([]); // Track updating matches for smooth UI
 
     // Combo Display Settings
     const [showPlayerCombo, setShowPlayerCombo] = useState(true);
@@ -164,11 +166,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }, [historyTooltip]);
 
     const handleGeneratePreview = async () => {
-        if (cardRef.current === null) return;
         setGenerating(true);
 
         // Wait a bit for any layouts to settle
         await new Promise((resolve) => setTimeout(resolve, 500));
+
+        if (cardRef.current === null) {
+            console.error("Card ref is null after waiting");
+            setGenerating(false);
+            return;
+        }
 
         try {
             await document.fonts.ready;
@@ -204,7 +211,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             // Use html-to-image
             const dataUrl = await toPng(cardRef.current, {
                 backgroundColor: '#030303',
-                pixelRatio: 2,
+                pixelRatio: 1.5, // Reduced from 2 for performance
                 cacheBust: true
             });
 
@@ -226,10 +233,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     };
 
     const handleExportBanList = async () => {
-        if (banListRef.current === null) return;
         setGeneratingBanList(true);
 
         await new Promise((resolve) => setTimeout(resolve, 500));
+
+        if (banListRef.current === null) {
+            console.error("Ban list ref is null after waiting");
+            setGeneratingBanList(false);
+            return;
+        }
 
         try {
             await document.fonts.ready;
@@ -262,7 +274,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             // Use html-to-image
             const dataUrl = await toPng(banListRef.current, {
                 backgroundColor: '#030303',
-                pixelRatio: 2,
+                pixelRatio: 1.5, // Reduced from 2 for performance
                 cacheBust: true
             });
 
@@ -419,18 +431,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const confirmUpdateMatch = async (matchId: number, scores: string, winnerId: number) => {
         if (!bracketUrl) return;
 
-        // Optimistic Update
-        setMatches(prev => prev.map(m => {
-            if (m.id === matchId) {
-                return {
-                    ...m,
-                    state: 'complete', // Mark as complete visually
-                    winner_id: winnerId,
-                    scores_csv: scores
-                };
-            }
-            return m;
-        }));
+        // Start loading state for this match
+        setUpdatingMatchIds(prev => [...prev, matchId]);
+
+        // Optimistic update removed to prevent flickering colors as per user request
+        // We rely on the loading spinner and final fetch to update UI state
 
         try {
             const res = await fetch('/api/admin/matches', {
@@ -446,8 +451,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             });
             if (!res.ok) throw new Error("Failed to update match");
 
-            // Silent refresh to sync data without flicker
-            fetchMatches(bracketUrl, true);
+            // Await the fetch to ensure UI stays in loading state until data is fresh
+            await fetchMatches(bracketUrl, true);
+
+            // Clear input state for this match to prevent stale data on next edit
+            setScoreInputs(prev => {
+                const newInputs = { ...prev };
+                delete newInputs[matchId];
+                return newInputs;
+            });
+
             toast.success("Match result updated successfully!");
         } catch (e) {
             console.error(e);
@@ -460,6 +473,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 type: "alert",
                 variant: "destructive"
             });
+        } finally {
+            // Remove from loading state
+            setUpdatingMatchIds(prev => prev.filter(id => id !== matchId));
         }
     };
 
@@ -1193,7 +1209,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         <option value="single elimination">Single Elimination</option>
                                         <option value="double elimination">Double Elimination</option>
                                         <option value="swiss">Swiss</option>
-                                        <option value="round robin">Round Robin</option>
                                     </select>
                                 </div>
 
@@ -1265,67 +1280,85 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             <div className="flex flex-col gap-1 text-sm flex-1">
                                                 <div className="text-xs text-muted-foreground uppercase">Round {match.round}</div>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={match.winner_id === match.player1_id ? "font-bold text-green-400" : ""}>{match.player1?.name}</span>
+                                                    <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player1_id) ? "font-bold text-green-400" : ""}>{match.player1?.name}</span>
                                                     <span className="text-muted-foreground">vs</span>
-                                                    <span className={match.winner_id === match.player2_id ? "font-bold text-green-400" : ""}>{match.player2?.name}</span>
+                                                    <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player2_id) ? "font-bold text-green-400" : ""}>{match.player2?.name}</span>
                                                 </div>
-                                                <div className="text-xs text-muted-foreground">Score: {match.scores_csv}</div>
                                             </div>
 
-                                            {editingMatchId === match.id ? (
-                                                <div className="flex items-center gap-2 animate-in fade-in zoom-in">
-                                                    <input
-                                                        type="number"
-                                                        className="w-10 bg-black/40 border border-white/10 rounded text-center text-sm p-1"
-                                                        placeholder="0"
-                                                        value={scoreInputs[match.id]?.p1 || match.scores_csv.split('-')[0] || '0'}
-                                                        onChange={(e) => setScoreInputs(prev => ({
-                                                            ...prev, [match.id]: { ...prev[match.id], p1: e.target.value }
-                                                        }))}
-                                                    />
-                                                    <span>-</span>
-                                                    <input
-                                                        type="number"
-                                                        className="w-10 bg-black/40 border border-white/10 rounded text-center text-sm p-1"
-                                                        placeholder="0"
-                                                        value={scoreInputs[match.id]?.p2 || match.scores_csv.split('-')[1] || '0'}
-                                                        onChange={(e) => setScoreInputs(prev => ({
-                                                            ...prev, [match.id]: { ...prev[match.id], p2: e.target.value }
-                                                        }))}
-                                                    />
-                                                    <div className="flex flex-col gap-1">
-                                                        <button
-                                                            onClick={() => {
-                                                                const s = scoreInputs[match.id];
-                                                                const currentP1 = s?.p1 ?? match.scores_csv.split('-')[0] ?? '0';
-                                                                const currentP2 = s?.p2 ?? match.scores_csv.split('-')[1] ?? '0';
-                                                                const scoreStr = `${currentP1}-${currentP2}`;
+                                            {updatingMatchIds.includes(match.id) ? (
+                                                <div className="flex items-center justify-center p-4 animate-in fade-in bg-black/20 rounded-xl border border-white/5">
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                                        <span className="text-[10px] text-muted-foreground">Updating result...</span>
+                                                    </div>
+                                                </div>
+                                            ) : editingMatchId === match.id ? (
+                                                <div className="w-full animate-in fade-in zoom-in-95 duration-200 mt-2 p-3 bg-secondary/40 backdrop-blur-sm rounded-xl border border-primary/20 shadow-2xl relative overflow-hidden group">
 
-                                                                confirmUpdateMatch(match.id, scoreStr, match.player1_id);
-                                                                setEditingMatchId(null);
-                                                            }}
-                                                            className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded hover:bg-green-500/30 w-24 flex justify-center items-center"
-                                                            title={match.player1?.name || "Player 1"}
-                                                        >
-                                                            <span className="truncate max-w-[80px]">{match.player1?.name || "Player 1"}</span>
-                                                        </button>
+                                                    {/* Header */}
+                                                    <div className="flex items-center justify-between mb-3 pl-1">
+                                                        <span className="text-xs font-bold text-primary flex items-center gap-1">
+                                                            <Trophy className="h-3 w-3" />
+                                                            Select Winner
+                                                        </span>
                                                         <button
-                                                            onClick={() => {
-                                                                setHistoryTooltip(null);
-                                                                setEditingMatchId(null);
-                                                            }}
-                                                            className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded hover:bg-green-500/30 w-24 flex justify-center items-center"
-                                                            title={match.player2?.name || "Player 2"}
+                                                            onClick={() => setEditingMatchId(null)}
+                                                            className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-colors"
                                                         >
-                                                            <span className="truncate max-w-[80px]">{match.player2?.name || "Player 2"}</span>
+                                                            <XCircle className="h-4 w-4" />
                                                         </button>
                                                     </div>
-                                                    <button
-                                                        onClick={() => setEditingMatchId(null)}
-                                                        className="text-muted-foreground hover:text-foreground"
-                                                    >
-                                                        <XCircle className="h-4 w-4" />
-                                                    </button>
+
+                                                    {/* Vertical Stack for better long name support */}
+                                                    <div className="flex flex-col gap-2">
+                                                        {/* Player 1 Button */}
+                                                        <button
+                                                            onClick={() => {
+                                                                confirmUpdateMatch(match.id, "1-0", match.player1_id);
+                                                                setEditingMatchId(null);
+                                                            }}
+                                                            className={cn(
+                                                                "relative w-full p-3 rounded-lg text-sm font-bold transition-all border flex items-center justify-between gap-3 text-left group/btn",
+                                                                match.winner_id === match.player1_id
+                                                                    ? "bg-green-500/10 text-green-400 border-green-500/50 shadow-[inset_0_0_10px_rgba(74,222,128,0.1)]"
+                                                                    : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
+                                                            )}
+                                                        >
+                                                            <span className="break-words leading-tight">{match.player1?.name || "Player 1"}</span>
+                                                            {match.winner_id === match.player1_id && (
+                                                                <div className="h-5 w-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                                                                    <Check className="h-3 w-3" />
+                                                                </div>
+                                                            )}
+                                                        </button>
+
+                                                        {/* VS Divider */}
+                                                        <div className="relative h-px bg-white/5 w-full my-1 flex items-center justify-center">
+                                                            <span className="bg-background px-2 text-[9px] font-bold text-muted-foreground/50 uppercase">vs</span>
+                                                        </div>
+
+                                                        {/* Player 2 Button */}
+                                                        <button
+                                                            onClick={() => {
+                                                                confirmUpdateMatch(match.id, "0-1", match.player2_id);
+                                                                setEditingMatchId(null);
+                                                            }}
+                                                            className={cn(
+                                                                "relative w-full p-3 rounded-lg text-sm font-bold transition-all border flex items-center justify-between gap-3 text-left group/btn",
+                                                                match.winner_id === match.player2_id
+                                                                    ? "bg-green-500/10 text-green-400 border-green-500/50 shadow-[inset_0_0_10px_rgba(74,222,128,0.1)]"
+                                                                    : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
+                                                            )}
+                                                        >
+                                                            <span className="break-words leading-tight">{match.player2?.name || "Player 2"}</span>
+                                                            {match.winner_id === match.player2_id && (
+                                                                <div className="h-5 w-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                                                                    <Check className="h-3 w-3" />
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ) : (tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') && (
                                                 <button
@@ -1654,43 +1687,44 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     </div>
 
                                     {/* Content Grid */}
-                                    <div style={{ position: 'relative', zIndex: 10, display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', width: '100%', height: 'auto', alignItems: 'stretch' }}>
+                                    {/* Content Grid */}
+                                    {tournament?.BanList && tournament.BanList.length > 0 ? (
+                                        <div style={{ position: 'relative', zIndex: 10, display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', width: '100%', height: 'auto', alignItems: 'stretch' }}>
 
-                                        {/* Left Side: Tournament Info & Ban List */}
-                                        <div style={{ padding: 40, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                                            <div style={{ marginBottom: 24 }}>
-                                                <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', fontSize: '0.9rem' }}>
-                                                    Tournament Invite
-                                                </p>
-                                                <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                    {tournament?.Name || "BEYBLADE X"}
-                                                </h1>
-                                                {tournament?.Type && (
-                                                    <span style={{
-                                                        display: 'inline-block',
-                                                        fontSize: '0.8rem',
-                                                        fontWeight: 800,
-                                                        color: tournament.Type === 'U10' ? '#60a5fa' : tournament.Type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
-                                                        textTransform: 'uppercase',
-                                                        letterSpacing: '0.1em',
-                                                        padding: '4px 8px',
-                                                        borderRadius: 4,
-                                                        backgroundColor: 'rgba(255,255,255,0.05)',
-                                                        border: '1px solid rgba(255,255,255,0.1)'
-                                                    }}>
-                                                        {tournament.Type} FORMAT
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {/* Ban List Mini-Grid */}
-                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
-                                                    <AlertCircle style={{ width: 16, height: 16, color: '#ef4444' }} />
-                                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restricted Parts ({tournament?.BanList?.length || 0})</span>
+                                            {/* Left Side: Tournament Info & Ban List */}
+                                            <div style={{ padding: 40, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                                                <div style={{ marginBottom: 24 }}>
+                                                    <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', fontSize: '0.9rem' }}>
+                                                        Tournament Invite
+                                                    </p>
+                                                    <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                                        {tournament?.Name || "BEYBLADE X"}
+                                                    </h1>
+                                                    {tournament?.Type && (
+                                                        <span style={{
+                                                            display: 'inline-block',
+                                                            fontSize: '0.8rem',
+                                                            fontWeight: 800,
+                                                            color: tournament.Type === 'U10' ? '#60a5fa' : tournament.Type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
+                                                            textTransform: 'uppercase',
+                                                            letterSpacing: '0.1em',
+                                                            padding: '4px 8px',
+                                                            borderRadius: 4,
+                                                            backgroundColor: 'rgba(255,255,255,0.05)',
+                                                            border: '1px solid rgba(255,255,255,0.1)'
+                                                        }}>
+                                                            {tournament.Type} FORMAT
+                                                        </span>
+                                                    )}
                                                 </div>
 
-                                                {tournament?.BanList && tournament.BanList.length > 0 ? (
+                                                {/* Ban List Mini-Grid */}
+                                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
+                                                        <AlertCircle style={{ width: 16, height: 16, color: '#ef4444' }} />
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restricted Parts ({tournament?.BanList?.length || 0})</span>
+                                                    </div>
+
                                                     <div style={{
                                                         display: 'grid',
                                                         gridTemplateColumns: `repeat(${tournament.BanList.length > 30 ? 7 : tournament.BanList.length > 20 ? 6 : 5}, 1fr)`,
@@ -1726,42 +1760,91 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         })}
 
                                                     </div>
-                                                ) : (
-                                                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed rgba(255,255,255,0.1)', borderRadius: 12 }}>
-                                                        <span style={{ color: '#4b5563', fontSize: '0.9rem' }}>No Banned Parts</span>
-                                                    </div>
+                                                </div>
+
+                                                {/* Footer */}
+                                                <div style={{ marginTop: 'auto', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
+                                                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Right Side: QR Code */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                                                <div style={{
+                                                    padding: 20,
+                                                    backgroundColor: 'white',
+                                                    borderRadius: 20,
+                                                    boxShadow: '0 0 40px rgba(0,0,0,0.5)',
+                                                    marginBottom: 24
+                                                }}>
+                                                    <QRCodeSVG
+                                                        value={`${origin || ''}/register/${id}`}
+                                                        size={220}
+                                                    />
+                                                </div>
+                                                <p style={{ fontSize: '1.2rem', color: '#fff', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                                    Scan to Register
+                                                </p>
+                                                <p style={{ marginTop: 8, fontSize: '0.8rem', color: '#9ca3af', fontFamily: 'monospace' }}>
+                                                    {origin ? `${origin.replace(/^https?:\/\//, '')}/register/${id}` : `.../register/${id}`}
+                                                </p>
+                                            </div>
+
+                                        </div>
+                                    ) : (
+                                        // NO BAN LIST - CENTERED LAYOUT
+                                        <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', gap: 40, padding: 60 }}>
+                                            <div style={{ textAlign: 'center' }}>
+                                                <p className="text-xl font-bold tracking-[0.5em] uppercase mb-4" style={{ color: '#00ff94', fontSize: '1.2rem' }}>
+                                                    Tournament Invite
+                                                </p>
+                                                <h1 style={{ fontSize: '4rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1.1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 16 }}>
+                                                    {tournament?.Name || "BEYBLADE X"}
+                                                </h1>
+                                                {tournament?.Type && (
+                                                    <span style={{
+                                                        display: 'inline-block',
+                                                        fontSize: '1.2rem',
+                                                        fontWeight: 800,
+                                                        color: tournament.Type === 'U10' ? '#60a5fa' : tournament.Type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.1em',
+                                                        padding: '6px 16px',
+                                                        borderRadius: 6,
+                                                        backgroundColor: 'rgba(255,255,255,0.05)',
+                                                        border: '1px solid rgba(255,255,255,0.1)'
+                                                    }}>
+                                                        {tournament.Type} FORMAT
+                                                    </span>
                                                 )}
                                             </div>
 
-                                            {/* Footer */}
-                                            <div style={{ marginTop: 'auto', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
-                                                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Right Side: QR Code */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: 'rgba(0,0,0,0.2)' }}>
                                             <div style={{
-                                                padding: 20,
+                                                padding: 30,
                                                 backgroundColor: 'white',
-                                                borderRadius: 20,
-                                                boxShadow: '0 0 40px rgba(0,0,0,0.5)',
-                                                marginBottom: 24
+                                                borderRadius: 30,
+                                                boxShadow: '0 0 60px rgba(0,0,0,0.5)',
                                             }}>
                                                 <QRCodeSVG
                                                     value={`${origin || ''}/register/${id}`}
-                                                    size={220}
+                                                    size={300}
                                                 />
                                             </div>
-                                            <p style={{ fontSize: '1.2rem', color: '#fff', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                                                Scan to Register
-                                            </p>
-                                            <p style={{ marginTop: 8, fontSize: '0.8rem', color: '#9ca3af', fontFamily: 'monospace' }}>
-                                                {origin ? `${origin.replace(/^https?:\/\//, '')}/register/${id}` : `.../register/${id}`}
-                                            </p>
-                                        </div>
 
-                                    </div>
+                                            <div style={{ textAlign: 'center' }}>
+                                                <p style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                                    Scan to Register
+                                                </p>
+                                                <p style={{ marginTop: 8, fontSize: '1rem', color: '#9ca3af', fontFamily: 'monospace' }}>
+                                                    {origin ? `${origin.replace(/^https?:\/\//, '')}/register/${id}` : `.../register/${id}`}
+                                                </p>
+                                            </div>
+
+                                            <div style={{ position: 'absolute', bottom: 30, opacity: 0.5 }}>
+                                                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

@@ -1,6 +1,4 @@
-"use client";
-
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import Image from "next/image";
 import { Search, X, Check, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,7 +12,7 @@ interface MultiVisualSelectorProps {
     onClose: () => void;
 }
 
-export function MultiVisualSelector({
+function MultiVisualSelectorComponent({
     label,
     initialSelected,
     onConfirm,
@@ -25,7 +23,12 @@ export function MultiVisualSelector({
 }: MultiVisualSelectorProps & { variant?: "modal" | "inline"; className?: string }) {
     const [query, setQuery] = useState("");
     // Use a Set for easier toggling
-    const [selected, setSelected] = useState<Set<string>>(new Set(initialSelected));
+    const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSelected));
+
+    // Sync selected when initialSelected changes (e.g. external reset)
+    useEffect(() => {
+        setSelected(new Set(initialSelected));
+    }, [initialSelected]);
 
     const toggleSelection = (name: string) => {
         const newSet = new Set(selected);
@@ -176,3 +179,5 @@ export function MultiVisualSelector({
         </div>
     );
 }
+
+export const MultiVisualSelector = memo(MultiVisualSelectorComponent);

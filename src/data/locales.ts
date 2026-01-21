@@ -70,7 +70,7 @@ export const locales = {
         "admin.btn.end": "จบการแข่งขัน",
         "admin.btn.completed": "จบการแข่งขันแล้ว",
         "admin.btn.reset": "รีเซ็ต",
-        "admin.btn.setup": "ตั้งค่าสายแข่ง",
+        "admin.btn.setup": "เริ่มต้นการแข่งขัน",
         "admin.btn.generating": "กำลังสร้าง...",
         "admin.btn.invite": "สร้างการ์ดเชิญ",
         "admin.btn.creating_invite": "กำลังสร้าง...",
@@ -97,10 +97,10 @@ export const locales = {
         "admin.modal.download": "ดาวน์โหลดรูปภาพ",
         "admin.modal.download_ban": "ดาวน์โหลด Ban List",
 
-        // Tournament Types
-        "type.U10": "U10",
+        "type.U10": "3 Bey Under 10 Point",
         "type.NoMoreMeta": "No More Meta",
-        "type.Open": "Open / Custom",
+        "type.Open": "Open",
+        "type.Standard": "Open",
 
         // General
         "gen.select": "เลือก...",
@@ -179,7 +179,7 @@ export const locales = {
         "admin.btn.end": "End Tournament",
         "admin.btn.completed": "Completed",
         "admin.btn.reset": "Reset",
-        "admin.btn.setup": "Setup Tournament",
+        "admin.btn.setup": "Start Tournament",
         "admin.btn.generating": "Generating...",
         "admin.btn.invite": "Create Invite Card",
         "admin.btn.creating_invite": "Creating...",
@@ -206,10 +206,10 @@ export const locales = {
         "admin.modal.download": "Download Image",
         "admin.modal.download_ban": "Download Ban List",
 
-        // Tournament Types
-        "type.U10": "U10",
+        "type.U10": "3 Bey Under 10 Point",
         "type.NoMoreMeta": "No More Meta",
-        "type.Open": "Open / Custom",
+        "type.Open": "Open",
+        "type.Standard": "Open",
 
         // General
         "gen.select": "Select...",

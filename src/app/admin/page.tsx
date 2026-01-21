@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { Globe } from "lucide-react";
 import gameData from "@/data/game-data.json";
 import { MultiVisualSelector } from "@/components/ui/MultiVisualSelector";
+import { locales } from "@/data/locales";
 
 type Tournament = {
     TournamentID: string;
@@ -51,7 +52,7 @@ export default function AdminPage() {
     const [newTournamentName, setNewTournamentName] = useState("");
 
     // New Creation State
-    const [newType, setNewType] = useState<"U10" | "NoMoreMeta" | "Open">("U10");
+    const [newType, setNewType] = useState<"U10" | "NoMoreMeta" | "Open" | "Standard">("U10");
     const [isCustomBanList, setIsCustomBanList] = useState(false);
 
     // Default ban list checks
@@ -62,6 +63,21 @@ export default function AdminPage() {
     const allBeys = useMemo(() => Object.entries(gameData.points).flatMap(([point, names]) =>
         names.map(name => ({ name, point: Number(point) }))
     ), []);
+
+    // Memoize selected list to prevent re-renders in MultiVisualSelector
+    // Note: This relies on customBanListInput which is a string.
+    const memoizedBanListSelected = useMemo(
+        () => customBanListInput.split(',').map(s => s.trim()).filter(Boolean),
+        [customBanListInput]
+    );
+
+    // Memoize confirm handler
+    const handleBanListConfirm = useCallback((selected: string[]) => {
+        setCustomBanListInput(selected.join(', '));
+    }, []);
+
+    // Empty handler for close
+    const handleBanListClose = useCallback(() => { }, []);
 
     const [createError, setCreateError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
@@ -603,7 +619,8 @@ export default function AdminPage() {
                                         >
                                             <option value="U10">{t('type.U10')}</option>
                                             <option value="NoMoreMeta">{t('type.NoMoreMeta')}</option>
-                                            <option value="Open">{t('type.Open')}</option>
+                                            {/* <option value="Open">{t('type.Open')}</option> REMOVED as per request */}
+                                            <option value="Standard">{t('type.Standard')}</option>
                                         </select>
                                     </div>
 
@@ -627,10 +644,10 @@ export default function AdminPage() {
                                                 <div>
                                                     <MultiVisualSelector
                                                         label="Select Banned Beyblades"
-                                                        initialSelected={customBanListInput.split(',').map(s => s.trim()).filter(Boolean)}
+                                                        initialSelected={memoizedBanListSelected}
                                                         options={allBeys}
-                                                        onConfirm={(selected) => setCustomBanListInput(selected.join(', '))}
-                                                        onClose={() => { }}
+                                                        onConfirm={handleBanListConfirm}
+                                                        onClose={handleBanListClose}
                                                         variant="inline"
                                                         className="mt-2"
                                                     />
@@ -688,9 +705,18 @@ export default function AdminPage() {
                                                                 <span className="px-1.5 py-0.5 rounded font-bold uppercase bg-green-500/20 text-green-500">
                                                                     {t.Status}
                                                                 </span>
+                                                                {t.Type && (
+                                                                    <span className="px-1.5 py-0.5 rounded font-bold uppercase border border-white/10">
+                                                                        {/* @ts-ignore */}
+                                                                        {/* Use the translation key if available, else raw type */}
+                                                                        {/* @ts-ignore */}
+                                                                        {(locales[lang] as any)[`type.${t.Type}`] || t.Type}
+                                                                    </span>
+                                                                )}
                                                                 <span>• Created {new Date(t.CreatedAt).toLocaleDateString()}</span>
                                                             </div>
                                                         </div>
+
 
                                                         <div className="flex items-center gap-3 w-full md:w-auto justify-end">
                                                             <div className="flex items-center gap-1">
@@ -906,22 +932,21 @@ export default function AdminPage() {
                     )}
 
 
+
+
                 </div >
 
-            </div>
-
-            <Modal
-                isOpen={modalConfig.isOpen}
-                onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
-                title={modalConfig.title}
-                description={modalConfig.desc}
-                type={modalConfig.type}
-                variant={modalConfig.variant}
-                onConfirm={modalConfig.onConfirm}
-                confirmText={modalConfig.confirmText || (modalConfig.type === 'confirm' ? (modalConfig.variant === 'destructive' ? 'Confirm End' : 'Confirm') : 'OK')}
-            />
-
-
+                <Modal
+                    isOpen={modalConfig.isOpen}
+                    onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    title={modalConfig.title}
+                    description={modalConfig.desc}
+                    type={modalConfig.type}
+                    variant={modalConfig.variant}
+                    onConfirm={modalConfig.onConfirm}
+                    confirmText={modalConfig.confirmText || (modalConfig.type === 'confirm' ? (modalConfig.variant === 'destructive' ? 'Confirm End' : 'Confirm') : 'OK')}
+                />
+            </div >
         </div >
     );
 }
