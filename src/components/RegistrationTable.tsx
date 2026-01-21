@@ -198,7 +198,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                     </div>
                                     <button
                                         onClick={() => onDelete(row)}
-                                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 text-muted-foreground hover:text-red-500 transition-all"
+                                        className="p-2 text-muted-foreground hover:text-red-500 transition-all"
                                         title="Delete"
                                     >
                                         <Trash2 className="h-4 w-4" />

@@ -7,7 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -59,7 +59,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const [data, setData] = useState<Registration[]>([]);
     const [tournament, setTournament] = useState<any>(null); // Store full tournament details
+    const [currentUser, setCurrentUser] = useState<{ username: string, shop_name: string } | null>(null);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        fetch("/api/admin/profile")
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) setCurrentUser(data.user);
+            })
+            .catch(err => console.error("Failed to fetch user profile", err));
+    }, []);
     const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [matchSearchQuery, setMatchSearchQuery] = useState("");
@@ -487,8 +497,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         } else {
             setModalConfig({
                 isOpen: true,
-                title: "Confirm Winner",
-                desc: `Are you sure you want to declare ${playerName} as the winner with score ${scores}?`,
+                title: t('admin.matches.confirm_win'),
+                content: (
+                    <div className="text-center text-lg">
+                        {t('admin.matches.win_confirm_text_prefix')} <span className="font-bold text-green-500 text-xl">{playerName}</span> {t('admin.matches.win_confirm_text_suffix')}
+                    </div>
+                ),
                 type: "confirm",
                 onConfirm: () => {
                     setModalConfig(prev => ({ ...prev, isOpen: false }));
@@ -645,6 +659,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         isOpen: boolean;
         title: string;
         desc?: string;
+        content?: React.ReactNode;
         type: "alert" | "confirm";
         variant?: "default" | "destructive";
         confirmText?: string;
@@ -748,6 +763,37 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         });
     }, [fetchData]);
 
+    // Locked Matches State (Realtime Presence)
+    const [lockedMatches, setLockedMatches] = useState<Record<number, { judgeName: string, judgeShop?: string, userId: string }>>({});
+    const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+    const toggleMatchLock = async (matchId: number) => {
+        if (!channelRef.current || !currentUser) return;
+
+        // Get currently locked matches by me
+        const myLockedMatchIds = Object.entries(lockedMatches)
+            .filter(([_, lock]) => lock.userId === currentUser.username)
+            .map(([id]) => Number(id));
+
+        const isLockedByMe = myLockedMatchIds.includes(matchId);
+
+        let newLockedIds = [...myLockedMatchIds];
+        if (isLockedByMe) {
+            // Unlock: Remove from list
+            newLockedIds = newLockedIds.filter(id => id !== matchId);
+        } else {
+            // Lock: Add to list
+            newLockedIds.push(matchId);
+        }
+
+        // Track with new list
+        await channelRef.current.track({
+            user: currentUser.username,
+            shop: currentUser.shop_name,
+            lockedMatchIds: newLockedIds // Now sending an array
+        });
+    };
+
     // Realtime Subscription
     useEffect(() => {
         if (!id) return;
@@ -790,12 +836,55 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     }
                 }
             )
-            .subscribe();
+            .on('presence', { event: 'sync' }, () => {
+                const newState: Record<number, { judgeName: string, judgeShop?: string, userId: string }> = {};
+
+                const state = channel.presenceState();
+                console.log('Presence sync:', state);
+
+                Object.values(state).forEach((presences: any) => {
+                    presences.forEach((p: any) => {
+                        // Handle both old (single) and new (array) structure for backward compatibility during transition
+                        if (p.lockedMatchIds && Array.isArray(p.lockedMatchIds)) {
+                            p.lockedMatchIds.forEach((mid: number) => {
+                                newState[mid] = {
+                                    judgeName: p.user,
+                                    judgeShop: p.shop,
+                                    userId: p.user
+                                };
+                            });
+                        } else if (p.lockedMatchId) {
+                            newState[p.lockedMatchId] = {
+                                judgeName: p.user,
+                                judgeShop: p.shop,
+                                userId: p.user
+                            };
+                        }
+                    });
+                });
+
+                setLockedMatches(newState);
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    // Initialize presence
+                    if (currentUser) {
+                        await channel.track({
+                            user: currentUser.username,
+                            shop: currentUser.shop_name,
+                            lockedMatchIds: [] // Initialize with empty array
+                        });
+                    }
+                }
+            });
+
+        channelRef.current = channel;
 
         return () => {
             supabase.removeChannel(channel);
+            channelRef.current = null;
         };
-    }, [id, fetchData, bracketUrl]);
+    }, [id, fetchData, bracketUrl, currentUser]);
 
     // validateRow moved to RegistrationTable component
 
@@ -871,9 +960,24 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </Link>
                         <div>
                             <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
-                                Tournament Details
+                                {tournament?.Name || "Tournament Details"}
                             </h1>
-                            <p className="text-xs text-muted-foreground break-all">ID: {id}</p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground break-all">
+                                <span>ID: {id}</span>
+                                {tournament?.Status && (
+                                    <>
+                                        <span>•</span>
+                                        <span className={cn(
+                                            "font-bold",
+                                            tournament.Status === 'OPEN' ? "text-green-500" :
+                                                tournament.Status === 'COMPLETED' ? "text-blue-500" :
+                                                    "text-muted-foreground"
+                                        )}>
+                                            {tournament.Status}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -991,137 +1095,206 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 ref={activeMatchesRef}
                                 className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[800px] overflow-y-auto custom-scrollbar pr-2"
                             >
-                                {activeMatches.map((match) => (
-                                    <div key={match.id} className="bg-background/50 border border-white/20 hover:border-primary/30 p-4 rounded-xl flex flex-col gap-3 transition-colors shadow-sm">
-                                        <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider text-center flex items-center justify-center gap-2">
-                                            <span className="w-8 h-[1px] bg-white/10"></span>
-                                            <span>{t('admin.matches.round').replace('{n}', match.round.toString())}</span>
-                                            {match.suggested_play_order && (
-                                                <>
-                                                    <span className="text-white/20">•</span>
-                                                    <span className="text-primary/80">Match {match.suggested_play_order}</span>
-                                                </>
+                                {activeMatches.map((match) => {
+                                    const lock = lockedMatches[match.id];
+                                    const isLockedByMe = lock && currentUser && lock.userId === currentUser.username;
+                                    const isLockedByOther = lock && !isLockedByMe;
+                                    const isUpdating = updatingMatchIds.includes(match.id);
+
+                                    return (
+                                        <div
+                                            key={match.id}
+                                            className={cn(
+                                                "relative p-4 rounded-xl flex flex-col gap-3 transition-all duration-300 border",
+                                                isLockedByMe
+                                                    ? "bg-primary/5 border-primary shadow-[0_0_15px_rgba(34,197,94,0.15)] ring-1 ring-primary/20"
+                                                    : isLockedByOther
+                                                        ? "bg-black/40 border-white/5 opacity-60 grayscale-[0.5]"
+                                                        : "bg-background/50 border-white/20 hover:border-primary/30 shadow-sm"
                                             )}
-                                            <span className="w-8 h-[1px] bg-white/10"></span>
-                                        </div>
-
-                                        <div className="flex items-center justify-between gap-2">
-                                            {/* Player 1 */}
-                                            <div
-                                                role="button"
-                                                tabIndex={0}
-                                                className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
-                                                    ${match.winner_id === match.player1_id
-                                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                                        : 'bg-secondary/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 border border-transparent hover:border-blue-500/30 cursor-pointer'
-                                                    }`}
-                                                onClick={() => {
-                                                    handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1");
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1");
-                                                    }
-                                                }}
-                                            >
-                                                <div className="font-bold text-sm truncate w-full">{match.player1?.name || "???"}</div>
-                                                {showPlayerCombo && (
-                                                    <div className="text-[10px] text-muted-foreground w-full truncate">
-                                                        {(() => {
-                                                            const p1Reg = data.find(r => r.PlayerName === match.player1?.name);
-                                                            if (!p1Reg) return null;
-                                                            return (
-                                                                <div className="flex flex-col items-center gap-1">
-                                                                    {p1Reg.Main_Bey1 && (
-                                                                        <button
-                                                                            onClick={(e) => handleShowCombo(e, p1Reg)}
-                                                                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p1Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
-                                                                        >
-                                                                            <Eye className="w-3 h-3" />
-                                                                            {t('admin.matches.view_all') || "View All"}
-                                                                            {tournament?.Type === 'U10' && (() => {
-                                                                                const decks = [p1Reg.Main_Bey1, p1Reg.Main_Bey2, p1Reg.Main_Bey3].filter(Boolean);
-                                                                                let total = 0;
-                                                                                decks.forEach(d => {
-                                                                                    for (const [pt, names] of Object.entries((gameData as any).points)) {
-                                                                                        if ((names as string[]).includes(d)) {
-                                                                                            total += parseInt(pt);
-                                                                                            break;
-                                                                                        }
-                                                                                    }
-                                                                                });
-                                                                                return <span className={total > 10 ? "text-red-500" : "text-green-500"}>({total}/10)</span>;
-                                                                            })()}
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })()}
+                                        >
+                                            {/* Updating Overlay */}
+                                            {isUpdating && (
+                                                <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-[1px] rounded-xl flex items-center justify-center fade-in animate-in duration-200">
+                                                    <div className="bg-secondary p-3 rounded-full shadow-xl ring-1 ring-white/10">
+                                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
                                                     </div>
-                                                )}
-                                                <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal">Click to Win</span>
+                                                </div>
+                                            )}
+
+                                            {/* Header Section */}
+                                            <div className="relative flex items-center justify-center min-h-[24px]">
+                                                {/* Play/Lock Button (Top Right) */}
+                                                <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10">
+                                                    {isLockedByOther ? (
+                                                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-[10px] font-bold text-muted-foreground cursor-not-allowed" title={`Judged by ${lock.judgeName}`}>
+                                                            <Lock className="h-3 w-3" />
+                                                            <span className="max-w-[60px] truncate">{lock.judgeName}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleMatchLock(match.id);
+                                                            }}
+                                                            className={cn(
+                                                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm",
+                                                                isLockedByMe
+                                                                    ? "bg-primary text-black border-primary hover:bg-primary/90"
+                                                                    : "bg-secondary text-foreground border-white/10 hover:border-primary/50 hover:text-primary"
+                                                            )}
+                                                            title={isLockedByMe ? t('admin.matches.release') : t('admin.matches.judge')}
+                                                        >
+                                                            {isLockedByMe ? (
+                                                                <>
+                                                                    <Gavel className="h-3 w-3" />
+                                                                    <span>{t('admin.matches.judging')}</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Play className="h-3 w-3" />
+                                                                    <span>{t('admin.matches.judge')}</span>
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {/* Round Info (Centered) */}
+                                                <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider flex items-center gap-2">
+                                                    {isLockedByMe && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
+                                                    <span>{t('admin.matches.round').replace('{n}', match.round.toString())}</span>
+                                                    {match.suggested_play_order && (
+                                                        <>
+                                                            <span className="text-white/20">•</span>
+                                                            <span className="text-primary/80">Match {match.suggested_play_order}</span>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
 
-                                            <div className="text-xs font-bold text-muted-foreground px-1">VS</div>
+                                            <div className={cn("flex items-center justify-between gap-2 transition-opacity", isLockedByOther ? "opacity-50 pointer-events-none" : "")}>
+                                                {/* Player 1 */}
+                                                <div
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
+                                                        ${match.winner_id === match.player1_id
+                                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                                            : 'bg-secondary/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 border border-transparent hover:border-blue-500/30 cursor-pointer'
+                                                        }`}
+                                                    onClick={() => !isLockedByOther && handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1")}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            !isLockedByOther && handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1");
+                                                        }
+                                                    }}
+                                                >
+                                                    <div className="font-bold text-sm truncate w-full">{match.player1?.name || "???"}</div>
+                                                    <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal flex-1 flex items-center justify-center">Click to Win</span>
 
-                                            {/* Player 2 */}
-                                            <div
-                                                role="button"
-                                                tabIndex={0}
-                                                className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
-                                                    ${match.winner_id === match.player2_id
-                                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                                        : 'bg-secondary/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-transparent hover:border-red-500/30 cursor-pointer'
-                                                    }`}
-                                                onClick={() => {
-                                                    handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2");
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2");
-                                                    }
-                                                }}
-                                            >
-                                                <div className="font-bold text-sm truncate w-full">{match.player2?.name || "???"}</div>
-                                                {showPlayerCombo && (
-                                                    <div className="text-[10px] text-muted-foreground w-full truncate">
-                                                        {(() => {
-                                                            const p2Reg = data.find(r => r.PlayerName === match.player2?.name);
-                                                            if (!p2Reg) return null;
-                                                            return (
-                                                                <div className="flex flex-col items-center gap-1">
-                                                                    {p2Reg.Main_Bey1 && (
-                                                                        <button
-                                                                            onClick={(e) => handleShowCombo(e, p2Reg)}
-                                                                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p2Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
-                                                                        >
-                                                                            <Eye className="w-3 h-3" />
-                                                                            {t('admin.matches.view_all') || "View All"}
-                                                                            {tournament?.Type === 'U10' && (() => {
-                                                                                const decks = [p2Reg.Main_Bey1, p2Reg.Main_Bey2, p2Reg.Main_Bey3].filter(Boolean);
-                                                                                let total = 0;
-                                                                                decks.forEach(d => {
-                                                                                    for (const [pt, names] of Object.entries((gameData as any).points)) {
-                                                                                        if ((names as string[]).includes(d)) {
-                                                                                            total += parseInt(pt);
-                                                                                            break;
+                                                    {showPlayerCombo && (
+                                                        <div className="text-[10px] text-muted-foreground w-full truncate mt-auto pt-2">
+                                                            {(() => {
+                                                                const p1Reg = data.find(r => r.PlayerName === match.player1?.name);
+                                                                if (!p1Reg) return null;
+                                                                return (
+                                                                    <div className="flex flex-col items-center gap-1">
+                                                                        {p1Reg.Main_Bey1 && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleShowCombo(e, p1Reg);
+                                                                                }}
+                                                                                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p1Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
+                                                                            >
+                                                                                <Eye className="w-3 h-3" />
+                                                                                {t('admin.matches.view_all') || "View All"}
+                                                                                {tournament?.Type === 'U10' && (() => {
+                                                                                    const decks = [p1Reg.Main_Bey1, p1Reg.Main_Bey2, p1Reg.Main_Bey3].filter(Boolean);
+                                                                                    let total = 0;
+                                                                                    decks.forEach(d => {
+                                                                                        for (const [pt, names] of Object.entries((gameData as any).points)) {
+                                                                                            if ((names as string[]).includes(d)) {
+                                                                                                total += parseInt(pt);
+                                                                                                break;
+                                                                                            }
                                                                                         }
-                                                                                    }
-                                                                                });
-                                                                                return <span className={total > 10 ? "text-red-500" : "text-green-500"}>({total}/10)</span>;
-                                                                            })()}
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                )}
-                                                <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal">Click to Win</span>
+                                                                                    });
+                                                                                    return <span className={total > 10 ? "text-red-500" : "text-green-500"}>({total}/10)</span>;
+                                                                                })()}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="text-xs font-bold text-muted-foreground px-1">VS</div>
+
+                                                {/* Player 2 */}
+                                                <div
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
+                                                        ${match.winner_id === match.player2_id
+                                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                                            : 'bg-secondary/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-transparent hover:border-red-500/30 cursor-pointer'
+                                                        }`}
+                                                    onClick={() => !isLockedByOther && handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2")}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            !isLockedByOther && handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2");
+                                                        }
+                                                    }}
+                                                >
+                                                    <div className="font-bold text-sm truncate w-full">{match.player2?.name || "???"}</div>
+                                                    <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal flex-1 flex items-center justify-center">Click to Win</span>
+
+                                                    {showPlayerCombo && (
+                                                        <div className="text-[10px] text-muted-foreground w-full truncate mt-auto pt-2">
+                                                            {(() => {
+                                                                const p2Reg = data.find(r => r.PlayerName === match.player2?.name);
+                                                                if (!p2Reg) return null;
+                                                                return (
+                                                                    <div className="flex flex-col items-center gap-1">
+                                                                        {p2Reg.Main_Bey1 && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleShowCombo(e, p2Reg);
+                                                                                }}
+                                                                                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p2Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
+                                                                            >
+                                                                                <Eye className="w-3 h-3" />
+                                                                                {t('admin.matches.view_all') || "View All"}
+                                                                                {tournament?.Type === 'U10' && (() => {
+                                                                                    const decks = [p2Reg.Main_Bey1, p2Reg.Main_Bey2, p2Reg.Main_Bey3].filter(Boolean);
+                                                                                    let total = 0;
+                                                                                    decks.forEach(d => {
+                                                                                        for (const [pt, names] of Object.entries((gameData as any).points)) {
+                                                                                            if ((names as string[]).includes(d)) {
+                                                                                                total += parseInt(pt);
+                                                                                                break;
+                                                                                            }
+                                                                                        }
+                                                                                    });
+                                                                                    return <span className={total > 10 ? "text-red-500" : "text-green-500"}>({total}/10)</span>;
+                                                                                })()}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -2008,9 +2181,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
                     title={modalConfig.title}
                     description={modalConfig.desc}
+                    content={modalConfig.content}
                     type={modalConfig.type}
                     variant={modalConfig.variant}
                     onConfirm={modalConfig.onConfirm}
+                    confirmText={modalConfig.confirmText}
                 />
             </div>
         </div >

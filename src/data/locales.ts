@@ -97,6 +97,14 @@ export const locales = {
         "admin.modal.download": "ดาวน์โหลดรูปภาพ",
         "admin.modal.download_ban": "ดาวน์โหลด Ban List",
 
+        "admin.matches.judge": "ตัดสิน",
+        "admin.matches.judging": "กำลังตัดสิน",
+        "admin.matches.release": "ยกเลิกการตัดสิน",
+        "admin.matches.locked_by": "ตัดสินโดย {name}",
+        "admin.matches.confirm_win": "ยืนยันผู้ชนะ",
+        "admin.matches.win_confirm_text_prefix": "ให้",
+        "admin.matches.win_confirm_text_suffix": "ชนะ?",
+
         "type.U10": "3 Bey Under 10 Point",
         "type.NoMoreMeta": "No More Meta",
         "type.Open": "Open",
@@ -205,6 +213,14 @@ export const locales = {
         "admin.modal.close": "Close",
         "admin.modal.download": "Download Image",
         "admin.modal.download_ban": "Download Ban List",
+
+        "admin.matches.judge": "Judge",
+        "admin.matches.judging": "Judging",
+        "admin.matches.release": "Release Match",
+        "admin.matches.locked_by": "Locked by {name}",
+        "admin.matches.confirm_win": "Confirm Winner",
+        "admin.matches.win_confirm_text_prefix": "Declare",
+        "admin.matches.win_confirm_text_suffix": "winner?",
 
         "type.U10": "3 Bey Under 10 Point",
         "type.NoMoreMeta": "No More Meta",

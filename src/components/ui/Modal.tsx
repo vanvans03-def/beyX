@@ -8,6 +8,7 @@ interface ModalProps {
     onClose: () => void;
     title: string;
     description?: string;
+    content?: React.ReactNode;
     children?: React.ReactNode;
     type?: "alert" | "confirm" | "custom";
     onConfirm?: () => void;
@@ -21,6 +22,7 @@ export function Modal({
     onClose,
     title,
     description,
+    content,
     children,
     type = "custom",
     onConfirm,
@@ -81,6 +83,12 @@ export function Modal({
                     <p className="text-sm text-muted-foreground mb-6">
                         {description}
                     </p>
+                )}
+
+                {content && (
+                    <div className="mb-6">
+                        {content}
+                    </div>
                 )}
 
                 {children}
