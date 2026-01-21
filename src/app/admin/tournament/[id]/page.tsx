@@ -1123,9 +1123,21 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             )}
 
                                             {/* Header Section */}
-                                            <div className="relative flex items-center justify-center min-h-[24px]">
-                                                {/* Play/Lock Button (Top Right) */}
-                                                <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10">
+                                            <div className="flex items-center justify-between min-h-[24px]">
+                                                {/* Round Info (Left) */}
+                                                <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider flex items-center gap-2">
+                                                    {isLockedByMe && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
+                                                    <span>{t('admin.matches.round').replace('{n}', match.round.toString())}</span>
+                                                    {match.suggested_play_order && (
+                                                        <>
+                                                            <span className="text-white/20">•</span>
+                                                            <span className="text-primary/80">Match {match.suggested_play_order}</span>
+                                                        </>
+                                                    )}
+                                                </div>
+
+                                                {/* Play/Lock Button (Right) */}
+                                                <div className="z-10 ml-2">
                                                     {isLockedByOther ? (
                                                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-[10px] font-bold text-muted-foreground cursor-not-allowed" title={`Judged by ${lock.judgeName}`}>
                                                             <Lock className="h-3 w-3" />
@@ -1157,18 +1169,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 </>
                                                             )}
                                                         </button>
-                                                    )}
-                                                </div>
-
-                                                {/* Round Info (Centered) */}
-                                                <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider flex items-center gap-2">
-                                                    {isLockedByMe && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
-                                                    <span>{t('admin.matches.round').replace('{n}', match.round.toString())}</span>
-                                                    {match.suggested_play_order && (
-                                                        <>
-                                                            <span className="text-white/20">•</span>
-                                                            <span className="text-primary/80">Match {match.suggested_play_order}</span>
-                                                        </>
                                                     )}
                                                 </div>
                                             </div>
