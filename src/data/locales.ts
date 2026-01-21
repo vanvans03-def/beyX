@@ -51,6 +51,7 @@ export const locales = {
         "admin.end_confirm_title": "จบการแข่งขัน?",
         "admin.end_confirm_desc": "คุณแน่ใจหรือไม่ที่จะจบการแข่งขัน \"{name}\"? ผู้เล่นจะลงทะเบียนไม่ได้อีก",
         "admin.end_btn": "จบการแข่งขัน",
+        "admin.error.delete_started": "ไม่สามารถลบได้เนื่องจากการแข่งเริ่มไปแล้ว โปรด รีเซ็ตการแข่ง เพื่อแก้ไข",
 
         // Admin Detail
         "detail.share_link": "ลิงก์ลงทะเบียน",
@@ -168,6 +169,7 @@ export const locales = {
         "admin.end_confirm_title": "End Tournament?",
         "admin.end_confirm_desc": "Are you sure you want to end \"{name}\"? This will disable new registrations immediately.",
         "admin.end_btn": "End Tournament",
+        "admin.error.delete_started": "Cannot delete players because the tournament has started. Please reset the tournament to edit.",
 
         // Admin Detail
         "detail.share_link": "Registration Link",

@@ -735,6 +735,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     };
 
     const handleDelete = useCallback((row: Registration) => {
+        if (bracketUrl) {
+            setModalConfig({
+                isOpen: true,
+                title: t('admin.matches.refresh').replace("Refresh Matches", "Error") === "Error" ? "Error" : "Error", // Fallback or just use "Error"
+                desc: t('admin.error.delete_started'),
+                type: "alert",
+                variant: "destructive"
+            });
+            return;
+        }
+
         setModalConfig({
             isOpen: true,
             title: "Delete Registration?",
@@ -761,7 +772,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 }
             }
         });
-    }, [fetchData]);
+    }, [fetchData, bracketUrl, t]);
 
     // Locked Matches State (Realtime Presence)
     const [lockedMatches, setLockedMatches] = useState<Record<number, { judgeName: string, judgeShop?: string, userId: string }>>({});
