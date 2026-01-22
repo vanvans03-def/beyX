@@ -1044,7 +1044,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             <Trophy className="h-5 w-5 text-yellow-500" />
                             Final Standings
                         </h3>
-                        <StandingsTable standings={standings} />
+                        <StandingsTable standings={standings} mode={tournament?.Type} />
                     </div>
                 )}
 
