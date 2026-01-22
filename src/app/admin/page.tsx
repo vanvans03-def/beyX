@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key } from "lucide-react";
+import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -244,6 +244,7 @@ export default function AdminPage() {
             if (json.success) {
                 setNewTournamentName("");
                 setCustomBanListInput(defaultBanList.join(", ")); // Reset
+                setIsCustomBanList(false); // Reset toggle
                 fetchTournaments();
             } else {
                 // Handle specific errors like Challonge Connection
@@ -437,10 +438,52 @@ export default function AdminPage() {
         });
     };
 
+    const handleReopenTournament = (t: Tournament) => {
+        setModalConfig({
+            isOpen: true,
+            title: "Re-open Tournament?",
+            desc: `Are you sure you want to re-open "${t.Name}"? This will move it back to Active and allow registrations.`,
+            type: "confirm",
+            confirmText: "Re-open",
+            onConfirm: async () => {
+                setModalConfig(prev => ({ ...prev, isOpen: false }));
+                try {
+                    const res = await fetch("/api/admin/tournaments", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ tournamentId: t.TournamentID, status: "OPEN" })
+                    });
+                    if (res.ok) fetchTournaments();
+                } catch (e) {
+                    alert("Failed to update");
+                }
+            }
+        });
+    };
+
+
+    const [activePage, setActivePage] = useState(1);
+    const [pastPage, setPastPage] = useState(1);
+    const [showPast, setShowPast] = useState(false);
+    const ITEMS_PER_PAGE = 5;
+
+    // Helper to check if started (includes legacy tournaments with URL)
+    const isStarted = (t: Tournament) => t.Status === 'STARTED' || (t.Status === 'OPEN' && !!(t as any).ChallongeUrl);
 
     const filteredTournaments = tournaments.filter(t =>
         t.Name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const activeTournamentsAll = filteredTournaments.filter(t => (t.Status === 'OPEN' || isStarted(t)) && t.Status !== 'CLOSED' && t.Status !== 'COMPLETED');
+    const pastTournamentsAll = filteredTournaments.filter(t => t.Status === 'CLOSED' || t.Status === 'COMPLETED');
+
+    // Active Pagination
+    const totalActivePages = Math.ceil(activeTournamentsAll.length / ITEMS_PER_PAGE);
+    const activeTournaments = activeTournamentsAll.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
+
+    // Past Pagination
+    const totalPastPages = Math.ceil(pastTournamentsAll.length / ITEMS_PER_PAGE);
+    const pastTournaments = pastTournamentsAll.slice((pastPage - 1) * ITEMS_PER_PAGE, pastPage * ITEMS_PER_PAGE);
 
     // Removed legacy auth UI block
 
@@ -697,18 +740,16 @@ export default function AdminPage() {
                                                 {t('admin.list.active')}
                                             </h2>
                                             <div className="grid gap-4">
-                                                {filteredTournaments.filter(t => t.Status === 'OPEN').map((t) => (
-                                                    <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors bg-gradient-to-r from-transparent to-primary/5">
+                                                {activeTournaments.map((t) => (
+                                                    <div key={t.TournamentID} className={`glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors ${isStarted(t) ? 'bg-amber-500/10 border-amber-500/30' : 'bg-gradient-to-r from-transparent to-primary/5'}`}>
                                                         <div>
                                                             <h3 className="font-bold text-lg text-white">{t.Name}</h3>
                                                             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                                                                <span className="px-1.5 py-0.5 rounded font-bold uppercase bg-green-500/20 text-green-500">
-                                                                    {t.Status}
+                                                                <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${isStarted(t) ? 'bg-amber-500/20 text-amber-500' : 'bg-green-500/20 text-green-500'}`}>
+                                                                    {t.Status === 'OPEN' && isStarted(t) ? 'STARTED' : t.Status}
                                                                 </span>
                                                                 {t.Type && (
                                                                     <span className="px-1.5 py-0.5 rounded font-bold uppercase border border-white/10">
-                                                                        {/* @ts-ignore */}
-                                                                        {/* Use the translation key if available, else raw type */}
                                                                         {/* @ts-ignore */}
                                                                         {(locales[lang] as any)[`type.${t.Type}`] || t.Type}
                                                                     </span>
@@ -716,7 +757,6 @@ export default function AdminPage() {
                                                                 <span>• Created {new Date(t.CreatedAt).toLocaleDateString()}</span>
                                                             </div>
                                                         </div>
-
 
                                                         <div className="flex items-center gap-3 w-full md:w-auto justify-end">
                                                             <div className="flex items-center gap-1">
@@ -746,45 +786,116 @@ export default function AdminPage() {
                                                         </div>
                                                     </div>
                                                 ))}
-                                                {filteredTournaments.filter(t => t.Status === 'OPEN').length === 0 && (
+                                                {activeTournaments.length === 0 && (
                                                     <div className="text-center p-8 text-muted-foreground bg-secondary/10 rounded-xl border border-white/5 font-mono text-sm">
                                                         No active tournaments.
                                                     </div>
                                                 )}
                                             </div>
+
+                                            {/* Active Pagination */}
+                                            {totalActivePages > 1 && (
+                                                <div className="flex justify-center gap-2 mt-4">
+                                                    <button
+                                                        className="px-3 py-1 bg-secondary rounded disabled:opacity-50"
+                                                        disabled={activePage === 1}
+                                                        onClick={() => setActivePage(p => p - 1)}
+                                                    >
+                                                        Prev
+                                                    </button>
+                                                    <span className="px-3 py-1 text-sm flex items-center">
+                                                        Page {activePage} / {totalActivePages}
+                                                    </span>
+                                                    <button
+                                                        className="px-3 py-1 bg-secondary rounded disabled:opacity-50"
+                                                        disabled={activePage === totalActivePages}
+                                                        onClick={() => setActivePage(p => p + 1)}
+                                                    >
+                                                        Next
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Past Tournaments */}
-                                        {filteredTournaments.filter(t => t.Status !== 'OPEN').length > 0 && (
+                                        {pastTournamentsAll.length > 0 && (
                                             <div className="space-y-4 pt-4 border-t border-white/5">
-                                                <h2 className="text-lg font-bold text-muted-foreground flex items-center gap-2">
-                                                    <div className="w-2 h-2 rounded-full bg-gray-600" />
-                                                    {t('admin.list.past')}
-                                                </h2>
-                                                <div className="grid gap-4">
-                                                    {filteredTournaments.filter(t => t.Status !== 'OPEN').map((t) => (
-                                                        <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 opacity-60 hover:opacity-100 transition-opacity grayscale hover:grayscale-0">
-                                                            <div>
-                                                                <h3 className="font-bold text-lg">{t.Name}</h3>
-                                                                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                                                                    <span className="px-1.5 py-0.5 rounded font-bold uppercase bg-secondary text-muted-foreground">
-                                                                        {t.Status}
-                                                                    </span>
-                                                                    <span>• Ended {new Date(t.CreatedAt).toLocaleDateString()}</span>
-                                                                </div>
-                                                            </div>
+                                                <button
+                                                    onClick={() => setShowPast(!showPast)}
+                                                    className="w-full flex items-center justify-between group"
+                                                >
+                                                    <h2 className="text-lg font-bold text-muted-foreground flex items-center gap-2 group-hover:text-foreground transition-colors">
+                                                        <div className="w-2 h-2 rounded-full bg-gray-600" />
+                                                        {t('admin.list.past')}
+                                                    </h2>
+                                                    <div className={`p-1 rounded-full bg-secondary/50 group-hover:bg-secondary transition-all ${showPast ? 'rotate-180' : ''}`}>
+                                                        {/* Using a Chevron from ArrowRight rotated, or generic chevron. ArrowRight matches style. Or I can assume ChevronDown is imported. Wait, I didn't import ChevronDown. I'll use simple text or Arrow. Let's rely on ArrowRight rotated 90deg if facing down. */}
+                                                        {/* Actually I'll just use text (+) or (-) if no icon, or ArrowRight with rotation. */}
+                                                        <ArrowRight className="w-4 h-4 transition-transform" style={{ transform: showPast ? 'rotate(-90deg)' : 'rotate(90deg)' }} />
+                                                    </div>
+                                                </button>
 
-                                                            <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                                                                <Link
-                                                                    href={`/admin/tournament/${t.TournamentID}`}
-                                                                    className="bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
-                                                                >
-                                                                    View History <ArrowRight className="h-4 w-4" />
-                                                                </Link>
-                                                            </div>
+                                                {showPast && (
+                                                    <div className="animate-in slide-in-from-top-2 duration-300">
+                                                        <div className="grid gap-4">
+                                                            {pastTournaments.map((t) => (
+                                                                <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 opacity-80 hover:opacity-100 transition-opacity grayscale hover:grayscale-0">
+                                                                    <div>
+                                                                        <h3 className="font-bold text-lg">{t.Name}</h3>
+                                                                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                                                                            <span className="px-1.5 py-0.5 rounded font-bold uppercase bg-secondary text-muted-foreground">
+                                                                                {t.Status}
+                                                                            </span>
+                                                                            <span>• Ended {new Date(t.CreatedAt).toLocaleDateString()}</span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                                                        {t.Status === 'CLOSED' && (
+                                                                            <button
+                                                                                onClick={() => handleReopenTournament(t)}
+                                                                                className="bg-secondary/50 hover:bg-green-500/20 hover:text-green-500 text-muted-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
+                                                                                title="Re-open tournament"
+                                                                            >
+                                                                                <RotateCcw className="h-4 w-4" />
+                                                                                <span className="hidden md:inline">Re-open</span>
+                                                                            </button>
+                                                                        )}
+                                                                        <Link
+                                                                            href={`/admin/tournament/${t.TournamentID}`}
+                                                                            className="bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
+                                                                        >
+                                                                            View History <ArrowRight className="h-4 w-4" />
+                                                                        </Link>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
                                                         </div>
-                                                    ))}
-                                                </div>
+
+                                                        {/* Pagination */}
+                                                        {totalPastPages > 1 && (
+                                                            <div className="flex justify-center gap-2 mt-4">
+                                                                <button
+                                                                    className="px-3 py-1 bg-secondary rounded disabled:opacity-50"
+                                                                    disabled={pastPage === 1}
+                                                                    onClick={() => setPastPage(p => p - 1)}
+                                                                >
+                                                                    Prev
+                                                                </button>
+                                                                <span className="px-3 py-1 text-sm flex items-center">
+                                                                    Page {pastPage} / {totalPastPages}
+                                                                </span>
+                                                                <button
+                                                                    className="px-3 py-1 bg-secondary rounded disabled:opacity-50"
+                                                                    disabled={pastPage === totalPastPages}
+                                                                    onClick={() => setPastPage(p => p + 1)}
+                                                                >
+                                                                    Next
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>

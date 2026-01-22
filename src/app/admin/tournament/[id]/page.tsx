@@ -552,6 +552,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             }
 
             setBracketUrl(json.url);
+
+            // Update Status to STARTED
+            await fetch('/api/admin/tournaments', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tournamentId: id, status: 'STARTED' })
+            });
+            // Update local state
+            setTournament((prev: any) => ({ ...prev, Status: 'STARTED' }));
+
             fetchMatches(json.url); // Load matches immediately
 
             toast.success("Tournament bracket created successfully!");
