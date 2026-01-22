@@ -204,6 +204,19 @@ export async function createRegistration(data: Omit<Registration, 'id' | 'timest
     const id = uuidv4();
     const timestamp = new Date();
 
+    // Check for duplicate name (Case Insensitive)
+    // Use select instead of maybeSingle to safely handle if multiple duplicates already exist (legacy data)
+    const { data: existing } = await supabaseAdmin
+        .from('registrations')
+        .select('id')
+        .eq('tournament_id', data.tournament_id)
+        .ilike('player_name', data.player_name.trim()) // Ensure we match against trimmed input
+        .limit(1);
+
+    if (existing && existing.length > 0) {
+        throw new Error(`Player "${data.player_name}" is already registered (ชื่อซ้ำ).`);
+    }
+
     // 1. Supabase
     const { error } = await supabaseAdmin
         .from('registrations')

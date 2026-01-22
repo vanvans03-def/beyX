@@ -384,10 +384,10 @@ export default function RegistrationForm({
             return;
         }
 
-        // 3. Submit ALL valid draft profiles
+        // 3. Submit ALL valid draft profiles using Promise.allSettled to handle partial failures
         setLoading(true);
         try {
-            const results = await Promise.all(draftProfiles.map(async (p) => {
+            const results = await Promise.allSettled(draftProfiles.map(async (p) => {
                 const validation = validateProfile(p); // Re-calc points if needed
                 const payload = {
                     deviceUUID,
@@ -406,32 +406,51 @@ export default function RegistrationForm({
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.message || t('reg.error.failed'));
-                return { originalIndex: p.originalIndex, success: true };
+                return { originalIndex: p.originalIndex };
             }));
 
-            // Mark all as submitted
+            // Process Results
+            const updates: { index: number, update: Partial<Profile> }[] = [];
+            let submissionCount = 0;
+
+            results.forEach((result, idx) => {
+                const originalProfile = draftProfiles[idx];
+                if (result.status === 'fulfilled') {
+                    updates.push({
+                        index: originalProfile.originalIndex,
+                        update: { status: 'submitted', errorMsg: "" }
+                    });
+                    submissionCount++;
+                } else {
+                    const msg = result.reason?.message || "Error";
+                    // Localize common errors
+                    let localizedMsg = msg;
+                    if (msg.includes("already registered") || msg.includes("ชื่อซ้ำ")) {
+                        localizedMsg = t('reg.error.name_exists');
+                    }
+
+                    updates.push({
+                        index: originalProfile.originalIndex,
+                        update: { errorMsg: localizedMsg }
+                    });
+                }
+            });
+
             setProfiles(prev => {
                 const newProfiles = [...prev];
-                results.forEach(r => {
-                    newProfiles[r.originalIndex] = { ...newProfiles[r.originalIndex], status: 'submitted' };
+                updates.forEach(u => {
+                    newProfiles[u.index] = { ...newProfiles[u.index], ...u.update };
                 });
                 return newProfiles;
             });
 
-            setSuccess(true); // Maybe trigger a confetti or global success message?
-
-        } catch (err: any) {
-            // If one failed, we might want to handle partials?
-            // For now, just show the error on the active tab or globally?
-
-            // Suppress console error for known blocking messages to avoid alarm
-            if (!err.message?.includes("ไม่สามารถลงทะเบียนได้")) {
-                console.error("Batch submit error", err);
+            if (submissionCount > 0 && submissionCount === draftProfiles.length) {
+                setSuccess(true);
             }
 
-            // Show error on the currently active profile if it's one of the drafts?
-            // Or just a specific error message.
-            updateProfile(activeTab, { errorMsg: err.message || t('reg.error.generic') });
+        } catch (err: any) {
+            console.error("Batch submit fatal error", err);
+            updateProfile(activeTab, { errorMsg: t('reg.error.generic') });
         } finally {
             setLoading(false);
         }

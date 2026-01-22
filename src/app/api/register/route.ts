@@ -106,7 +106,7 @@ export async function POST(request: Request) {
 
         const registrationData = {
             tournament_id: tournamentId,
-            player_name: playerName,
+            player_name: playerName.trim(), // Trim name
             device_uuid: deviceUUID,
             mode: mode,
             main_deck: [mainBeys[0], mainBeys[1], mainBeys[2]],

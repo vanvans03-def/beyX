@@ -37,6 +37,13 @@ export const locales = {
         "reg.error.generic": "เกิดข้อผิดพลาดบางอย่าง",
         "reg.error.name_exists": "ชื่อนี้ถูกใช้ไปแล้ว",
         "reg.success.name_available": "ชื่อนี้ใช้ได้",
+        "admin.bulk.title": "ลงทะเบียนหลายคน",
+        "admin.bulk.placeholder": "ผู้เล่น 1\nผู้เล่น 2\nผู้เล่น 3",
+        "admin.bulk.helper_1": "กรอกรายชื่อผู้เล่นหนึ่งบรรทัดต่อคน",
+        "admin.bulk.helper_2": "ไฮไลท์สีแดง หมายถึง ชื่อซ้ำ",
+        "admin.bulk.btn": "ลงทะเบียนผู้เล่น",
+        "admin.bulk.error.internal": "พบรายชื่อซ้ำในรายการ",
+        "admin.bulk.error.highlight": "กรุณาแก้รายชื่อที่เป็นสีแดง",
 
         // Admin
         "admin.title": "จัดการทัวร์นาเมนต์",
@@ -155,6 +162,13 @@ export const locales = {
         "reg.error.generic": "Something went wrong.",
         "reg.error.name_exists": "Name already exists",
         "reg.success.name_available": "Name is available",
+        "admin.bulk.title": "Bulk Registration",
+        "admin.bulk.placeholder": "Player 1\nPlayer 2\nPlayer 3",
+        "admin.bulk.helper_1": "Enter one player name per line.",
+        "admin.bulk.helper_2": "Red highlights indicate duplicates.",
+        "admin.bulk.btn": "Register Players",
+        "admin.bulk.error.internal": "Duplicate names found in list",
+        "admin.bulk.error.highlight": "Please fix duplicates highlighted in red.",
 
         // Admin
         "admin.title": "Tournament Manager",

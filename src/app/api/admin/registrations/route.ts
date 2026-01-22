@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getRegistrations, deleteRegistration } from "@/lib/repository";
+import { getRegistrations, deleteRegistration, createRegistration } from "@/lib/repository";
+import { v4 as uuidv4 } from 'uuid';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,95 @@ export async function GET(req: Request) {
         return NextResponse.json({ success: false, message: error.message }, { status: 500 });
     }
 }
+
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        const { tournamentId, players, mode } = body;
+
+        if (!tournamentId || !players || !Array.isArray(players) || players.length === 0) {
+            return NextResponse.json({ success: false, message: "Invalid Request" }, { status: 400 });
+        }
+
+        const trimmedPlayers = players
+            .map((p: string) => p.trim())
+            .filter((p: string) => p);
+
+        if (trimmedPlayers.length === 0) {
+            return NextResponse.json({ success: false, message: "No valid player names" }, { status: 400 });
+        }
+
+        // 1. Check for Internal Duplicates in the batch
+        const uniqueInput = new Set<string>();
+        const internalDuplicates = new Set<string>();
+
+        trimmedPlayers.forEach((p: string) => {
+            const lower = p.toLowerCase();
+            if (uniqueInput.has(lower)) {
+                internalDuplicates.add(p);
+            }
+            uniqueInput.add(lower);
+        });
+
+        // 2. Check for Database Duplicates
+        const registrations = await getRegistrations(tournamentId);
+        const existingNames = new Set(registrations.map(r => r.player_name.toLowerCase()));
+
+        const dbConflicts: string[] = [];
+
+        trimmedPlayers.forEach((p: string) => {
+            if (existingNames.has(p.toLowerCase())) {
+                dbConflicts.push(p);
+            }
+        });
+
+        // 3. Return Errors if any conflicts found
+        if (dbConflicts.length > 0) {
+            return NextResponse.json({
+                success: false,
+                message: `Found ${dbConflicts.length} duplicate names already registered.`,
+                details: {
+                    conflicts: dbConflicts,
+                    internal: Array.from(internalDuplicates)
+                }
+            }, { status: 400 });
+        }
+
+        if (internalDuplicates.size > 0) {
+            return NextResponse.json({
+                success: false,
+                message: `Found duplicate names in your list.`,
+                details: {
+                    conflicts: [],
+                    internal: Array.from(internalDuplicates)
+                }
+            }, { status: 400 });
+        }
+
+        // 4. Proceed to Bulk Insert (We know they are unique now)
+        const deviceUuid = `admin-manual-${uuidv4().substring(0, 8)}`;
+
+        const promises = trimmedPlayers.map(async (playerName: string) => {
+            // Basic create without re-checking since we just checked
+            await createRegistration({
+                tournament_id: tournamentId,
+                player_name: playerName,
+                device_uuid: deviceUuid,
+                mode: mode || "Open",
+                main_deck: [],
+                reserve_decks: []
+            });
+        });
+
+        await Promise.all(promises);
+
+        return NextResponse.json({ success: true, message: `Registered ${trimmedPlayers.length} players successfully` });
+    } catch (error: any) {
+        console.error("Bulk Registration Error:", error);
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    }
+}
+
 export async function DELETE(req: Request) {
     try {
         const body = await req.json();

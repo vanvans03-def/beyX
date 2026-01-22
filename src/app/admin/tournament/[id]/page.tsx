@@ -7,7 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -101,6 +101,58 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     // Config for Scoring
     const [scoreInputs, setScoreInputs] = useState<Record<number, { p1: string, p2: string }>>({});
     const [updatingMatchIds, setUpdatingMatchIds] = useState<number[]>([]); // Track updating matches for smooth UI
+
+    // Bulk Register State
+    const [bulkPlayers, setBulkPlayers] = useState("");
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [highlightedLines, setHighlightedLines] = useState<number[]>([]);
+    const [dbConflicts, setDbConflicts] = useState<string[]>([]);
+    const [internalConflicts, setInternalConflicts] = useState<string[]>([]);
+
+    // Calculate duplicates on the fly
+    const getDuplicateLines = (text: string) => {
+        const lines = text.split('\n');
+        const seen = new Map<string, number>(); // Content -> First Line Index
+        const duplicates = new Set<number>();
+        const internalNames = new Set<string>();
+
+        lines.forEach((line, index) => {
+            const trimmed = line.trim().toLowerCase();
+            if (!trimmed) return;
+
+            if (seen.has(trimmed)) {
+                duplicates.add(index);
+                duplicates.add(seen.get(trimmed)!); // Mark the first occurrence too if duplicate found later
+                internalNames.add(line.trim());
+            } else {
+                seen.set(trimmed, index);
+            }
+        });
+
+        return { indices: Array.from(duplicates), names: Array.from(internalNames) };
+    };
+
+    // Update highlights when text changes
+    useEffect(() => {
+        const { indices, names } = getDuplicateLines(bulkPlayers);
+        // Merge with known DB conflicts (find lines that match dbConflicts)
+        const lines = bulkPlayers.split('\n');
+        const dbIndices: number[] = [];
+
+        lines.forEach((line, idx) => {
+            const val = line.trim();
+            if (val && dbConflicts.map(d => d.toLowerCase()).includes(val.toLowerCase())) {
+                dbIndices.push(idx);
+            }
+        });
+
+        setHighlightedLines([...new Set([...indices, ...dbIndices])]);
+        setInternalConflicts(names);
+    }, [bulkPlayers, dbConflicts]);
+
+    // Shuffle State
+    const [isListShuffled, setIsListShuffled] = useState(false);
+    const [shuffledData, setShuffledData] = useState<Registration[] | null>(null);
 
     // Combo Display Settings
     const [showPlayerCombo, setShowPlayerCombo] = useState(true);
@@ -663,6 +715,69 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             }
         });
     }
+
+    const handleBulkRegister = async () => {
+        if (!bulkPlayers.trim()) return;
+        setIsRegistering(true);
+        setDbConflicts([]); // Clear previous DB conflicts
+
+        // Check internal first
+        if (internalConflicts.length > 0) {
+            toast.error("Duplicate names found in list", { description: "Please fix duplicates highlighted in red." });
+            setIsRegistering(false);
+            return;
+        }
+
+        try {
+            const players = bulkPlayers.split('\n').filter(p => p.trim());
+            const res = await fetch('/api/admin/registrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tournamentId: id,
+                    players,
+                    mode: tournament?.Type || 'Open'
+                })
+            });
+            const json = await res.json();
+            if (res.ok) {
+                setBulkPlayers("");
+                setDbConflicts([]);
+                fetchData();
+                toast.success(json.message || "Players registered successfully");
+            } else {
+                // If 400 with details, show specific errors
+                if (json.details) {
+                    if (json.details.conflicts) {
+                        setDbConflicts(json.details.conflicts);
+                        toast.error("Registration Failed", { description: `Found ${json.details.conflicts.length} names already registered.` });
+                    }
+                    if (json.details.internal) {
+                        // Should be caught by client-side check but just in case
+                        toast.error("Registration Failed", { description: "Duplicate names in list." });
+                    }
+                } else {
+                    toast.error("Failed to register players", { description: json.message });
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error("Error registering players");
+        } finally {
+            setIsRegistering(false);
+        }
+    };
+
+    const handleShufflePlayers = () => {
+        if (isListShuffled) {
+            setIsListShuffled(false);
+            setShuffledData(null);
+        } else {
+            const shuffled = [...data].sort(() => Math.random() - 0.5);
+            setShuffledData(shuffled);
+            setIsListShuffled(true);
+        }
+    };
 
     // Modal State
     const [modalConfig, setModalConfig] = useState<{
@@ -2106,8 +2221,108 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     </div>
                 </div>
 
+                {/* Bulk Registration (Only for Open/Standard or when explicitly enabled) */}
+                {/* Bulk Registration (Only for Open/Standard and when Status is OPEN) */}
+                {/* Bulk Registration (Only for Open/Standard and when Status is OPEN) */}
+                {(!bracketUrl && tournament?.Status === 'OPEN' && (tournament?.Type === 'Open' || tournament?.Type === 'Standard')) && (
+                    <div className="glass-card p-6 rounded-xl space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Users className="h-5 w-5 text-primary" />
+                            <h3 className="font-bold text-foreground">{t('admin.bulk.title')}</h3>
+                        </div>
+                        <p className="text-xs text-muted-foreground opacity-80">
+                            {t('admin.bulk.helper_1')} <br />
+                            <span className="text-red-400">{t('admin.bulk.helper_2')}</span>
+                        </p>
+
+                        <div className="relative w-full rounded-lg border border-white/10 bg-black/20 overflow-hidden min-h-[128px]">
+                            {/* Backdrop for Highlights */}
+                            <div className="absolute inset-0 p-3 pointer-events-none whitespace-pre-wrap font-sans text-sm leading-[1.5em]" aria-hidden="true"
+                                ref={(el) => {
+                                    if (el && document.getElementById('bulk-textarea')) {
+                                        const ta = document.getElementById('bulk-textarea');
+                                        if (ta) el.scrollTop = ta.scrollTop;
+                                    }
+                                }}
+                            >
+                                {bulkPlayers.split('\n').map((line, i) => (
+                                    <div key={i} className="relative min-h-[1.5em] w-full break-all">
+                                        {highlightedLines.includes(i) && (
+                                            <span className="absolute inset-0 bg-red-500/20 w-full -mx-3 px-3 animate-in fade-in"
+                                                data-tooltip={dbConflicts.map(d => d.toLowerCase()).includes(line.trim().toLowerCase()) ? t('reg.error.name_exists') : t('admin.bulk.error.internal')}
+                                            />
+                                        )}
+                                        <span className="invisible">{line || ' '}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <textarea
+                                id="bulk-textarea"
+                                value={bulkPlayers}
+                                onChange={(e) => {
+                                    setBulkPlayers(e.target.value);
+                                    e.target.style.height = 'auto'; // Reset
+                                    e.target.style.height = Math.max(128, e.target.scrollHeight) + 'px'; // Auto-grow
+
+                                    // Sync scroll with backdrop
+                                    const backdrop = e.target.previousSibling as HTMLElement;
+                                    if (backdrop) backdrop.scrollTop = e.target.scrollTop;
+                                }}
+                                onScroll={(e) => {
+                                    const backdrop = (e.target as HTMLElement).previousSibling as HTMLElement;
+                                    if (backdrop) backdrop.scrollTop = (e.target as HTMLElement).scrollTop;
+                                }}
+                                className="relative z-10 w-full h-full min-h-[128px] bg-transparent text-foreground p-3 text-sm focus:outline-none resize-none leading-[1.5em] font-sans"
+                                placeholder={t('admin.bulk.placeholder')}
+                                spellCheck={false}
+                            />
+                        </div>
+
+                        {/* Error Summary */}
+                        {(internalConflicts.length > 0 || dbConflicts.length > 0) && (
+                            <div className="bg-destructive/10 text-destructive text-xs p-3 rounded-lg border border-destructive/20 animate-in slide-in-from-top-2">
+                                <p className="font-bold flex items-center gap-2 mb-1">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Cannot Register:
+                                </p>
+                                <ul className="list-disc list-inside opacity-80 space-y-0.5">
+                                    {internalConflicts.length > 0 && <li>{t('admin.bulk.error.internal')} ({internalConflicts.length})</li>}
+                                    {dbConflicts.length > 0 && <li>{t('reg.error.name_exists')} ({dbConflicts.length})</li>}
+                                </ul>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 items-center">
+                            {highlightedLines.length > 0 && <span className="text-xs text-red-400 font-bold animate-pulse">{t('admin.bulk.error.highlight')}</span>}
+                            <button
+                                onClick={handleBulkRegister}
+                                disabled={isRegistering || !bulkPlayers.trim() || highlightedLines.length > 0}
+                                className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-primary to-blue-500 text-white rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isRegistering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                                {t('admin.bulk.btn')}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                        <Users className="h-5 w-5 text-primary" />
+                        Registered Players ({data.length})
+                    </h3>
+                    <button
+                        onClick={handleShufflePlayers}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isListShuffled ? "bg-primary text-black border-primary" : "bg-secondary text-muted-foreground border-transparent hover:text-foreground"}`}
+                    >
+                        <Shuffle className="h-3.5 w-3.5" />
+                        {isListShuffled ? "Shuffled" : "Shuffle List"}
+                    </button>
+                </div>
+
                 <RegistrationTable
-                    data={data}
+                    data={isListShuffled && shuffledData ? shuffledData : data}
                     loading={loading}
                     searchQuery={searchQuery}
                     onDelete={handleDelete}
