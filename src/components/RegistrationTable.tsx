@@ -160,8 +160,8 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                 </div>
                             </td>
                             <td className="p-4 whitespace-nowrap">
-                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
-                                    {row.Mode === "Under10" ? "U10" : "NMM"}
+                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : row.Mode === "Standard" || row.Mode === "Open" ? "bg-green-500/20 text-green-400" : "bg-purple-500/20 text-purple-400"}`}>
+                                    {row.Mode === "Under10" ? "U10" : row.Mode === "Standard" || row.Mode === "Open" ? "OPEN" : "NMM"}
                                 </span>
                             </td>
                             <td className="p-4 text-xs space-y-1 min-w-[200px]">

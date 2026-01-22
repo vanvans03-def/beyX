@@ -1411,11 +1411,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     <input
                                         type="checkbox"
                                         id="showCombo"
-                                        checked={showPlayerCombo}
+                                        checked={showPlayerCombo && (tournament?.Type !== 'Open' && tournament?.Type !== 'Standard' && tournamentType !== 'Standard')}
                                         onChange={(e) => setShowPlayerCombo(e.target.checked)}
-                                        className="w-4 h-4 rounded border-gray-600"
+                                        disabled={tournament?.Type === 'Open' || tournament?.Type === 'Standard' || tournamentType === 'Standard'}
+                                        className="w-4 h-4 rounded border-gray-600 disabled:opacity-50"
                                     />
-                                    <label htmlFor="showCombo" className="text-sm">Show Player Combo (In Match)</label>
+                                    <label htmlFor="showCombo" className={`text-sm ${(tournament?.Type === 'Open' || tournament?.Type === 'Standard' || tournamentType === 'Standard') ? 'text-muted-foreground line-through' : ''}`}>Show Player Combo (In Match)</label>
                                 </div>
 
                                 <div className="p-3 bg-secondary/50 rounded-lg text-xs text-muted-foreground border border-white/5">

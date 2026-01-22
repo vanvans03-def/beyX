@@ -217,12 +217,12 @@ export default function RegistrationForm({
     }
 
     const validateDeck = (deck: string[], mode: RegistrationMode) => {
+        if (mode === "Standard") return { valid: true, message: "" };
+
         // 1. Full
         if (deck.some(b => !b)) return { valid: false, message: t('reg.validation.incomplete') };
         // 2. Unique
         if (new Set(deck).size !== 3) return { valid: false, message: t('reg.validation.duplicate') };
-
-        if (mode === "Standard") return { valid: true, message: "" };
 
         // 3. Mode
         if (mode === "Under10") {
@@ -552,7 +552,7 @@ export default function RegistrationForm({
                     </div>
 
                     {/* Copy Combo Button */}
-                    {activeTab > 0 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && (
+                    {activeTab > 0 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && tournamentType !== 'Standard' && (
                         <button
                             type="button"
                             onClick={() => copyComboFromFirst(activeTab)}

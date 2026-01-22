@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
         // 1. Validate
         const uniqueMain = new Set(body.mainBeys);
-        if ((uniqueMain.size !== 3) && body.mode !== "Unlimited") { // Basic uniqueness check
+        if ((uniqueMain.size !== 3) && body.mode !== "Unlimited" && body.mode !== "Standard") { // Basic uniqueness check
             // Actually Frontend enforces 3 unique. Server should too.
             if (uniqueMain.size !== 3) {
                 return NextResponse.json({ success: false, message: "Main Deck must use 3 unique Blades." }, { status: 400 });
