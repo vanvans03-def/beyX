@@ -1,5 +1,6 @@
 export const locales = {
     TH: {
+        "header.hosted_by": "จัดโดย",
         // Registration
         "reg.title": "ลงทะเบียนการแข่งขัน", // Registration
         "reg.placeholder.name": "กรอกชื่อที่ใช้ในการแข่งขัน", // Enter your Display Name
@@ -125,6 +126,7 @@ export const locales = {
         "gen.save": "บันทึก"
     },
     EN: {
+        "header.hosted_by": "HOSTED BY",
         // Registration
         "reg.title": "Tournament Registration",
         "reg.placeholder.name": "Enter your Display Name",

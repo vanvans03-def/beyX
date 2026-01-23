@@ -64,7 +64,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     useEffect(() => {
         fetch("/api/admin/profile")
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error("Failed to fetch profile");
+                return res.json();
+            })
             .then(data => {
                 if (data.success) setCurrentUser(data.user);
             })
@@ -439,6 +442,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const fetchStandings = async () => {
         try {
             const res = await fetch(`/api/admin/tournaments/${id}/standings`);
+            if (!res.ok) return;
             const json = await res.json();
             if (json.success) {
                 setStandings(json.data);
@@ -451,6 +455,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const pollTournamentStatus = async () => {
         try {
             const res = await fetch(`/api/admin/tournaments?id=${id}`);
+            if (!res.ok) return;
             const json = await res.json();
             if (json.success && json.data) {
                 const remoteStatus = json.data.Status;
@@ -474,6 +479,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         if (!silent) setLoadingMatches(true);
         try {
             const res = await fetch(`/api/admin/matches?tournamentUrl=${encodeURIComponent(url)}`);
+            if (!res.ok) {
+                console.error("Failed to fetch matches:", res.status, res.statusText);
+                return;
+            }
             const json = await res.json();
             if (json.matches) {
                 // Check if we need to update to avoid re-renders if data is same (NextJS state update optimization might handle it, but good to be safe)
@@ -598,6 +607,29 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             });
 
             const json = await res.json();
+
+            // Validate Registrations here before starting
+            // While RegistrationTable calculates it visually, we should ensure no "fail" status exists
+            // Since we don't have the table's internal calculation here easily without duplicating logic,
+            // we will do a quick check similarly or trust the standard "fail" logic reuse.
+            // Let's reuse a simplified check or iterate similar to validateRow from table (re-implemented briefly here or check raw data)
+
+            // Re-implement basic check:
+            const invalidPlayers = data.filter(r => {
+                let isMatch = false;
+                if (tournament?.Type === 'U10' && r.Mode === 'Under10') isMatch = true;
+                else if (tournament?.Type === 'NoMoreMeta' && r.Mode === 'NoMoreMeta') isMatch = true;
+                else if ((tournament?.Type === 'Open' || tournament?.Type === 'Standard') && (r.Mode === 'Standard' || r.Mode === 'Open')) isMatch = true;
+                return !isMatch;
+            });
+
+            if (invalidPlayers.length > 0) {
+                toast.error("Cannot start tournament", {
+                    description: `Found ${invalidPlayers.length} players with mismatched modes. Please fix or remove them.`
+                });
+                setGeneratingBracket(false);
+                return;
+            }
 
             if (!res.ok) {
                 throw new Error(json.error || 'Failed to generate bracket');
@@ -769,14 +801,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     };
 
     const handleShufflePlayers = () => {
-        if (isListShuffled) {
-            setIsListShuffled(false);
-            setShuffledData(null);
-        } else {
-            const shuffled = [...data].sort(() => Math.random() - 0.5);
-            setShuffledData(shuffled);
-            setIsListShuffled(true);
-        }
+        // Must allow unique shuffle every time
+        const shuffled = [...data].sort(() => Math.random() - 0.5);
+        setShuffledData(shuffled);
+        setIsListShuffled(true);
     };
 
     // Modal State
@@ -803,6 +831,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 fetch(`/api/admin/registrations?tournamentId=${id}`),
                 fetch(`/api/admin/tournaments?id=${id}`)
             ]);
+
+
+
+            if (!regRes.ok || !tourRes.ok) throw new Error("Failed to fetch data");
 
             const regJson = await regRes.json();
             const tourJson = await tourRes.json();
@@ -1136,13 +1168,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                             <span className="hidden md:inline">Refresh</span>
                         </button>
-                        <button
-                            onClick={copyToClipboard}
-                            className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-lg hover:bg-primary/90 text-sm font-medium transition-colors"
-                        >
-                            <Copy className="h-4 w-4" />
-                            <span className="hidden md:inline">Copy List</span>
-                        </button>
+
                     </div>
                 </header>
 
@@ -1261,14 +1287,21 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             {/* Header Section */}
                                             <div className="flex items-center justify-between min-h-[24px]">
                                                 {/* Round Info (Left) */}
-                                                <div className="text-xs text-muted-foreground font-bold uppercase tracking-wider flex items-center gap-2">
+                                                <div className="flex items-center gap-2">
                                                     {isLockedByMe && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
-                                                    <span>{t('admin.matches.round').replace('{n}', match.round.toString())}</span>
-                                                    {match.suggested_play_order && (
-                                                        <>
-                                                            <span className="text-white/20">•</span>
-                                                            <span className="text-primary/80">Match {match.suggested_play_order}</span>
-                                                        </>
+                                                    {match.suggested_play_order ? (
+                                                        <div className="flex items-baseline gap-2">
+                                                            <span className="text-sm font-black text-primary tracking-wide uppercase">
+                                                                MATCH {match.suggested_play_order}
+                                                            </span>
+                                                            <span className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-widest border-l border-white/10 pl-2">
+                                                                {t('admin.matches.round').replace('{n}', match.round.toString())}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                                                            {t('admin.matches.round').replace('{n}', match.round.toString())}
+                                                        </span>
                                                     )}
                                                 </div>
 
@@ -2312,13 +2345,36 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         <Users className="h-5 w-5 text-primary" />
                         Registered Players ({data.length})
                     </h3>
-                    <button
-                        onClick={handleShufflePlayers}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isListShuffled ? "bg-primary text-black border-primary" : "bg-secondary text-muted-foreground border-transparent hover:text-foreground"}`}
-                    >
-                        <Shuffle className="h-3.5 w-3.5" />
-                        {isListShuffled ? "Shuffled" : "Shuffle List"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* Reset Order (Only visible when shuffled) */}
+                        {isListShuffled && (
+                            <button
+                                onClick={() => {
+                                    setIsListShuffled(false);
+                                    setShuffledData(null);
+                                }}
+                                className="text-xs text-muted-foreground hover:text-destructive transition-colors px-2 font-bold"
+                            >
+                                Reset Order
+                            </button>
+                        )}
+
+                        <button
+                            onClick={handleShufflePlayers}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-secondary hover:bg-secondary/80 rounded-lg text-xs font-bold transition-all text-foreground"
+                        >
+                            <Shuffle className="h-3.5 w-3.5" />
+                            Shuffle
+                        </button>
+
+                        <button
+                            onClick={copyToClipboard}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-black rounded-lg text-xs font-bold hover:bg-green-600 transition-colors"
+                        >
+                            <Copy className="h-3.5 w-3.5" />
+                            Copy List
+                        </button>
+                    </div>
                 </div>
 
                 <RegistrationTable
@@ -2326,6 +2382,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     loading={loading}
                     searchQuery={searchQuery}
                     onDelete={handleDelete}
+                    tournamentType={tournament?.Type}
                 />
 
 

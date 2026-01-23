@@ -3,6 +3,8 @@ import { createRegistration } from "@/lib/repository";
 import gameData from "@/data/game-data.json";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const dynamic = 'force-dynamic';
+
 // Validation Logic (Duplicated from Frontend for security, usually shared via lib/types but keeping simple here)
 function validatePayload(body: any) {
     const { playerName, mode, mainBeys, totalPoints } = body;

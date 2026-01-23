@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getTournament, getUserApiKey } from "@/lib/repository";
 import { getTournamentStandings } from "@/lib/challonge";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const userId = req.headers.get('x-user-id');

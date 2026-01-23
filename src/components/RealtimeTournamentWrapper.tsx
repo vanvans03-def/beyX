@@ -7,6 +7,7 @@ import RegistrationForm from "@/components/RegistrationForm";
 import StandingsTable from "@/components/StandingsTable";
 import { getTournamentStandings } from "@/lib/challonge";
 import { Trophy } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 type Tournament = {
     id: string;
@@ -15,6 +16,7 @@ type Tournament = {
     type: 'U10' | 'NoMoreMeta' | 'Open';
     ban_list: string[];
     challonge_url?: string;
+    organizer_name?: string;
 };
 
 type Props = {
@@ -24,6 +26,7 @@ type Props = {
 };
 
 export default function RealtimeTournamentWrapper({ initialTournament, tournamentId, initialStandings }: Props) {
+    const { t } = useTranslation();
     const [tournament, setTournament] = useState<Tournament>(initialTournament);
     const [standings, setStandings] = useState<any>(initialStandings);
 
@@ -82,13 +85,13 @@ export default function RealtimeTournamentWrapper({ initialTournament, tournamen
 
             <main className="relative z-10 max-w-lg mx-auto min-h-screen px-6 py-12 flex flex-col" data-aos="fade-in" suppressHydrationWarning>
                 {/* Header */}
-                <header className="flex flex-col items-center justify-center space-y-4 mb-8">
+                <header className="flex flex-col items-center justify-center space-y-2 mb-6">
                     <div className="text-center space-y-1">
-                        <h1 className="text-4xl font-black italic text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] uppercase py-4 leading-loose">
+                        <h1 className="text-2xl font-black italic text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] uppercase py-2 leading-relaxed">
                             {tournament?.name || "TOURNAMENT REGISTER"}
                         </h1>
-                        <p className="text-xs font-bold tracking-[0.2em] text-muted-foreground uppercase">
-                            {tournament?.name ? "BeyBlade X Tournament" : "BeyBlade X • Season 2026"}
+                        <p className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase flex items-center justify-center gap-1">
+                            {t('header.hosted_by')}: <span className="text-primary">{tournament.organizer_name || "Official"}</span>
                         </p>
                     </div>
 

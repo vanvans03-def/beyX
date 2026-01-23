@@ -24,10 +24,11 @@ type Props = {
     loading: boolean;
     searchQuery: string;
     onDelete: (row: Registration) => void;
+    tournamentType?: string;
 };
 
 // Extracted validation logic
-const validateRow = (row: Registration) => {
+const validateRow = (row: Registration, tournamentType?: string) => {
     const mainBeys = [row.Main_Bey1, row.Main_Bey2, row.Main_Bey3];
     // Parse reserves
     let reserveDecks: string[][] = [];
@@ -41,6 +42,20 @@ const validateRow = (row: Registration) => {
             reserveDecks = parsed;
         }
     } catch (e) { }
+
+    // Check Tournament Type Mismatch
+    if (tournamentType) {
+        let isMatch = false;
+        if (tournamentType === 'U10' && row.Mode === 'Under10') isMatch = true;
+        else if (tournamentType === 'NoMoreMeta' && row.Mode === 'NoMoreMeta') isMatch = true;
+        else if ((tournamentType === 'Open' || tournamentType === 'Standard') && (row.Mode === 'Standard' || row.Mode === 'Open')) isMatch = true;
+        // Also allow legacy/loose matching if needed, but per request we strictly validate what is displayed.
+        // row.Mode comes from DB enum potentially? Or just strings. Frontend sends: "Under10", "NoMoreMeta", "Standard"
+
+        if (!isMatch) {
+            return { status: "fail", msg: `Type Mismatch (${row.Mode})`, reserveDecks };
+        }
+    }
 
     const checkDeck = (deck: string[]) => {
         if (row.Mode === "Under10") {
@@ -73,7 +88,7 @@ const validateRow = (row: Registration) => {
 };
 
 // Wrap in memo to prevent re-renders when parent state changes (like modals)
-const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete }: Props) {
+const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, tournamentType }: Props) {
 
     // Memoize the processed data to avoid re-parsing JSON and re-validating on every render
     // This is crucial for performance with 250+ rows
@@ -90,7 +105,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
         );
 
         return filtered.map(row => {
-            const validation = validateRow(row);
+            const validation = validateRow(row, tournamentType);
             const isMulti = (deviceCounts[row.DeviceUUID] || 0) > 1;
 
             // Generate color for multi-device
@@ -110,7 +125,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                 reserveDecks: validation.reserveDecks
             };
         });
-    }, [data, searchQuery]);
+    }, [data, searchQuery, tournamentType]);
 
     if (loading) {
         return (

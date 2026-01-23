@@ -3,6 +3,8 @@ import { getMatches, updateMatch } from '@/lib/challonge';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getUserApiKey } from '@/lib/repository';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
     const userId = request.headers.get('x-user-id');
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

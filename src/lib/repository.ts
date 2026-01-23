@@ -12,6 +12,7 @@ export type Tournament = {
     ban_list: string[];
     challonge_url?: string;
     user_id?: string; // Added for ownership check
+    organizer_name?: string;
 };
 
 export type Registration = {
@@ -77,7 +78,13 @@ export async function getTournaments(userId: string): Promise<Tournament[]> {
 export async function getTournament(id: string): Promise<Tournament | null> {
     const { data, error } = await supabaseAdmin
         .from('tournaments')
-        .select('*')
+        .select(`
+            *,
+            users (
+                shop_name,
+                username
+            )
+        `)
         .eq('id', id)
         .single();
 
@@ -85,6 +92,10 @@ export async function getTournament(id: string): Promise<Tournament | null> {
         if (error.code === 'PGRST116') return null; // Not found
         throw new Error(error.message);
     }
+
+    // @ts-ignore
+    const user = data.users;
+    const organizerName = user?.shop_name || user?.username || "Unknown Organizer";
 
     return {
         id: data.id,
@@ -94,7 +105,8 @@ export async function getTournament(id: string): Promise<Tournament | null> {
         type: data.type || 'U10',
         ban_list: data.ban_list || [],
         challonge_url: data.challonge_url,
-        user_id: data.user_id
+        user_id: data.user_id,
+        organizer_name: organizerName
     };
 }
 

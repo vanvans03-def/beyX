@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createTournament, getTournaments, getTournament, updateTournamentStatus, getUserApiKey } from "@/lib/repository";
 import { finalizeTournament } from "@/lib/challonge";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
     try {
         const userId = req.headers.get('x-user-id');

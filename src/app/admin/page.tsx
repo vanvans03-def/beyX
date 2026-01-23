@@ -465,7 +465,7 @@ export default function AdminPage() {
     const [activePage, setActivePage] = useState(1);
     const [pastPage, setPastPage] = useState(1);
     const [showPast, setShowPast] = useState(false);
-    const ITEMS_PER_PAGE = 5;
+    const [itemsPerPage, setItemsPerPage] = useState(10);
 
     // Helper to check if started (includes legacy tournaments with URL)
     const isStarted = (t: Tournament) => t.Status === 'STARTED' || (t.Status === 'OPEN' && !!(t as any).ChallongeUrl);
@@ -478,12 +478,12 @@ export default function AdminPage() {
     const pastTournamentsAll = filteredTournaments.filter(t => t.Status === 'CLOSED' || t.Status === 'COMPLETED');
 
     // Active Pagination
-    const totalActivePages = Math.ceil(activeTournamentsAll.length / ITEMS_PER_PAGE);
-    const activeTournaments = activeTournamentsAll.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE);
+    const totalActivePages = Math.ceil(activeTournamentsAll.length / itemsPerPage);
+    const activeTournaments = activeTournamentsAll.slice((activePage - 1) * itemsPerPage, activePage * itemsPerPage);
 
     // Past Pagination
-    const totalPastPages = Math.ceil(pastTournamentsAll.length / ITEMS_PER_PAGE);
-    const pastTournaments = pastTournamentsAll.slice((pastPage - 1) * ITEMS_PER_PAGE, pastPage * ITEMS_PER_PAGE);
+    const totalPastPages = Math.ceil(pastTournamentsAll.length / itemsPerPage);
+    const pastTournaments = pastTournamentsAll.slice((pastPage - 1) * itemsPerPage, pastPage * itemsPerPage);
 
     // Removed legacy auth UI block
 
@@ -794,25 +794,43 @@ export default function AdminPage() {
                                             </div>
 
                                             {/* Active Pagination */}
-                                            {totalActivePages > 1 && (
-                                                <div className="flex justify-center gap-2 mt-4">
-                                                    <button
-                                                        className="px-3 py-1 bg-secondary rounded disabled:opacity-50"
-                                                        disabled={activePage === 1}
-                                                        onClick={() => setActivePage(p => p - 1)}
+                                            {activeTournamentsAll.length > 0 && (
+                                                <div className="flex items-center justify-center gap-4 mt-4">
+                                                    {totalActivePages > 1 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                className="px-3 py-1 bg-secondary rounded disabled:opacity-50 hover:bg-white/10 transition-colors"
+                                                                disabled={activePage === 1}
+                                                                onClick={() => setActivePage(p => p - 1)}
+                                                            >
+                                                                Prev
+                                                            </button>
+                                                            <span className="text-sm font-mono text-muted-foreground min-w-[80px] text-center">
+                                                                {activePage} / {totalActivePages}
+                                                            </span>
+                                                            <button
+                                                                className="px-3 py-1 bg-secondary rounded disabled:opacity-50 hover:bg-white/10 transition-colors"
+                                                                disabled={activePage === totalActivePages}
+                                                                onClick={() => setActivePage(p => p + 1)}
+                                                            >
+                                                                Next
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    <select
+                                                        value={itemsPerPage}
+                                                        onChange={(e) => {
+                                                            setItemsPerPage(Number(e.target.value));
+                                                            setActivePage(1);
+                                                            setPastPage(1);
+                                                        }}
+                                                        className="bg-secondary rounded px-2 py-1 text-xs outline-none border border-transparent focus:border-white/10 cursor-pointer"
                                                     >
-                                                        Prev
-                                                    </button>
-                                                    <span className="px-3 py-1 text-sm flex items-center">
-                                                        Page {activePage} / {totalActivePages}
-                                                    </span>
-                                                    <button
-                                                        className="px-3 py-1 bg-secondary rounded disabled:opacity-50"
-                                                        disabled={activePage === totalActivePages}
-                                                        onClick={() => setActivePage(p => p + 1)}
-                                                    >
-                                                        Next
-                                                    </button>
+                                                        {[5, 10, 15, 20].map(n => (
+                                                            <option key={n} value={n}>{n} / page</option>
+                                                        ))}
+                                                    </select>
                                                 </div>
                                             )}
                                         </div>
@@ -874,24 +892,26 @@ export default function AdminPage() {
 
                                                         {/* Pagination */}
                                                         {totalPastPages > 1 && (
-                                                            <div className="flex justify-center gap-2 mt-4">
-                                                                <button
-                                                                    className="px-3 py-1 bg-secondary rounded disabled:opacity-50"
-                                                                    disabled={pastPage === 1}
-                                                                    onClick={() => setPastPage(p => p - 1)}
-                                                                >
-                                                                    Prev
-                                                                </button>
-                                                                <span className="px-3 py-1 text-sm flex items-center">
-                                                                    Page {pastPage} / {totalPastPages}
-                                                                </span>
-                                                                <button
-                                                                    className="px-3 py-1 bg-secondary rounded disabled:opacity-50"
-                                                                    disabled={pastPage === totalPastPages}
-                                                                    onClick={() => setPastPage(p => p + 1)}
-                                                                >
-                                                                    Next
-                                                                </button>
+                                                            <div className="flex items-center justify-center gap-4 mt-4">
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        className="px-3 py-1 bg-secondary rounded disabled:opacity-50 hover:bg-white/10 transition-colors"
+                                                                        disabled={pastPage === 1}
+                                                                        onClick={() => setPastPage(p => p - 1)}
+                                                                    >
+                                                                        Prev
+                                                                    </button>
+                                                                    <span className="text-sm font-mono text-muted-foreground min-w-[80px] text-center">
+                                                                        {pastPage} / {totalPastPages}
+                                                                    </span>
+                                                                    <button
+                                                                        className="px-3 py-1 bg-secondary rounded disabled:opacity-50 hover:bg-white/10 transition-colors"
+                                                                        disabled={pastPage === totalPastPages}
+                                                                        onClick={() => setPastPage(p => p + 1)}
+                                                                    >
+                                                                        Next
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
