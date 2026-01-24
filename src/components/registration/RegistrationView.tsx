@@ -47,7 +47,10 @@ export function RegistrationView({
         updateProfile,
         handleSubmit,
         validateDeck,
-        triggerFetchExistingPlayers // Use the trigger wrapper
+        triggerFetchExistingPlayers, // Use the trigger wrapper
+        showPlayerList,
+        existingPlayers,
+        closePlayerList
     } = hook;
 
     // Derived
@@ -393,6 +396,52 @@ export function RegistrationView({
                     />
                 );
             })()}
+
+            {/* Player List Modal */}
+            {showPlayerList && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-background border border-border rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="p-4 border-b border-white/10 flex items-center justify-between sticky top-0 bg-background/95 backdrop-blur z-10 rounded-t-2xl">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <Globe className="h-4 w-4 text-primary" />
+                                {t('reg.btn.registered_players') || 'Registered Players'} ({existingPlayers.length})
+                            </h3>
+                            <button
+                                onClick={closePlayerList}
+                                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                            >
+                                <XCircle className="h-5 w-5 text-muted-foreground hover:text-foreground" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            {existingPlayers.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    <p>{t('reg.msg.no_players') || 'No players registered yet.'}</p>
+                                </div>
+                            ) : (
+                                existingPlayers.map((name, i) => (
+                                    <div key={i} className="px-4 py-3 rounded-xl bg-secondary/30 border border-white/5 flex items-center gap-3">
+                                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold">
+                                            {i + 1}
+                                        </span>
+                                        <span className="font-medium text-foreground">{name}</span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-white/10 bg-secondary/20 rounded-b-2xl">
+                            <button
+                                onClick={closePlayerList}
+                                className="w-full py-3 bg-secondary hover:bg-secondary/80 text-foreground font-bold rounded-xl transition-all"
+                            >
+                                {t('reg.btn.close') || 'Close'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -256,6 +256,7 @@ export function useRegistration({
             const data = await res.json();
             if (data.success) {
                 setExistingPlayers(data.players || []);
+                setShowPlayerList(true);
             }
         } catch (e) {
             console.error("Failed to list players", e);
@@ -418,6 +419,7 @@ export function useRegistration({
         handleSubmit,
         validateProfile,
         validateDeck,
-        triggerFetchExistingPlayers
+        triggerFetchExistingPlayers,
+        closePlayerList: () => setShowPlayerList(false)
     };
 }

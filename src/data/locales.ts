@@ -45,6 +45,9 @@ export const locales = {
         "admin.bulk.btn": "ลงทะเบียนผู้เล่น",
         "admin.bulk.error.internal": "พบรายชื่อซ้ำในรายการ",
         "admin.bulk.error.highlight": "กรุณาแก้รายชื่อที่เป็นสีแดง",
+        "reg.btn.registered_players": "รายชื่อผู้เล่นที่ลงทะเบียน",
+        "reg.msg.no_players": "ยังไม่มีผู้เล่นลงทะเบียน",
+        "reg.btn.close": "ปิด",
 
         // Admin
         "admin.title": "จัดการทัวร์นาเมนต์",
@@ -171,6 +174,9 @@ export const locales = {
         "admin.bulk.btn": "Register Players",
         "admin.bulk.error.internal": "Duplicate names found in list",
         "admin.bulk.error.highlight": "Please fix duplicates highlighted in red.",
+        "reg.btn.registered_players": "Registered Players",
+        "reg.msg.no_players": "No players registered yet.",
+        "reg.btn.close": "Close",
 
         // Admin
         "admin.title": "Tournament Manager",
