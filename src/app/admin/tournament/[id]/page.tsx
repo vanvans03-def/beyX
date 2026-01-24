@@ -1082,7 +1082,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 m.identifier?.toLowerCase().includes(q) ||
                 m.suggested_play_order?.toString().includes(q)
             );
-        });
+        })
+        .sort((a, b) => (a.suggested_play_order || 0) - (b.suggested_play_order || 0));
     const historyMatches = matches
         .filter(m => m.state === 'complete')
         .sort((a, b) => new Date(b.completed_at || b.updated_at || "").getTime() - new Date(a.completed_at || a.updated_at || "").getTime());
