@@ -1,7 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Trophy, LockKeyhole, Calendar } from "lucide-react";
+import { ArrowRight, Trophy, LockKeyhole, Calendar, MessageCircle } from "lucide-react";
+
 import { getSystemSetting } from "@/lib/repository";
+import appConfig from "@/data/app-config.json";
 
 export const dynamic = 'force-dynamic';
 
@@ -67,8 +69,23 @@ export default async function Home() {
         </div>
       </main>
 
-      <footer className="absolute bottom-6 text-[10px] text-muted-foreground/30 uppercase tracking-[0.3em]">
-        Powered by สายใต้ยิม - V0.0.3
+      <footer className="absolute bottom-6 flex items-center justify-center gap-4 text-[10px] uppercase tracking-wider text-muted-foreground/40 font-medium">
+        <div className="flex items-center gap-2">
+          <span>Powered by สายใต้ยิม</span>
+          <span className="opacity-30">•</span>
+          <span>V{appConfig.version}</span>
+        </div>
+
+        <a
+          href="https://www.facebook.com/beyx.system"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 hover:text-primary transition-colors pl-4 border-l border-white/10"
+          title="Contact Developer"
+        >
+          <MessageCircle className="h-3 w-3" />
+          <span>Contact</span>
+        </a>
       </footer>
     </div>
   );

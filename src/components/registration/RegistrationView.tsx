@@ -2,7 +2,8 @@
 
 import { useRegistration } from "./useRegistration";
 import { cn } from "@/lib/utils";
-import { Loader2, AlertTriangle, CheckCircle2, Plus, Trash2, Globe, Eye, XCircle } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle2, Plus, Trash2, Globe, Eye, XCircle, MessageCircle } from "lucide-react";
+import appConfig from "@/data/app-config.json";
 import { VisualSelector } from "@/components/ui/VisualSelector";
 import { BladeSlot } from "./BladeSlot";
 import gameData from "@/data/game-data.json";

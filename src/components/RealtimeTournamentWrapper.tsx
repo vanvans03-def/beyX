@@ -8,6 +8,8 @@ import StandingsTable from "@/components/StandingsTable";
 import { getTournamentStandings } from "@/lib/challonge";
 import { Trophy } from "lucide-react";
 import { useTranslation } from "@/hooks/useTranslation";
+import appConfig from "@/data/app-config.json";
+import { MessageCircle } from "lucide-react";
 
 type Tournament = {
     id: string;
@@ -133,12 +135,26 @@ export default function RealtimeTournamentWrapper({ initialTournament, tournamen
                 </div>
 
                 {/* Footer */}
-                <footer className="mt-8 text-center">
-                    <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest font-medium">
-                        Powered by สายใต้ยิม
-                    </p>
+                <footer className="mt-8 flex items-center justify-center gap-4 text-[10px] uppercase tracking-wider text-muted-foreground/40 font-medium pb-6">
+                    <div className="flex items-center gap-2">
+                        <span>Powered by สายใต้ยิม</span>
+                        <span className="opacity-30">•</span>
+                        <span>V{appConfig.version}</span>
+                    </div>
+
+                    <a
+                        href="https://www.facebook.com/beyx.system"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 hover:text-primary transition-colors pl-4 border-l border-white/10"
+                        title="Contact Developer"
+                    >
+                        <MessageCircle className="h-3 w-3" />
+                        <span>Contact</span>
+                    </a>
                 </footer>
+
             </main>
         </div>
-    );
+    )
 }
