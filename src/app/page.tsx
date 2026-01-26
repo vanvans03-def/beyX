@@ -22,7 +22,7 @@ export default async function Home() {
             BEYX <span className="text-primary">SYSTEM</span>
           </h1>
           <p className="text-muted-foreground text-lg">
-            Tournament Registration & Managment Platform
+            Tournament Registration & Management Platform
           </p>
         </div>
 
