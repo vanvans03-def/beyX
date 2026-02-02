@@ -57,6 +57,19 @@ export async function POST(request: Request) {
             );
         }
 
+        // Handle Axios 422 (Unprocessable Entity) - Validation Errors
+        if (error.response?.status === 422) {
+            const validationErrors = error.response.data?.errors;
+            const errorMessage = Array.isArray(validationErrors)
+                ? validationErrors.join(', ')
+                : 'Validation failed on Challonge side.';
+
+            return NextResponse.json(
+                { error: `Challonge Validation Error: ${errorMessage}` },
+                { status: 422 }
+            );
+        }
+
         return NextResponse.json(
             { error: error.message || 'Failed to generate bracket' },
             { status: 500 }

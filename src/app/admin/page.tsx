@@ -415,6 +415,17 @@ export default function AdminPage() {
     };
 
     const handleEndTournament = (t: Tournament) => {
+        if (isStarted(t)) {
+            setModalConfig({
+                isOpen: true,
+                title: "Cannot End Started Tournament",
+                desc: "กรุณาแข่งให้จบ หรือ reset การแข่งขัน",
+                type: "alert",
+                variant: "destructive"
+            });
+            return;
+        }
+
         setModalConfig({
             isOpen: true,
             title: "End Tournament?",
@@ -774,7 +785,7 @@ export default function AdminPage() {
                                                                     className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors"
                                                                     title="End Tournament"
                                                                 >
-                                                                    <LockKeyhole className="h-5 w-5" />
+                                                                    {isStarted(t) ? <RotateCcw className="h-5 w-5" /> : <X className="h-5 w-5" />}
                                                                 </button>
                                                             </div>
                                                             <Link

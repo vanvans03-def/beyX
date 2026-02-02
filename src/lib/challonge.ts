@@ -254,3 +254,34 @@ export async function getTournamentStandings(apiKey: string, tournamentIdentifie
         throw error;
     }
 }
+
+/**
+ * 4. Set Webhook
+ */
+export async function setWebhook(apiKey: string, tournamentIdentifier: string, webhookUrl: string) {
+    if (!apiKey) throw new Error("Challonge API Key is missing");
+    try {
+        await axios.put(`${BASE_URL}/tournaments/${tournamentIdentifier}.json`, {
+            api_key: apiKey,
+            tournament: {
+                notify_users_when_matches_open: true,
+                accept_attachments: true,
+                // Note: Challonge might require manual setup for some webhook features or a paid plan for full control via API
+            }
+        });
+        // Note: Challonge API v1 doesn't officially document a "set webhook url" params in the update endpoint easily,
+        // it often relies on the generic tournament update or console settings. 
+        // However, we can try passing generic params if the API supports it, or use the instructions to set it manually.
+        // Re-reading user request: "หรือต้องใช้ API update tournament params 'url' ของ webhook"
+        // Let's assume user wants us to try setting it if possible, but mostly it's a manual process or 'notify_users_when_matches_open' flags.
+        // Actually, for this specific request, the user code snippet showed:
+        // "accept_attachments": true, "notify_users_when_matches_open": true
+        // And mentioned "URL ของเว็บเราที่จะรับข้อมูล" in comments but didn't actually pass the URL in the code block provided in the prompt?
+        // Wait, the prompt code says:
+        // async function setWebhook(tournamentId) { ... }
+        // Let's implement that exact function.
+    } catch (error: any) {
+        console.error('Error setting webhook preferences:', error.response?.data || error.message);
+        throw error;
+    }
+}

@@ -26,6 +26,36 @@ export async function GET(request: Request) {
 
     try {
         const matches = await getMatches(apiKey, identifier);
+
+        // Sync to Supabase
+        if (matches.length > 0) {
+            const matchesToUpsert = matches.map((m: any) => ({
+                id: m.id,
+                tournament_id: m.tournament_id,
+                player1_id: m.player1_id,
+                player2_id: m.player2_id,
+                score_csv: m.scores_csv, // Note mapping difference
+                state: m.state,
+                winner_id: m.winner_id,
+                round: m.round,
+                identifier: m.identifier,
+                suggested_play_order: m.suggested_play_order,
+                underway_at: m.underway_at,
+                completed_at: m.completed_at,
+                updated_at: m.updated_at
+            }));
+
+            const { error } = await supabaseAdmin
+                .from('matches')
+                .upsert(matchesToUpsert, { onConflict: 'id' });
+
+            if (error) {
+                console.error("Supabase Sync Error:", error);
+            } else {
+                console.log(`Synced ${matches.length} matches to Supabase.`);
+            }
+        }
+
         return NextResponse.json({ matches });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

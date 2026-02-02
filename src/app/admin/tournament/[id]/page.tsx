@@ -561,7 +561,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 title: t('admin.matches.confirm_win'),
                 content: (
                     <div className="text-center text-lg">
-                        {t('admin.matches.win_confirm_text_prefix')} <span className="font-bold text-green-500 text-xl">{playerName}</span> {t('admin.matches.win_confirm_text_suffix')}
+                        {t('admin.matches.win_confirm_text_prefix')} <span className="font-bold text-green-500 text-xl break-all">{playerName}</span> {t('admin.matches.win_confirm_text_suffix')}
                     </div>
                 ),
                 type: "confirm",
@@ -584,6 +584,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         // Save settings
         if (typeof window !== 'undefined') {
             localStorage.setItem(`tournament_settings_${id}_showCombo`, String(showPlayerCombo));
+        }
+
+        // Check Challonge Limits
+        if (data.length > 256) {
+            toast.error("Participant Limit Exceeded", {
+                description: `Challonge supports a maximum of 256 participants. You have ${data.length}. Please reduce the number of players.`
+            });
+            setGeneratingBracket(false);
+            return;
         }
 
         try {
@@ -774,6 +783,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             const json = await res.json();
             if (res.ok) {
                 setBulkPlayers("");
+                // Reset textarea height
+                const ta = document.getElementById('bulk-textarea');
+                if (ta) ta.style.height = '';
                 setDbConflicts([]);
                 fetchData();
                 toast.success(json.message || "Players registered successfully");
@@ -834,7 +846,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
 
 
-            if (!regRes.ok || !tourRes.ok) throw new Error("Failed to fetch data");
+            if (!regRes.ok) {
+                const text = await regRes.text();
+                console.error(`Registrations fetch failed: ${regRes.status} ${text}`);
+            }
+            if (!tourRes.ok) {
+                const text = await tourRes.text();
+                console.error(`Tournament fetch failed: ${tourRes.status} ${text}`);
+            }
+
+            if (!regRes.ok || !tourRes.ok) throw new Error(`Failed to fetch data (Reg:${regRes.status}, Tour:${tourRes.status})`);
 
             const regJson = await regRes.json();
             const tourJson = await tourRes.json();
@@ -1176,7 +1197,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 {/* Sharing & Info Section */}
                 {/* Bracket Section - If URL exists */}
                 {bracketUrl && (
-                    <TournamentBracket challongeUrl={bracketUrl} />
+                    <TournamentBracket url={bracketUrl} />
                 )}
 
                 {/* Standings Section */}
@@ -1348,7 +1369,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 <div
                                                     role="button"
                                                     tabIndex={0}
-                                                    className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
+                                                    className={`flex-1 min-w-0 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
                                                         ${match.winner_id === match.player1_id
                                                             ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                                                             : 'bg-secondary/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 border border-transparent hover:border-blue-500/30 cursor-pointer'
@@ -1360,7 +1381,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         }
                                                     }}
                                                 >
-                                                    <div className="font-bold text-sm truncate w-full">{match.player1?.name || "???"}</div>
+                                                    <div className="font-bold text-sm w-full break-all line-clamp-2 leading-tight min-h-[2.5em] flex items-center justify-center">{match.player1?.name || "???"}</div>
                                                     <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal flex-1 flex items-center justify-center">Click to Win</span>
 
                                                     {showPlayerCombo && (
@@ -1408,7 +1429,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 <div
                                                     role="button"
                                                     tabIndex={0}
-                                                    className={`flex-1 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
+                                                    className={`flex-1 min-w-0 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
                                                         ${match.winner_id === match.player2_id
                                                             ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                                                             : 'bg-secondary/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-transparent hover:border-red-500/30 cursor-pointer'
@@ -1420,7 +1441,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         }
                                                     }}
                                                 >
-                                                    <div className="font-bold text-sm truncate w-full">{match.player2?.name || "???"}</div>
+                                                    <div className="font-bold text-sm w-full break-all line-clamp-2 leading-tight min-h-[2.5em] flex items-center justify-center">{match.player2?.name || "???"}</div>
                                                     <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal flex-1 flex items-center justify-center">Click to Win</span>
 
                                                     {showPlayerCombo && (
@@ -1624,9 +1645,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             <div className="flex flex-col gap-1 text-sm flex-1">
                                                 <div className="text-xs text-muted-foreground uppercase">Round {match.round}</div>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player1_id) ? "font-bold text-green-400" : ""}>{match.player1?.name}</span>
+                                                    <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player1_id) ? "font-bold text-green-400 break-all" : "break-all"}>{match.player1?.name}</span>
                                                     <span className="text-muted-foreground">vs</span>
-                                                    <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player2_id) ? "font-bold text-green-400" : ""}>{match.player2?.name}</span>
+                                                    <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player2_id) ? "font-bold text-green-400 break-all" : "break-all"}>{match.player2?.name}</span>
                                                 </div>
                                             </div>
 
@@ -1669,7 +1690,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                     : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
                                                             )}
                                                         >
-                                                            <span className="break-words leading-tight">{match.player1?.name || "Player 1"}</span>
+                                                            <span className="break-all leading-tight">{match.player1?.name || "Player 1"}</span>
                                                             {match.winner_id === match.player1_id && (
                                                                 <div className="h-5 w-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
                                                                     <Check className="h-3 w-3" />
@@ -1695,7 +1716,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                     : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
                                                             )}
                                                         >
-                                                            <span className="break-words leading-tight">{match.player2?.name || "Player 2"}</span>
+                                                            <span className="break-all leading-tight">{match.player2?.name || "Player 2"}</span>
                                                             {match.winner_id === match.player2_id && (
                                                                 <div className="h-5 w-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
                                                                     <Check className="h-3 w-3" />

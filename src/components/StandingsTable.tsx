@@ -47,7 +47,7 @@ export default function StandingsTable({ standings, mode }: { standings: Standin
                     </div>
 
                     <div className="flex-1 min-w-0">
-                        <div className="font-bold truncate text-base">{player.name}</div>
+                        <div className="font-bold break-all line-clamp-2 text-base leading-tight">{player.name}</div>
                         {shouldShowMisc(player.misc) && (
                             <div className="text-xs text-muted-foreground truncate">{player.misc}</div>
                         )}

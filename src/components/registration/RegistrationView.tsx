@@ -321,7 +321,7 @@ export function RegistrationView({
                             <div key={idx} className="flex items-start gap-2 text-sm text-destructive font-bold bg-destructive/10 p-3 rounded-lg border border-destructive/20 shadow-sm">
                                 <AlertTriangle className="h-5 w-5 shrink-0" />
                                 <div className="flex flex-col">
-                                    <span className="underline mb-0.5">{p.name || `Player ${idx + 1}`}</span>
+                                    <span className="underline mb-0.5 break-all">{p.name || `Player ${idx + 1}`}</span>
                                     <span className="font-normal opacity-90">{p.errorMsg}</span>
                                 </div>
                             </div>
@@ -426,7 +426,7 @@ export function RegistrationView({
                                         <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold">
                                             {i + 1}
                                         </span>
-                                        <span className="font-medium text-foreground">{name}</span>
+                                        <span className="font-medium text-foreground break-all line-clamp-2 flex-1 min-w-0 leading-tight">{name}</span>
                                     </div>
                                 ))
                             )}

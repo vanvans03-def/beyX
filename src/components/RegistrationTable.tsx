@@ -160,8 +160,8 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                             <td className="p-4 whitespace-nowrap text-muted-foreground">
                                 {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </td>
-                            <td className="p-4 font-medium text-foreground whitespace-nowrap">
-                                <div className="flex items-center gap-2">
+                            <td className="p-4 font-medium text-foreground min-w-[150px] max-w-[200px]">
+                                <div className="flex items-center gap-2 break-all leading-tight">
                                     {row.PlayerName}
                                     {row.isMulti && (
                                         <div
