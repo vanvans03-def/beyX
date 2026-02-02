@@ -40,7 +40,7 @@ export default function LiveMatches({ tournamentId }: LiveMatchesProps) {
         const channel = supabase
             .channel('realtime-matches')
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches' },
-                (payload) => {
+                (payload: any) => {
                     console.log('Realtime update received:', payload);
                     const updatedMatch = payload.new as Match;
 
@@ -57,7 +57,7 @@ export default function LiveMatches({ tournamentId }: LiveMatchesProps) {
                 }
             )
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches' },
-                (payload) => {
+                (payload: any) => {
                     console.log('Realtime insert received:', payload);
                     const newMatch = payload.new as Match;
                     setMatches(prev => [newMatch, ...prev]);
