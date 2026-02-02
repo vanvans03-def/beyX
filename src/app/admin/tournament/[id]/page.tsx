@@ -505,6 +505,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         // Start loading state for this match
         setUpdatingMatchIds(prev => [...prev, matchId]);
 
+        // Broadcast start loading
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'match-updating',
+                payload: { matchId, isUpdating: true }
+            });
+        }
+
         // Optimistic update removed to prevent flickering colors as per user request
         // We rely on the loading spinner and final fetch to update UI state
 
@@ -547,6 +556,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         } finally {
             // Remove from loading state
             setUpdatingMatchIds(prev => prev.filter(id => id !== matchId));
+
+            // Broadcast stop loading
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'match-updating',
+                    payload: { matchId, isUpdating: false }
+                });
+            }
         }
     };
 
@@ -1023,6 +1041,20 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     if (bracketUrl) {
                         fetchMatches(bracketUrl, true);
                     }
+                }
+            )
+            .on(
+                'broadcast',
+                { event: 'match-updating' },
+                (payload) => {
+                    const { matchId, isUpdating } = payload.payload;
+                    setUpdatingMatchIds(prev => {
+                        if (isUpdating) {
+                            return [...prev, matchId];
+                        } else {
+                            return prev.filter(id => id !== matchId);
+                        }
+                    });
                 }
             )
             .on('presence', { event: 'sync' }, () => {
@@ -1625,7 +1657,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="bg-popover/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 w-[360px] max-h-[500px] flex flex-col text-popover-foreground">
+                        <div className="bg-popover/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 w-[90vw] max-w-[360px] max-h-[500px] flex flex-col text-popover-foreground">
                             <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
                                 <h4 className="font-bold text-sm flex items-center gap-2">
                                     <Clock className="h-4 w-4 text-primary" />
@@ -1640,109 +1672,90 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 {historyMatches.length === 0 ? (
                                     <div className="text-center py-8 text-muted-foreground">No completed matches yet.</div>
                                 ) : (
-                                    historyMatches.map(match => (
-                                        <div key={match.id} className="bg-secondary/30 p-3 rounded flex items-center justify-between border border-white/5">
-                                            <div className="flex flex-col gap-1 text-sm flex-1">
-                                                <div className="text-xs text-muted-foreground uppercase">Round {match.round}</div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player1_id) ? "font-bold text-green-400 break-all" : "break-all"}>{match.player1?.name}</span>
-                                                    <span className="text-muted-foreground">vs</span>
-                                                    <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player2_id) ? "font-bold text-green-400 break-all" : "break-all"}>{match.player2?.name}</span>
-                                                </div>
-                                            </div>
+                                    historyMatches
 
-                                            {updatingMatchIds.includes(match.id) ? (
-                                                <div className="flex items-center justify-center p-4 animate-in fade-in bg-black/20 rounded-xl border border-white/5">
-                                                    <div className="flex flex-col items-center gap-2">
-                                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                                                        <span className="text-[10px] text-muted-foreground">Updating result...</span>
+                                        .map(match => (
+                                            <div key={match.id} className="bg-secondary/30 p-3 rounded flex items-center justify-between border border-white/5">
+                                                <div className="flex flex-col gap-1 text-sm flex-1">
+                                                    <div className="text-xs text-muted-foreground uppercase">Round {match.round}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player1_id) ? "font-bold text-green-400 whitespace-normal break-all flex-1 min-w-0 text-right leading-tight" : "whitespace-normal break-all flex-1 min-w-0 text-right leading-tight"}>{match.player1?.name}</span>
+                                                        <span className="text-muted-foreground shrink-0 px-1">vs</span>
+                                                        <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player2_id) ? "font-bold text-green-400 whitespace-normal break-all flex-1 min-w-0 text-left leading-tight" : "whitespace-normal break-all flex-1 min-w-0 text-left leading-tight"}>{match.player2?.name}</span>
                                                     </div>
                                                 </div>
-                                            ) : editingMatchId === match.id ? (
-                                                <div className="w-full animate-in fade-in zoom-in-95 duration-200 mt-2 p-3 bg-secondary/40 backdrop-blur-sm rounded-xl border border-primary/20 shadow-2xl relative overflow-hidden group">
 
-                                                    {/* Header */}
-                                                    <div className="flex items-center justify-between mb-3 pl-1">
-                                                        <span className="text-xs font-bold text-primary flex items-center gap-1">
-                                                            <Trophy className="h-3 w-3" />
-                                                            Select Winner
-                                                        </span>
-                                                        <button
-                                                            onClick={() => setEditingMatchId(null)}
-                                                            className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-colors"
-                                                        >
-                                                            <XCircle className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Vertical Stack for better long name support */}
-                                                    <div className="flex flex-col gap-2">
-                                                        {/* Player 1 Button */}
-                                                        <button
-                                                            onClick={() => {
-                                                                confirmUpdateMatch(match.id, "1-0", match.player1_id);
-                                                                setEditingMatchId(null);
-                                                            }}
-                                                            className={cn(
-                                                                "relative w-full p-3 rounded-lg text-sm font-bold transition-all border flex items-center justify-between gap-3 text-left group/btn",
-                                                                match.winner_id === match.player1_id
-                                                                    ? "bg-green-500/10 text-green-400 border-green-500/50 shadow-[inset_0_0_10px_rgba(74,222,128,0.1)]"
-                                                                    : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
-                                                            )}
-                                                        >
-                                                            <span className="break-all leading-tight">{match.player1?.name || "Player 1"}</span>
-                                                            {match.winner_id === match.player1_id && (
-                                                                <div className="h-5 w-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
-                                                                    <Check className="h-3 w-3" />
-                                                                </div>
-                                                            )}
-                                                        </button>
-
-                                                        {/* VS Divider */}
-                                                        <div className="relative h-px bg-white/5 w-full my-1 flex items-center justify-center">
-                                                            <span className="bg-background px-2 text-[9px] font-bold text-muted-foreground/50 uppercase">vs</span>
+                                                {updatingMatchIds.includes(match.id) ? (
+                                                    <div className="flex items-center justify-center p-4 animate-in fade-in bg-black/20 rounded-xl border border-white/5">
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                                            <span className="text-[10px] text-muted-foreground">Updating result...</span>
                                                         </div>
-
-                                                        {/* Player 2 Button */}
-                                                        <button
-                                                            onClick={() => {
-                                                                confirmUpdateMatch(match.id, "0-1", match.player2_id);
-                                                                setEditingMatchId(null);
-                                                            }}
-                                                            className={cn(
-                                                                "relative w-full p-3 rounded-lg text-sm font-bold transition-all border flex items-center justify-between gap-3 text-left group/btn",
-                                                                match.winner_id === match.player2_id
-                                                                    ? "bg-green-500/10 text-green-400 border-green-500/50 shadow-[inset_0_0_10px_rgba(74,222,128,0.1)]"
-                                                                    : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
-                                                            )}
-                                                        >
-                                                            <span className="break-all leading-tight">{match.player2?.name || "Player 2"}</span>
-                                                            {match.winner_id === match.player2_id && (
-                                                                <div className="h-5 w-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
-                                                                    <Check className="h-3 w-3" />
-                                                                </div>
-                                                            )}
-                                                        </button>
                                                     </div>
-                                                </div>
-                                            ) : (tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') && (
-                                                <button
-                                                    onClick={() => {
-                                                        const parts = match.scores_csv.split('-');
-                                                        setScoreInputs(prev => ({
-                                                            ...prev,
-                                                            [match.id]: { p1: parts[0] || '0', p2: parts[1] || '0' }
-                                                        }));
-                                                        setEditingMatchId(match.id);
-                                                    }}
-                                                    className="p-2 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors"
-                                                    title="Edit Result"
-                                                >
-                                                    <Edit className="h-4 w-4" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    ))
+                                                ) : (tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setModalConfig({
+                                                                isOpen: true,
+                                                                title: "Select Winner",
+                                                                content: (
+                                                                    <div className="flex flex-col gap-3 mt-2">
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                confirmUpdateMatch(match.id, "1-0", match.player1_id);
+                                                                                setModalConfig(prev => ({ ...prev, isOpen: false }));
+                                                                            }}
+                                                                            className={cn(
+                                                                                "relative w-full p-4 rounded-xl text-sm font-bold transition-all border flex items-center justify-between gap-3 text-left group/btn",
+                                                                                match.winner_id === match.player1_id
+                                                                                    ? "bg-green-500/10 text-green-400 border-green-500/50 shadow-[inset_0_0_10px_rgba(74,222,128,0.1)]"
+                                                                                    : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
+                                                                            )}
+                                                                        >
+                                                                            <span className="break-all leading-tight flex-1 min-w-0 text-left">{match.player1?.name || "Player 1"}</span>
+                                                                            {match.winner_id === match.player1_id && (
+                                                                                <div className="h-6 w-6 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                                                                                    <Check className="h-4 w-4" />
+                                                                                </div>
+                                                                            )}
+                                                                        </button>
+
+                                                                        <div className="relative h-px bg-white/5 w-full flex items-center justify-center">
+                                                                            <span className="bg-background px-2 text-[10px] font-bold text-muted-foreground/50 uppercase">vs</span>
+                                                                        </div>
+
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                confirmUpdateMatch(match.id, "0-1", match.player2_id);
+                                                                                setModalConfig(prev => ({ ...prev, isOpen: false }));
+                                                                            }}
+                                                                            className={cn(
+                                                                                "relative w-full p-4 rounded-xl text-sm font-bold transition-all border flex items-center justify-between gap-3 text-left group/btn",
+                                                                                match.winner_id === match.player2_id
+                                                                                    ? "bg-green-500/10 text-green-400 border-green-500/50 shadow-[inset_0_0_10px_rgba(74,222,128,0.1)]"
+                                                                                    : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
+                                                                            )}
+                                                                        >
+                                                                            <span className="break-all leading-tight flex-1 min-w-0 text-left">{match.player2?.name || "Player 2"}</span>
+                                                                            {match.winner_id === match.player2_id && (
+                                                                                <div className="h-6 w-6 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                                                                                    <Check className="h-4 w-4" />
+                                                                                </div>
+                                                                            )}
+                                                                        </button>
+                                                                    </div>
+                                                                ),
+                                                                type: "custom"
+                                                            });
+                                                        }}
+                                                        className="p-2 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors ml-2"
+                                                        title="Edit Result"
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))
                                 )}
                             </div>
                         </div>
