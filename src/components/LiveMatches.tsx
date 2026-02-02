@@ -63,7 +63,7 @@ export default function LiveMatches({ tournamentId }: LiveMatchesProps) {
                     setMatches(prev => [newMatch, ...prev]);
                 }
             )
-            .subscribe((status) => {
+            .subscribe((status: any) => {
                 setStatus(status);
             });
 

@@ -23,7 +23,7 @@ const TournamentBracket: React.FC<TournamentBracketProps> = ({ url }) => {
                 height="600"
                 frameBorder="0"
                 scrolling="auto"
-                allowtransparency="true"
+                allowTransparency={true}
                 sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                 className="w-full h-[600px] md:h-[800px]"
                 title="Tournament Bracket"
