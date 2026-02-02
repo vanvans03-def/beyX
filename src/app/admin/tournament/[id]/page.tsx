@@ -105,6 +105,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [scoreInputs, setScoreInputs] = useState<Record<number, { p1: string, p2: string }>>({});
     const [updatingMatchIds, setUpdatingMatchIds] = useState<number[]>([]); // Track updating matches for smooth UI
 
+    // Arena State
+    const [arenaCount, setArenaCount] = useState(0);
+    const [selectedArenaMatchId, setSelectedArenaMatchId] = useState<number | null>(null);
+
     // Bulk Register State
     const [bulkPlayers, setBulkPlayers] = useState("");
     const [isRegistering, setIsRegistering] = useState(false);
@@ -288,7 +292,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             setModalConfig({
                 isOpen: true,
                 title: "Error",
-                desc: "Failed to generate image. Please try again.",
+                desc: t('admin.error.gen_image'),
                 type: "alert",
                 variant: "destructive"
             });
@@ -351,7 +355,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             setModalConfig({
                 isOpen: true,
                 title: "Error",
-                desc: "Failed to generate ban list image. Please try again.",
+                desc: t('admin.error.gen_ban_list'),
                 type: "alert",
                 variant: "destructive"
             });
@@ -373,8 +377,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 const file = new File([blob], `invite-${tournament?.Name || 'tournament'}.jpg`, { type: 'image/jpeg' });
                 await navigator.share({
                     files: [file],
-                    title: 'Tournament Invite',
-                    text: `Join ${tournament?.Name || 'our tournament'}!`
+                    title: t('admin.share.invite_title'),
+                    text: t('admin.share.invite_text', { name: tournament?.Name || 'our tournament' })
                 });
                 return;
             }
@@ -413,8 +417,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 const file = new File([blob], `banlist-${tournament?.Name || 'tournament'}.jpg`, { type: 'image/jpeg' });
                 await navigator.share({
                     files: [file],
-                    title: 'Tournament Ban List',
-                    text: `Ban list for ${tournament?.Name || 'our tournament'}`
+                    title: t('admin.share.ban_list_title'),
+                    text: t('admin.share.ban_list_text', { name: tournament?.Name || 'our tournament' })
                 });
                 return;
             }
@@ -606,8 +610,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
         // Check Challonge Limits
         if (data.length > 256) {
-            toast.error("Participant Limit Exceeded", {
-                description: `Challonge supports a maximum of 256 participants. You have ${data.length}. Please reduce the number of players.`
+            toast.error(t('admin.error.limit_exceeded'), {
+                description: t('admin.error.limit_desc', { n: data.length })
             });
             setGeneratingBracket(false);
             return;
@@ -629,7 +633,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     type: tournamentType,
                     shuffle: isShuffle,
                     quickAdvance: isQuickAdvance,
-                    tournamentId: id // Send ID to save URL
+                    tournamentId: id, // Send ID to save URL
+                    arenaCount: arenaCount // Send Arena Count
                 })
             });
 
@@ -651,8 +656,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             });
 
             if (invalidPlayers.length > 0) {
-                toast.error("Cannot start tournament", {
-                    description: `Found ${invalidPlayers.length} players with mismatched modes. Please fix or remove them.`
+                toast.error(t('admin.error.start_failed'), {
+                    description: t('admin.error.mismatched_modes', { n: invalidPlayers.length })
                 });
                 setGeneratingBracket(false);
                 return;
@@ -686,8 +691,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             if (errorMessage && (errorMessage.includes("API Key") || errorMessage.includes("401"))) {
                 setModalConfig({
                     isOpen: true,
-                    title: "Challonge Authorization Failed",
-                    desc: "Unable to connect to Challonge. Please check that your API Key is correct in the Admin Dashboard settings.",
+                    title: t('admin.error.challonge_auth'),
+                    desc: t('admin.error.challonge_auth_desc'),
                     type: "alert",
                     variant: 'destructive'
                 });
@@ -703,8 +708,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const handleEndTournament = async () => {
         setModalConfig({
             isOpen: true,
-            title: "End Tournament?",
-            desc: "This will close the tournament and mark it as completed.",
+            title: t('admin.end_confirm_title'),
+            desc: t('admin.end_confirm_desc', { name: tournament?.Name || '' }),
             type: "confirm",
             onConfirm: async () => {
                 setModalConfig(prev => ({ ...prev, isOpen: false }));
@@ -742,11 +747,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const handleResetTournament = async () => {
         setModalConfig({
             isOpen: true,
-            title: "Reset Tournament?",
-            desc: "WARNING: This will delete the current bracket link and reset the status to OPEN. This allows you to regenerate the bracket or add more players.",
+            title: t('admin.reset.title'),
+            desc: t('admin.reset.desc'),
             type: "confirm",
             variant: "destructive",
-            confirmText: "Reset & Delete Bracket Link",
+            confirmText: t('admin.reset.confirm'),
             onConfirm: async () => {
                 setModalConfig(prev => ({ ...prev, isOpen: false }));
                 try {
@@ -760,7 +765,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     setMatches([]);
                     setStandings([]);
                     fetchData(); // Refresh all
-                    toast.success("Reset Complete: Tournament has been reset to OPEN.");
+                    toast.success(t('admin.toast.reset_complete'));
                 } catch (e) {
                     console.error(e);
                     setModalConfig({
@@ -843,7 +848,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         title: string;
         desc?: string;
         content?: React.ReactNode;
-        type: "alert" | "confirm";
+        type: "alert" | "confirm" | "custom";
         variant?: "default" | "destructive";
         confirmText?: string;
         onConfirm?: () => void;
@@ -971,10 +976,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }, [fetchData, bracketUrl, t]);
 
     // Locked Matches State (Realtime Presence)
-    const [lockedMatches, setLockedMatches] = useState<Record<number, { judgeName: string, judgeShop?: string, userId: string }>>({});
+    const [lockedMatches, setLockedMatches] = useState<Record<number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }>>({});
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-    const toggleMatchLock = async (matchId: number) => {
+    const toggleMatchLock = async (matchId: number, arenaId?: number) => {
         if (!channelRef.current || !currentUser) return;
 
         // Get currently locked matches by me
@@ -984,20 +989,58 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
         const isLockedByMe = myLockedMatchIds.includes(matchId);
 
-        let newLockedIds = [...myLockedMatchIds];
-        if (isLockedByMe) {
-            // Unlock: Remove from list
-            newLockedIds = newLockedIds.filter(id => id !== matchId);
-        } else {
-            // Lock: Add to list
-            newLockedIds.push(matchId);
+        let newLockedIds: any[] = [...myLockedMatchIds]; // Use object array in future, simple ID list for now or enhanced object
+
+        // Strategy: We track "my locks" as an array of objects { matchId, arena? }
+        // But the current presence structure is simplified. Let's send the full state of MY locks.
+
+        // Current implementation uses simple ID array for lockedMatchIds in presence.
+        // To support Arena, we should ideally change presence structure or encode it.
+        // Let's stick to the current "lockedMatchIds" array for backward comp, 
+        // AND add a new "lockedMatchDetails" object to presence? Or just modify the existing logic.
+
+        // Simpler approach for this task without breaking previous clients:
+        // We will just handle the lock logic here.
+
+        // If we are locking (not unlocking) and Arena Count > 0 AND no arena selected yet...
+        // We probably need to show a UI.
+        // Wait, this function `toggleMatchLock` is called by the UI.
+
+        if (!isLockedByMe && !arenaId && (tournament?.ArenaCount && tournament.ArenaCount > 0)) {
+            // Need to select arena!
+            setSelectedArenaMatchId(matchId);
+            return;
         }
 
-        // Track with new list
+        const currentLock = lockedMatches[matchId];
+
+        // Simple array based locking for presence track (retaining compat)
+        // If we want to broadcast Arena info, we need to add it to the tracked object
+
+        // Let's refetch/calculate my current locks including the new one
+        let myLocks = Object.entries(lockedMatches)
+            .filter(([_, lock]) => lock.userId === currentUser.username)
+            .map(([mid, lock]) => ({ matchId: Number(mid), arena: lock.arena }));
+
+        if (isLockedByMe) {
+            // Unlock
+            myLocks = myLocks.filter(l => l.matchId !== matchId);
+        } else {
+            // Lock
+            myLocks.push({ matchId, arena: arenaId });
+        }
+
+        // Send to Supabase
+        // We need to change the tracking payload to include arena info
+        // We'll map it to a new structure `lockedMatchesEx` or similar, or just update `lockedMatchIds` to be objects if possible?
+        // To match `lockedMatchIds` (array of numbers), let's keep it.
+        // We add `lockedMatchInfos` [ { id: 123, arena: 5 } ]
+
         await channelRef.current.track({
             user: currentUser.username,
             shop: currentUser.shop_name,
-            lockedMatchIds: newLockedIds // Now sending an array
+            lockedMatchIds: myLocks.map(l => l.matchId),
+            lockedMatchInfos: myLocks
         });
     };
 
@@ -1058,7 +1101,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 }
             )
             .on('presence', { event: 'sync' }, () => {
-                const newState: Record<number, { judgeName: string, judgeShop?: string, userId: string }> = {};
+                const newState: Record<number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }> = {};
 
                 const state = channel.presenceState();
                 console.log('Presence sync:', state);
@@ -1071,9 +1114,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 newState[mid] = {
                                     judgeName: p.user,
                                     judgeShop: p.shop,
-                                    userId: p.user
+                                    userId: p.user,
+                                    arena: undefined // Legacy support
                                 };
                             });
+
+                            // Check for new Info structure
+                            if (p.lockedMatchInfos && Array.isArray(p.lockedMatchInfos)) {
+                                p.lockedMatchInfos.forEach((info: any) => {
+                                    if (newState[info.matchId]) {
+                                        newState[info.matchId].arena = info.arena;
+                                    }
+                                });
+                            }
                         } else if (p.lockedMatchId) {
                             newState[p.lockedMatchId] = {
                                 judgeName: p.user,
@@ -1093,7 +1146,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         await channel.track({
                             user: currentUser.username,
                             shop: currentUser.shop_name,
-                            lockedMatchIds: [] // Initialize with empty array
+                            lockedMatchIds: [],
+                            lockedMatchInfos: []
                         });
                     }
                 }
@@ -1365,6 +1419,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-[10px] font-bold text-muted-foreground cursor-not-allowed" title={`Judged by ${lock.judgeName}`}>
                                                             <Lock className="h-3 w-3" />
                                                             <span className="max-w-[60px] truncate">{lock.judgeName}</span>
+                                                            {lock.arena && <span className="ml-1 text-purple-400">#{lock.arena}</span>}
                                                         </div>
                                                     ) : (
                                                         <button
@@ -1384,6 +1439,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 <>
                                                                     <Gavel className="h-3 w-3" />
                                                                     <span>{t('admin.matches.judging')}</span>
+                                                                    {lock.arena && <span className="ml-1 bg-black/20 px-1 rounded text-white/90">#{lock.arena}</span>}
                                                                 </>
                                                             ) : (
                                                                 <>
@@ -1406,15 +1462,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                                                             : 'bg-secondary/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 border border-transparent hover:border-blue-500/30 cursor-pointer'
                                                         }`}
-                                                    onClick={() => !isLockedByOther && handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1")}
+                                                    onClick={() => !isLockedByOther && handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || t('admin.default.player1'))}
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter' || e.key === ' ') {
-                                                            !isLockedByOther && handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || "Player 1");
+                                                            !isLockedByOther && handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || t('admin.default.player1'));
                                                         }
                                                     }}
                                                 >
                                                     <div className="font-bold text-sm w-full break-all line-clamp-2 leading-tight min-h-[2.5em] flex items-center justify-center">{match.player1?.name || "???"}</div>
-                                                    <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal flex-1 flex items-center justify-center">Click to Win</span>
+                                                    <span className="text-[10px] opacity-0 group-hover:opacity-60 transition-opacity font-normal flex-1 flex items-center justify-center">{t('admin.matches.click_to_win')}</span>
 
                                                     {showPlayerCombo && (
                                                         <div className="text-[10px] text-muted-foreground w-full truncate mt-auto pt-2">
@@ -1466,10 +1522,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                                                             : 'bg-secondary/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-transparent hover:border-red-500/30 cursor-pointer'
                                                         }`}
-                                                    onClick={() => !isLockedByOther && handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2")}
+                                                    onClick={() => !isLockedByOther && handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || t('admin.default.player2'))}
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter' || e.key === ' ') {
-                                                            !isLockedByOther && handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || "Player 2");
+                                                            !isLockedByOther && handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || t('admin.default.player2'));
                                                         }
                                                     }}
                                                 >
@@ -1628,7 +1684,21 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         disabled={tournament?.Type === 'Open' || tournament?.Type === 'Standard' || tournamentType === 'Standard'}
                                         className="w-4 h-4 rounded border-gray-600 disabled:opacity-50"
                                     />
-                                    <label htmlFor="showCombo" className={`text-sm ${(tournament?.Type === 'Open' || tournament?.Type === 'Standard' || tournamentType === 'Standard') ? 'text-muted-foreground line-through' : ''}`}>Show Player Combo (In Match)</label>
+                                    <label htmlFor="showCombo" className={`text-sm ${(tournament?.Type === 'Open' || tournament?.Type === 'Standard' || tournamentType === 'Standard') ? 'text-muted-foreground line-through' : ''}`}>{t('admin.settings.show_combo')}</label>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">{t('admin.settings.arena_count')}</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="50"
+                                        value={arenaCount}
+                                        onChange={(e) => setArenaCount(parseInt(e.target.value) || 0)}
+                                        className="w-full bg-secondary border border-transparent rounded-lg p-2 text-sm"
+                                        placeholder="0 for no arenas"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground mt-1">{t('admin.settings.arena_desc')}</p>
                                 </div>
 
                                 <div className="p-3 bg-secondary/50 rounded-lg text-xs text-muted-foreground border border-white/5">
@@ -1661,7 +1731,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
                                 <h4 className="font-bold text-sm flex items-center gap-2">
                                     <Clock className="h-4 w-4 text-primary" />
-                                    Match History
+                                    {t('admin.matches.history')}
                                 </h4>
                                 <button onClick={() => setHistoryTooltip(null)} className="text-muted-foreground hover:text-foreground">
                                     <XCircle className="h-4 w-4" />
@@ -1670,7 +1740,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                             <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                                 {historyMatches.length === 0 ? (
-                                    <div className="text-center py-8 text-muted-foreground">No completed matches yet.</div>
+                                    <div className="text-center py-8 text-muted-foreground">{t('admin.matches.history_empty')}</div>
                                 ) : (
                                     historyMatches
 
@@ -1689,7 +1759,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     <div className="flex items-center justify-center p-4 animate-in fade-in bg-black/20 rounded-xl border border-white/5">
                                                         <div className="flex flex-col items-center gap-2">
                                                             <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                                                            <span className="text-[10px] text-muted-foreground">Updating result...</span>
+                                                            <span className="text-[10px] text-muted-foreground">{t('admin.matches.updating')}</span>
                                                         </div>
                                                     </div>
                                                 ) : (tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') && (
@@ -1697,7 +1767,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         onClick={() => {
                                                             setModalConfig({
                                                                 isOpen: true,
-                                                                title: "Select Winner",
+                                                                title: t('admin.modal.custom_select_winner'),
                                                                 content: (
                                                                     <div className="flex flex-col gap-3 mt-2">
                                                                         <button
@@ -1712,7 +1782,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                                     : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
                                                                             )}
                                                                         >
-                                                                            <span className="break-all leading-tight flex-1 min-w-0 text-left">{match.player1?.name || "Player 1"}</span>
+                                                                            <span className="break-all leading-tight flex-1 min-w-0 text-left">{match.player1?.name || t('admin.default.player1')}</span>
                                                                             {match.winner_id === match.player1_id && (
                                                                                 <div className="h-6 w-6 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
                                                                                     <Check className="h-4 w-4" />
@@ -1736,7 +1806,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                                     : "bg-black/20 text-foreground/80 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-lg"
                                                                             )}
                                                                         >
-                                                                            <span className="break-all leading-tight flex-1 min-w-0 text-left">{match.player2?.name || "Player 2"}</span>
+                                                                            <span className="break-all leading-tight flex-1 min-w-0 text-left">{match.player2?.name || t('admin.default.player2')}</span>
                                                                             {match.winner_id === match.player2_id && (
                                                                                 <div className="h-6 w-6 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
                                                                                     <Check className="h-4 w-4" />
@@ -1749,7 +1819,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             });
                                                         }}
                                                         className="p-2 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors ml-2"
-                                                        title="Edit Result"
+                                                        title={t('admin.matches.edit_result')}
                                                     >
                                                         <Edit className="h-4 w-4" />
                                                     </button>
@@ -1999,12 +2069,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         {generatingBanList ? (
                                             <>
                                                 <Loader2 className="h-3 w-3 animate-spin" />
-                                                Exporting...
+                                                {t('admin.invite.exporting')}
                                             </>
                                         ) : (
                                             <>
                                                 <Download className="h-3 w-3" />
-                                                Export Ban List
+                                                {t('admin.invite.export_ban')}
                                             </>
                                         )}
                                     </button>
@@ -2026,7 +2096,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         onClick={() => {
                                             const url = `${origin}/register/${id}`;
                                             navigator.clipboard.writeText(url);
-                                            alert("Link copied!");
+                                            toast.success(t('admin.toast.link_copied'));
                                         }}
                                         className="p-2 bg-secondary hover:bg-secondary/80 rounded transition-colors text-primary"
                                         title="Copy Link"
@@ -2073,7 +2143,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             <div style={{ padding: 40, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                                                 <div style={{ marginBottom: 24 }}>
                                                     <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', fontSize: '0.9rem' }}>
-                                                        Tournament Invite
+                                                        {t('admin.invite.title')}
                                                     </p>
                                                     <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                                         {tournament?.Name || "BEYBLADE X"}
@@ -2100,7 +2170,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
                                                         <AlertCircle style={{ width: 16, height: 16, color: '#ef4444' }} />
-                                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restricted Parts ({tournament?.BanList?.length || 0})</span>
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('admin.invite.restricted_parts')} ({tournament?.BanList?.length || 0})</span>
                                                     </div>
 
                                                     <div style={{
@@ -2142,7 +2212,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                                                 {/* Footer */}
                                                 <div style={{ marginTop: 'auto', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
-                                                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>{t('admin.invite.powered_by')}</span>
                                                 </div>
                                             </div>
 
@@ -2501,6 +2571,39 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 {t('admin.modal.download_ban')}
                             </button>
                         </div>
+                    </div>
+                </Modal>
+
+                {/* ARENA SELECTION MODAL */}
+                <Modal
+                    isOpen={!!selectedArenaMatchId}
+                    onClose={() => setSelectedArenaMatchId(null)}
+                    title="Select Arena"
+                    description="Which arena will this match be played on?"
+                    type="custom"
+                >
+                    <div className="grid grid-cols-3 gap-3 p-2 max-h-[60vh] overflow-y-auto">
+                        <button
+                            onClick={() => {
+                                if (selectedArenaMatchId) toggleMatchLock(selectedArenaMatchId); // No arena
+                                setSelectedArenaMatchId(null);
+                            }}
+                            className="bg-secondary hover:bg-white/10 p-3 rounded-lg border border-white/10 text-sm font-medium transition-colors"
+                        >
+                            No Arena
+                        </button>
+                        {Array.from({ length: tournament?.ArenaCount || 0 }).map((_, i) => (
+                            <button
+                                key={i}
+                                onClick={() => {
+                                    if (selectedArenaMatchId) toggleMatchLock(selectedArenaMatchId, i + 1);
+                                    setSelectedArenaMatchId(null);
+                                }}
+                                className="bg-primary/10 hover:bg-primary/20 p-3 rounded-lg border border-primary/20 text-primary font-bold text-lg transition-colors flex items-center justify-center"
+                            >
+                                {i + 1}
+                            </button>
+                        ))}
                     </div>
                 </Modal>
 

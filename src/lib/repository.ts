@@ -13,6 +13,7 @@ export type Tournament = {
     challonge_url?: string;
     user_id?: string; // Added for ownership check
     organizer_name?: string;
+    arena_count?: number;
 };
 
 export type Registration = {
@@ -71,6 +72,7 @@ export async function getTournaments(userId: string): Promise<Tournament[]> {
         type: r.type || 'U10', // Default for legacy data
         ban_list: r.ban_list || [],
         challonge_url: r.challonge_url,
+        arena_count: r.arena_count,
         user_id: r.user_id
     }));
 }
@@ -105,6 +107,7 @@ export async function getTournament(id: string): Promise<Tournament | null> {
         type: data.type || 'U10',
         ban_list: data.ban_list || [],
         challonge_url: data.challonge_url,
+        arena_count: data.arena_count,
         user_id: data.user_id,
         organizer_name: organizerName
     };

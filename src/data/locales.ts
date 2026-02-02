@@ -102,6 +102,48 @@ export const locales = {
         "admin.matches.round": "รอบที่ {n}",
         "admin.matches.win": "ชนะ",
         "admin.matches.view_all": "ดูทั้งหมด",
+        "admin.matches.select_winner": "เลือกผู้ชนะ",
+        "admin.matches.click_to_win": "คลิกเพื่อชนะ",
+        "admin.matches.edit_result": "แก้ไขผล",
+        "admin.matches.updating": "กำลังอัปเดตผล...",
+        "admin.matches.history": "ประวัติการแข่ง",
+        "admin.matches.history_empty": "ยังไม่มีประวัติการแข่ง",
+
+        "admin.settings.arena_count": "จำนวนสนาม (ไม่บังคับ)",
+        "admin.settings.arena_desc": "หากตั้งค่าไว้ กรรมการจะสามารถเลือกหมายเลขสนามเมื่อเริ่มแข่งได้",
+        "admin.settings.show_combo": "แสดงคอมโบผู้เล่น (ในแมตช์)",
+
+        "admin.toast.link_copied": "คัดลอกลิงก์แล้ว!",
+        "admin.toast.reset_complete": "รีเซ็ตเสร็จสิ้น: สถานะกลับเป็นเปิดรับสมัคร",
+
+        "admin.error.gen_image": "สร้างรูปภาพไม่สำเร็จ โปรดลองใหม่",
+        "admin.error.gen_ban_list": "สร้างรูปรายการแบนไม่สำเร็จ โปรดลองใหม่",
+        "admin.error.challonge_auth": "เชื่อมต่อ Challonge ล้มเหลว",
+        "admin.error.challonge_auth_desc": "ไม่สามารถติดต่อ Challonge ได้ โปรดตรวจสอบ API Key ในหน้า Dashboard",
+        "admin.error.start_failed": "เริ่มการแข่งขันไม่ได้",
+        "admin.error.mismatched_modes": "พบผู้เล่น {n} คนที่รุ่นไม่ตรงกับการแข่ง โปรดแก้ไขหรือลบออก",
+        "admin.error.limit_exceeded": "จำนวนผู้เล่นเกินกำหนด",
+        "admin.error.limit_desc": "Challonge รองรับสูงสุด 256 คน (ปัจจุบัน {n}) โปรดลดจำนวนผู้เล่น",
+
+        "admin.reset.title": "รีเซ็ตการแข่งขัน?",
+        "admin.reset.desc": "คำเตือน: การกระทำนี้จะลบลิงก์ Challonge และปรับสถานะเป็นเปิดรับสมัคร ทำให้คุณสามารถสร้างสายแข่งใหม่ได้",
+        "admin.reset.confirm": "รีเซ็ตและลบลิงก์",
+
+        "admin.invite.title": "Tournament Invite",
+        "admin.invite.restricted_parts": "Restricted Parts",
+        "admin.invite.powered_by": "Powered by สายใต้ยิม",
+        "admin.invite.export_ban": "ส่งออก Ban List",
+        "admin.invite.exporting": "กำลังส่งออก...",
+
+        "admin.share.invite_title": "Tournament Invite",
+        "admin.share.invite_text": "เข้าร่วม {name}!",
+        "admin.share.ban_list_title": "Tournament Ban List",
+        "admin.share.ban_list_text": "รายการแบนสำหรับ {name}",
+
+        "admin.modal.custom_select_winner": "เลือกผู้ชนะ",
+
+        "admin.default.player1": "ผู้เล่น 1",
+        "admin.default.player2": "ผู้เล่น 2",
 
         "admin.modal.invite_created": "สร้างการ์ดเชิญสำเร็จ",
         "admin.modal.ban_created": "สร้างรูป Ban List สำเร็จ",
@@ -231,6 +273,48 @@ export const locales = {
         "admin.matches.round": "Round {n}",
         "admin.matches.win": "Win",
         "admin.matches.view_all": "View All",
+        "admin.matches.select_winner": "Select Winner",
+        "admin.matches.click_to_win": "Click to Win",
+        "admin.matches.edit_result": "Edit Result",
+        "admin.matches.updating": "Updating result...",
+        "admin.matches.history": "Match History",
+        "admin.matches.history_empty": "No completed matches yet.",
+
+        "admin.settings.arena_count": "Number of Arenas (Optional)",
+        "admin.settings.arena_desc": "If set, judges can select an arena number when starting a match.",
+        "admin.settings.show_combo": "Show Player Combo (In Match)",
+
+        "admin.toast.link_copied": "Link copied!",
+        "admin.toast.reset_complete": "Reset Complete: Tournament has been reset to OPEN.",
+
+        "admin.error.gen_image": "Failed to generate image. Please try again.",
+        "admin.error.gen_ban_list": "Failed to generate ban list image. Please try again.",
+        "admin.error.challonge_auth": "Challonge Authorization Failed",
+        "admin.error.challonge_auth_desc": "Unable to connect to Challonge. Please check your API Key in Dashboard settings.",
+        "admin.error.start_failed": "Cannot start tournament",
+        "admin.error.mismatched_modes": "Found {n} players with mismatched modes. Please fix or remove them.",
+        "admin.error.limit_exceeded": "Participant Limit Exceeded",
+        "admin.error.limit_desc": "Challonge supports a maximum of 256 participants. You have {n}. Please reduce player count.",
+
+        "admin.reset.title": "Reset Tournament?",
+        "admin.reset.desc": "WARNING: This will delete the current bracket link and reset the status to OPEN. This allows you to regenerate the bracket or add more players.",
+        "admin.reset.confirm": "Reset & Delete Bracket Link",
+
+        "admin.invite.title": "Tournament Invite",
+        "admin.invite.restricted_parts": "Restricted Parts",
+        "admin.invite.powered_by": "Powered by Sai Tai Gym",
+        "admin.invite.export_ban": "Export Ban List",
+        "admin.invite.exporting": "Exporting...",
+
+        "admin.share.invite_title": "Tournament Invite",
+        "admin.share.invite_text": "Join {name}!",
+        "admin.share.ban_list_title": "Tournament Ban List",
+        "admin.share.ban_list_text": "Ban list for {name}",
+
+        "admin.modal.custom_select_winner": "Select Winner",
+
+        "admin.default.player1": "Player 1",
+        "admin.default.player2": "Player 2",
 
         "admin.modal.invite_created": "Invite Card Created",
         "admin.modal.ban_created": "Ban List Image Created",

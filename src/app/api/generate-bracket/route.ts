@@ -20,7 +20,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Challonge API Key not configured. Please add it in the admin dashboard.' }, { status: 403 });
         }
 
-        const { roomName, players, type, shuffle, tournamentId, quickAdvance } = await request.json(); // tournamentId is our DB UUID
+        const { roomName, players, type, shuffle, tournamentId, quickAdvance, arenaCount } = await request.json(); // tournamentId is our DB UUID
 
         if (!roomName) {
             return NextResponse.json({ error: 'Room name is required' }, { status: 400 });
@@ -38,7 +38,8 @@ export async function POST(request: Request) {
                 .from('tournaments')
                 .update({
                     challonge_url: result.url,
-                    tournament_type: type // Save the type too
+                    tournament_type: type, // Save the type too
+                    arena_count: arenaCount || 0
                 })
                 .eq('id', tournamentId);
 

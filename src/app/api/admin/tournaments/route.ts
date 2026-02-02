@@ -29,7 +29,8 @@ export async function GET(req: Request) {
                 CreatedAt: data.created_at.toISOString(),
                 Type: data.type,
                 BanList: data.ban_list,
-                ChallongeUrl: data.challonge_url
+                ChallongeUrl: data.challonge_url,
+                ArenaCount: data.arena_count || 0
             };
             return NextResponse.json({ success: true, data: mapped });
         } else {
@@ -42,7 +43,8 @@ export async function GET(req: Request) {
                 CreatedAt: d.created_at.toISOString(),
                 Type: d.type,
                 BanList: d.ban_list,
-                ChallongeUrl: d.challonge_url
+                ChallongeUrl: d.challonge_url,
+                ArenaCount: d.arena_count || 0
             }));
             return NextResponse.json({ success: true, data: mapped });
         }
