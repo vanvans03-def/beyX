@@ -97,7 +97,7 @@ export default function LoginPage() {
                 </div>
 
                 <div className="text-center text-xs text-gray-600">
-                    &copy; 2024 BeyBlade X Tournament Manager
+                    &copy; 2026 BeyBlade X Tournament Manager
                 </div>
             </div>
         </div>
