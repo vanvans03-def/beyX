@@ -34,6 +34,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         return NextResponse.json({ success: true, data: standings });
 
     } catch (error: any) {
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+        console.error("GET Standings Error:", error);
+        const errorDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+        return NextResponse.json({
+            success: false,
+            message: error.message,
+            details: errorDetail
+        }, { status: 500 });
     }
 }

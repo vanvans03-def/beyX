@@ -1,6 +1,8 @@
 import React from 'react';
 import { Trophy, Medal } from 'lucide-react';
 
+import { useTranslation } from "@/hooks/useTranslation";
+
 interface Standing {
     id: number;
     rank: number;
@@ -9,6 +11,8 @@ interface Standing {
 }
 
 export default function StandingsTable({ standings, mode }: { standings: Standing[], mode?: string }) {
+    const { t } = useTranslation();
+
     const getRankIcon = (rank: number) => {
         const r = rank || 999;
         const rankNum = <span className="font-bold text-muted-foreground mr-1">#{r}</span>;
@@ -60,7 +64,7 @@ export default function StandingsTable({ standings, mode }: { standings: Standin
             ))}
             {standings.length === 0 && (
                 <div className="text-center p-8 text-muted-foreground">
-                    No standings data available.
+                    {t('standings.empty')}
                 </div>
             )}
         </div>

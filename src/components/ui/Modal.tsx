@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ModalProps {
     isOpen: boolean;
@@ -26,12 +27,16 @@ export function Modal({
     children,
     type = "custom",
     onConfirm,
-    confirmText = "Confirm",
-    cancelText = "Cancel",
+    confirmText,
+    cancelText,
     variant = "default"
 }: ModalProps) {
+    const { t } = useTranslation();
     const [mounted, setMounted] = useState(false);
     const [visible, setVisible] = useState(false);
+
+    const effectiveConfirmText = confirmText || t('modal.default.confirm');
+    const effectiveCancelText = cancelText || t('modal.default.cancel');
 
     useEffect(() => {
         setMounted(true);
@@ -100,7 +105,7 @@ export function Modal({
                                 onClick={onClose}
                                 className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors"
                             >
-                                {cancelText}
+                                {effectiveCancelText}
                             </button>
                         )}
                         <button
@@ -115,7 +120,7 @@ export function Modal({
                                     : "bg-primary hover:bg-primary/90"
                             )}
                         >
-                            {confirmText}
+                            {effectiveConfirmText}
                         </button>
                     </div>
                 )}

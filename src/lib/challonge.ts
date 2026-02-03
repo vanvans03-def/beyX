@@ -4,6 +4,8 @@ import axios from 'axios';
 // API Key is now passed dynamically per user
 const BASE_URL = 'https://api.challonge.com/v1';
 
+axios.defaults.timeout = 5000; // Reduced to 5s to prevent UI freeze
+
 interface TournamentResponse {
     tournament: {
         id: number;
@@ -58,7 +60,7 @@ async function createTournament(apiKey: string, name: string, urlPath: string, t
                 show_rounds: true,
                 quick_advance: quickAdvance
             }
-        });
+        }, { timeout: 60000 }); // Allow 60s for creation
         return response.data.tournament;
     } catch (error: any) {
         console.error('Error creating tournament:', error.response?.data || error.message);
@@ -79,7 +81,7 @@ async function addParticipants(apiKey: string, tournamentId: number, participant
         await axios.post(`${BASE_URL}/tournaments/${tournamentId}/participants/bulk_add.json`, {
             api_key: apiKey,
             participants: formattedParticipants
-        });
+        }, { timeout: 60000 }); // Allow 60s for bulk add
     } catch (error: any) {
         console.error('Error adding participants:', error.response?.data || error.message);
         throw error;
@@ -93,7 +95,7 @@ async function randomizeParticipants(apiKey: string, tournamentId: number) {
     try {
         await axios.post(`${BASE_URL}/tournaments/${tournamentId}/participants/randomize.json`, {
             api_key: apiKey
-        });
+        }, { timeout: 60000 });
     } catch (error: any) {
         console.error('Error shuffling participants:', error.response?.data || error.message);
         throw error;
@@ -108,7 +110,7 @@ async function startTournament(apiKey: string, tournamentId: number) {
     try {
         await axios.post(`${BASE_URL}/tournaments/${tournamentId}/start.json`, {
             api_key: apiKey
-        });
+        }, { timeout: 60000 });
     } catch (error: any) {
         console.error('Error starting tournament:', error.response?.data || error.message);
         throw error;

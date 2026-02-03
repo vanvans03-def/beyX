@@ -176,6 +176,85 @@ export async function resetTournamentBracket(id: string) {
     if (error) throw new Error(error.message);
 }
 
+export async function getMatchesFromDB(tournamentIdentifier: string) {
+    // 1. Try to find the tournament UUID from the identifier (url slug)
+    const { data: tour } = await supabaseAdmin
+        .from('tournaments')
+        .select('id')
+        .ilike('challonge_url', `%${tournamentIdentifier}`)
+        .limit(1)
+        .maybeSingle();
+
+    if (!tour) {
+        console.warn(`Fallback: No tournament found for identifier ${tournamentIdentifier}`);
+        return [];
+    }
+
+    // 2. Try to find a link via match_locks (Bridge: UUID -> MatchID -> IntID)
+    const { data: locks } = await supabaseAdmin
+        .from('match_locks')
+        .select('match_id')
+        .eq('tournament_id', tour.id)
+        .limit(1);
+
+    let challongeTournamentId: number | null = null;
+
+    if (locks && locks.length > 0) {
+        // We have a lock, use it to find the Challonge Tournament ID from the matches table
+        const { data: linkedMatch } = await supabaseAdmin
+            .from('matches')
+            .select('tournament_id')
+            .eq('id', locks[0].match_id)
+            .single();
+
+        if (linkedMatch) {
+            challongeTournamentId = linkedMatch.tournament_id;
+        }
+    }
+
+    // 3. Query matches
+    let query = supabaseAdmin
+        .from('matches')
+        .select('*')
+        .order('suggested_play_order', { ascending: true });
+
+    if (challongeTournamentId) {
+        // Precise search
+        query = query.eq('tournament_id', challongeTournamentId);
+    } else {
+        // Fallback to fuzzy search if we couldn't bridge (unlikely to work if matches table doesn't have identifier slug correctly)
+        // But maybe some rows do? Or if we add it in future.
+        // For now, if we fail to link, checking 'identifier' is better than nothing, though likely empty.
+        query = query.eq('identifier', tournamentIdentifier);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error("Fallback Query Error:", error.message);
+        return [];
+    }
+
+    return data.map((m: any) => ({
+        id: m.id,
+        tournament_id: m.tournament_id,
+        state: m.state,
+        player1_id: m.player1_id,
+        player2_id: m.player2_id,
+        scores_csv: m.score_csv, // Map back
+        winner_id: m.winner_id,
+        round: m.round,
+        identifier: m.identifier,
+        suggested_play_order: m.suggested_play_order,
+        underway_at: m.underway_at,
+        completed_at: m.completed_at,
+        updated_at: m.updated_at,
+        // Fallback: Provide placeholder objects so frontend doesn't crash on match.player1.name
+        player1: { id: m.player1_id, name: "Player " + (m.player1_id || "?"), misc: "" },
+        player2: { id: m.player2_id, name: "Player " + (m.player2_id || "?"), misc: "" }
+    }));
+}
+
 // Helper to get User's API Key
 export async function getUserApiKey(userId: string): Promise<string | null> {
     const { data, error } = await supabaseAdmin

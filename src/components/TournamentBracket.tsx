@@ -17,6 +17,17 @@ const TournamentBracket: React.FC<TournamentBracketProps> = ({ url }) => {
 
     return (
         <div className="w-full overflow-hidden rounded-lg shadow-lg bg-white/5 border border-white/10">
+            <div className="p-2 flex justify-between items-center bg-black/20 px-4">
+                <span className="text-sm text-gray-400">Tournament Bracket</span>
+                <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded transition-colors"
+                >
+                    Open in Challonge
+                </a>
+            </div>
             <iframe
                 src={embedUrl}
                 width="100%"

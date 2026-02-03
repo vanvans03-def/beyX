@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getMatches, updateMatch } from '@/lib/challonge';
 import { supabaseAdmin } from '@/lib/supabase';
-import { getUserApiKey } from '@/lib/repository';
+import { createTournament, getTournaments, getTournament, updateTournamentStatus, getUserApiKey, getMatchesFromDB } from "@/lib/repository";
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +58,28 @@ export async function GET(request: Request) {
 
         return NextResponse.json({ matches });
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("GET Matches Error (Challonge):", error.message);
+
+        try {
+            console.log("Attempting fallback to local DB matches...");
+            const fallbackMatches = await getMatchesFromDB(identifier);
+
+            if (fallbackMatches && fallbackMatches.length > 0) {
+                console.log(`Served ${fallbackMatches.length} matches from Fallback DB.`);
+                return NextResponse.json({ matches: fallbackMatches, isFallback: true });
+            } else {
+                throw new Error("No local matches found for fallback.");
+            }
+        } catch (dbError: any) {
+            console.error("Fallback Failed:", dbError.message);
+            const errorDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+            return NextResponse.json({
+                error: error.message,
+                details: errorDetail,
+                stack: error.stack,
+                fallbackFailed: true
+            }, { status: 500 });
+        }
     }
 }
 

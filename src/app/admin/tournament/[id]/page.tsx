@@ -15,7 +15,7 @@ import TournamentBracket from "@/components/TournamentBracket";
 import { toast } from "sonner";
 import StandingsTable from "@/components/StandingsTable";
 import RegistrationTable from "@/components/RegistrationTable";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
 
 type Registration = {
@@ -47,6 +47,8 @@ type Match = {
     completed_at?: string;
     updated_at?: string;
 };
+
+const supabaseClient = createClient();
 
 export default function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { t } = useTranslation();
@@ -484,7 +486,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         try {
             const res = await fetch(`/api/admin/matches?tournamentUrl=${encodeURIComponent(url)}`);
             if (!res.ok) {
-                console.error("Failed to fetch matches:", res.status, res.statusText);
+                const errText = await res.text();
+                console.error("Failed to fetch matches:", res.status, res.statusText, errText);
                 return;
             }
             const json = await res.json();
@@ -858,6 +861,27 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         type: "alert"
     });
 
+    const fetchLocks = useCallback(async () => {
+        if (!id) return;
+        const { data, error } = await supabaseClient
+            .from('match_locks')
+            .select('*')
+            .eq('tournament_id', id);
+
+        if (data) {
+            const newLocks: Record<number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }> = {};
+            data.forEach((l: any) => {
+                newLocks[l.match_id] = {
+                    judgeName: l.judge_name,
+                    judgeShop: l.judge_shop,
+                    userId: l.user_id,
+                    arena: l.arena_number
+                };
+            });
+            setLockedMatches(newLocks);
+        }
+    }, [id]);
+
     const fetchData = useCallback(async (silent = false) => {
         if (!id) return;
         if (!silent) setLoading(true);
@@ -906,19 +930,24 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             }
 
             if (!silent) setLastRefreshed(new Date());
+
+            // Also fetch locks to ensure we are in sync
+            fetchLocks();
         } catch (err) {
             console.error(err);
-            setModalConfig({
-                isOpen: true,
-                title: "Error",
-                desc: "Failed to fetch data.",
-                type: "alert",
-                variant: "destructive"
-            });
+            if (!silent) { // Only show modal on manual refresh failure, not polling
+                setModalConfig({
+                    isOpen: true,
+                    title: "Error",
+                    desc: "Failed to fetch data.",
+                    type: "alert",
+                    variant: "destructive"
+                });
+            }
         } finally {
             if (!silent) setLoading(false);
         }
-    }, [id]);
+    }, [id, fetchLocks]);
 
     useEffect(() => {
         if (id) fetchData();
@@ -977,78 +1006,88 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     // Locked Matches State (Realtime Presence)
     const [lockedMatches, setLockedMatches] = useState<Record<number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }>>({});
-    const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+    const channelRef = useRef<ReturnType<typeof supabaseClient.channel> | null>(null);
+
+
+
+    useEffect(() => {
+        if (id) fetchLocks();
+    }, [id, fetchLocks]);
 
     const toggleMatchLock = async (matchId: number, arenaId?: number) => {
-        if (!channelRef.current || !currentUser) return;
+        if (!currentUser) return;
 
-        // Get currently locked matches by me
-        const myLockedMatchIds = Object.entries(lockedMatches)
-            .filter(([_, lock]) => lock.userId === currentUser.username)
-            .map(([id]) => Number(id));
+        const currentLock = lockedMatches[matchId];
+        const isLockedByMe = currentLock && currentLock.userId === currentUser.username;
+        const isLockedByOther = currentLock && !isLockedByMe;
 
-        const isLockedByMe = myLockedMatchIds.includes(matchId);
-
-        let newLockedIds: any[] = [...myLockedMatchIds]; // Use object array in future, simple ID list for now or enhanced object
-
-        // Strategy: We track "my locks" as an array of objects { matchId, arena? }
-        // But the current presence structure is simplified. Let's send the full state of MY locks.
-
-        // Current implementation uses simple ID array for lockedMatchIds in presence.
-        // To support Arena, we should ideally change presence structure or encode it.
-        // Let's stick to the current "lockedMatchIds" array for backward comp, 
-        // AND add a new "lockedMatchDetails" object to presence? Or just modify the existing logic.
-
-        // Simpler approach for this task without breaking previous clients:
-        // We will just handle the lock logic here.
-
-        // If we are locking (not unlocking) and Arena Count > 0 AND no arena selected yet...
-        // We probably need to show a UI.
-        // Wait, this function `toggleMatchLock` is called by the UI.
+        if (isLockedByOther) return;
 
         if (!isLockedByMe && !arenaId && (tournament?.ArenaCount && tournament.ArenaCount > 0)) {
-            // Need to select arena!
             setSelectedArenaMatchId(matchId);
             return;
         }
 
-        const currentLock = lockedMatches[matchId];
+        try {
+            if (isLockedByMe) {
+                // Unlock
+                const { error } = await supabaseClient
+                    .from('match_locks')
+                    .delete()
+                    .eq('match_id', matchId)
+                    .eq('tournament_id', id);
 
-        // Simple array based locking for presence track (retaining compat)
-        // If we want to broadcast Arena info, we need to add it to the tracked object
+                if (error) throw error;
+                // Optimistic update
+                setLockedMatches(prev => {
+                    const next = { ...prev };
+                    delete next[matchId];
+                    return next;
+                });
+            } else {
+                // Lock
+                const { error } = await supabaseClient
+                    .from('match_locks')
+                    .insert({
+                        match_id: matchId,
+                        tournament_id: id,
+                        judge_name: currentUser.username,
+                        judge_shop: currentUser.shop_name,
+                        user_id: currentUser.username,
+                        arena_number: arenaId || null
+                    });
 
-        // Let's refetch/calculate my current locks including the new one
-        let myLocks = Object.entries(lockedMatches)
-            .filter(([_, lock]) => lock.userId === currentUser.username)
-            .map(([mid, lock]) => ({ matchId: Number(mid), arena: lock.arena }));
-
-        if (isLockedByMe) {
-            // Unlock
-            myLocks = myLocks.filter(l => l.matchId !== matchId);
-        } else {
-            // Lock
-            myLocks.push({ matchId, arena: arenaId });
+                if (error) {
+                    if (error.code === '23505') {
+                        toast.error(t('admin.matches.lock_error_exists'));
+                        fetchLocks();
+                    } else {
+                        throw error;
+                    }
+                } else {
+                    // Optimistic update
+                    setLockedMatches(prev => ({
+                        ...prev,
+                        [matchId]: {
+                            judgeName: currentUser.username,
+                            judgeShop: currentUser.shop_name,
+                            userId: currentUser.username,
+                            arena: arenaId
+                        }
+                    }));
+                }
+            }
+        } catch (e) {
+            console.error("Lock error", e);
+            toast.error(t('admin.matches.lock_error_failed'));
         }
-
-        // Send to Supabase
-        // We need to change the tracking payload to include arena info
-        // We'll map it to a new structure `lockedMatchesEx` or similar, or just update `lockedMatchIds` to be objects if possible?
-        // To match `lockedMatchIds` (array of numbers), let's keep it.
-        // We add `lockedMatchInfos` [ { id: 123, arena: 5 } ]
-
-        await channelRef.current.track({
-            user: currentUser.username,
-            shop: currentUser.shop_name,
-            lockedMatchIds: myLocks.map(l => l.matchId),
-            lockedMatchInfos: myLocks
-        });
     };
 
     // Realtime Subscription
     useEffect(() => {
         if (!id) return;
 
-        const channel = supabase
+        const channel = supabaseClient
             .channel(`admin-tournament-${id}`)
             .on(
                 'postgres_changes',
@@ -1077,6 +1116,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 }
             )
             .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'match_locks'
+                },
+                (payload) => {
+                    fetchLocks();
+                }
+            )
+            .on(
                 'broadcast',
                 { event: 'match-update' },
                 (payload) => {
@@ -1100,66 +1150,20 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     });
                 }
             )
-            .on('presence', { event: 'sync' }, () => {
-                const newState: Record<number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }> = {};
-
-                const state = channel.presenceState();
-                console.log('Presence sync:', state);
-
-                Object.values(state).forEach((presences: any) => {
-                    presences.forEach((p: any) => {
-                        // Handle both old (single) and new (array) structure for backward compatibility during transition
-                        if (p.lockedMatchIds && Array.isArray(p.lockedMatchIds)) {
-                            p.lockedMatchIds.forEach((mid: number) => {
-                                newState[mid] = {
-                                    judgeName: p.user,
-                                    judgeShop: p.shop,
-                                    userId: p.user,
-                                    arena: undefined // Legacy support
-                                };
-                            });
-
-                            // Check for new Info structure
-                            if (p.lockedMatchInfos && Array.isArray(p.lockedMatchInfos)) {
-                                p.lockedMatchInfos.forEach((info: any) => {
-                                    if (newState[info.matchId]) {
-                                        newState[info.matchId].arena = info.arena;
-                                    }
-                                });
-                            }
-                        } else if (p.lockedMatchId) {
-                            newState[p.lockedMatchId] = {
-                                judgeName: p.user,
-                                judgeShop: p.shop,
-                                userId: p.user
-                            };
-                        }
-                    });
-                });
-
-                setLockedMatches(newState);
-            })
-            .subscribe(async (status) => {
+            .subscribe((status) => {
+                console.log("Realtime subscription status:", status);
                 if (status === 'SUBSCRIBED') {
-                    // Initialize presence
-                    if (currentUser) {
-                        await channel.track({
-                            user: currentUser.username,
-                            shop: currentUser.shop_name,
-                            lockedMatchIds: [],
-                            lockedMatchInfos: []
-                        });
-                    }
+                    // toast.success("Realtime connected");
                 }
             });
 
         channelRef.current = channel;
 
         return () => {
-            supabase.removeChannel(channel);
+            supabaseClient.removeChannel(channel);
             channelRef.current = null;
         };
-    }, [id, fetchData, bracketUrl, currentUser]);
+    }, [id, fetchData, bracketUrl, fetchLocks]);
 
     // validateRow moved to RegistrationTable component
 
@@ -1207,6 +1211,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             // Poll tournament status & registrations (fallback)
             pollTournamentStatus();
             fetchData(true);
+            // fetchLocks is called within fetchData now, so this is covered
         }, 5000);
 
         return () => clearInterval(interval);
@@ -1358,7 +1363,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         {loadingMatches ? (
                             <div className="text-center py-8 text-muted-foreground">{t('admin.matches.loading')}</div>
                         ) : activeMatches.length === 0 ? (
-                            <div className="text-center py-8 text-muted-foreground">{t('admin.matches.empty')}</div>
+                            <div className="text-center py-8 text-muted-foreground">
+                                {matches.length > 0 && !matches.some(m => m.state === 'open' || m.state === 'pending') ? (
+                                    <div className="flex flex-col items-center gap-2 animate-in fade-in zoom-in duration-300">
+                                        <Trophy className="w-12 h-12 text-yellow-500 mb-2 opacity-80" />
+                                        <span className="text-lg font-bold text-foreground">ไม่พบการแข่งขันแล้ว</span>
+                                        <span className="text-sm text-muted-foreground">กรุณากดจบการแข่งขัน (Finish Tournament)</span>
+                                    </div>
+                                ) : (
+                                    t('admin.matches.empty')
+                                )}
+                            </div>
                         ) : (
                             <div
 

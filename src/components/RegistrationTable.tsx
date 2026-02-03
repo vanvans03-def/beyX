@@ -88,7 +88,10 @@ const validateRow = (row: Registration, tournamentType?: string) => {
 };
 
 // Wrap in memo to prevent re-renders when parent state changes (like modals)
+import { useTranslation } from "@/hooks/useTranslation";
+
 const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, tournamentType }: Props) {
+    const { t } = useTranslation();
 
     // Memoize the processed data to avoid re-parsing JSON and re-validating on every render
     // This is crucial for performance with 250+ rows
@@ -132,7 +135,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
             <div className="flex flex-col items-center justify-center min-h-[400px] glass-card rounded-xl">
                 <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
                 <h3 className="text-xl font-bold italic tracking-tighter text-white animate-pulse">
-                    FETCHING <span className="text-primary">DATA</span>
+                    <span className="text-primary">{t('table.loading')}</span>
                 </h3>
             </div>
         );
@@ -146,12 +149,12 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
             <table className="w-full text-sm text-left">
                 <thead className="bg-secondary/50 text-muted-foreground uppercase text-xs font-bold tracking-wider">
                     <tr>
-                        <th className="p-4 whitespace-nowrap">Time</th>
-                        <th className="p-4 whitespace-nowrap">Player</th>
-                        <th className="p-4 whitespace-nowrap">Mode</th>
-                        <th className="p-4 whitespace-nowrap">Main Deck</th>
-                        <th className="p-4 whitespace-nowrap">Reserves</th>
-                        <th className="p-4 whitespace-nowrap">Status</th>
+                        <th className="p-4 whitespace-nowrap">{t('table.header.time')}</th>
+                        <th className="p-4 whitespace-nowrap">{t('table.header.player')}</th>
+                        <th className="p-4 whitespace-nowrap">{t('table.header.mode')}</th>
+                        <th className="p-4 whitespace-nowrap">{t('table.header.deck')}</th>
+                        <th className="p-4 whitespace-nowrap">{t('table.header.reserves')}</th>
+                        <th className="p-4 whitespace-nowrap">{t('table.header.status')}</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -208,13 +211,16 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                         <span className={`font-bold ${row.validation.status === "pass" ? "text-green-500" :
                                             row.validation.status === "fail" ? "text-red-500" : "text-yellow-500"
                                             }`}>
-                                            {row.validation.msg}
+                                            {(row.validation.status === "pass" && row.validation.msg === 'OK') ? t('table.status.ok') :
+                                                (row.validation.msg === 'Banned') ? t('table.status.banned') :
+                                                    (row.validation.msg.includes('Type Mismatch')) ? t('table.status.mismatch', { mode: row.Mode }) :
+                                                        row.validation.msg}
                                         </span>
                                     </div>
                                     <button
                                         onClick={() => onDelete(row)}
                                         className="p-2 text-muted-foreground hover:text-red-500 transition-all"
-                                        title="Delete"
+                                        title={t('gen.delete')}
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </button>
@@ -225,7 +231,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                     {processedData.length === 0 && !loading && (
                         <tr>
                             <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                                No matching registrations found.
+                                {t('table.empty')}
                             </td>
                         </tr>
                     )}
