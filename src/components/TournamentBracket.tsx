@@ -44,4 +44,4 @@ const TournamentBracket: React.FC<TournamentBracketProps> = ({ url }) => {
     );
 };
 
-export default TournamentBracket;
+export default React.memo(TournamentBracket);
