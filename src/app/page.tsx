@@ -5,7 +5,8 @@ import { ArrowRight, Trophy, LockKeyhole, Calendar, MessageCircle } from "lucide
 import { getSystemSetting } from "@/lib/repository";
 import appConfig from "@/data/app-config.json";
 
-export const dynamic = 'force-dynamic';
+//export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export default async function Home() {
   const isEventsActive = await getSystemSetting("event_system_active", true);
@@ -52,6 +53,19 @@ export default async function Home() {
               <div className="text-left">
                 <h3 className="font-bold text-foreground">Organizer</h3>
                 <p className="text-xs text-muted-foreground">Login to Manage</p>
+              </div>
+            </div>
+            <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+          </Link>
+
+          <Link href="/score-board" className="group relative flex items-center justify-between bg-card hover:bg-secondary/80 border border-white/10 p-5 rounded-2xl transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-secondary rounded-xl group-hover:bg-background transition-colors">
+                <Trophy className="h-6 w-6 text-primary" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-bold text-foreground">Scoreboard</h3>
+                <p className="text-xs text-muted-foreground">Quick Match Counter</p>
               </div>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />

@@ -3,7 +3,8 @@ import { EventsClientView } from "@/components/EventsClientView";
 import Link from "next/link";
 import { Metadata, ResolvingMetadata } from "next";
 
-export const dynamic = 'force-dynamic';
+//export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 type Props = {
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>
