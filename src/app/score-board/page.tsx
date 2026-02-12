@@ -193,29 +193,31 @@ export default function ScoreboardPage() {
             </header>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col md:flex-row relative">
+            <main className="flex-1 flex flex-col md:flex-row landscape:flex-row relative">
                 {activePlayers.map((player) => (
                     <div
                         key={player.id}
                         className={cn(
                             "flex-1 flex flex-col relative transition-all duration-500 ease-in-out",
                             // Use a subtle gradient background based on player color
-                            activePlayers.length === 3 ? "md:border-r last:border-r-0 border-white/5" : "md:first:border-r border-white/5"
+                            activePlayers.length === 3
+                                ? "md:border-r landscape:border-r last:border-r-0 border-white/5"
+                                : "md:first:border-r landscape:first:border-r border-white/5"
                         )}
                     >
                         {/* Background Tint */}
                         <div className={cn("absolute inset-0 opacity-5 bg-gradient-to-b", player.bgClass)} />
 
                         {/* Score Area (Top Half) */}
-                        <div className="flex-1 flex flex-col items-center justify-center relative p-8">
-                            <h2 className={cn("text-2xl md:text-4xl font-black italic tracking-widest uppercase mb-4 opacity-80", player.textClass)}>
+                        <div className="flex-1 flex flex-col items-center justify-center relative p-8 landscape:p-2 md:p-8">
+                            <h2 className={cn("text-2xl landscape:text-xl md:text-4xl font-black italic tracking-widest uppercase mb-4 landscape:mb-1 opacity-80", player.textClass)}>
                                 {player.name}
                             </h2>
 
                             <div className="relative group cursor-default">
                                 {/* Huge Score Number */}
                                 <div className={cn(
-                                    "text-[120px] md:text-[200px] leading-none font-black text-white drop-shadow-2xl tabular-nums transition-transform duration-150",
+                                    "text-[120px] landscape:text-[100px] md:text-[200px] leading-none font-black text-white drop-shadow-2xl tabular-nums transition-transform duration-150",
                                     animatingPlayerId === player.id ? "scale-110" : "scale-100"
                                 )}>
                                     {player.score}
@@ -234,9 +236,9 @@ export default function ScoreboardPage() {
                             {/* Animation Overlay */}
                             {animatingPlayerId === player.id && (
                                 <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
-                                    <div className="bg-black/80 backdrop-blur-md border border-white/20 px-12 py-8 rounded-[2rem] transform rotate-[-5deg] shadow-2xl animate-in zoom-in-0 fade-in duration-300 slide-in-from-bottom-10 ease-out">
+                                    <div className="bg-black/80 backdrop-blur-md border border-white/20 px-6 py-4 md:px-12 md:py-8 rounded-2xl md:rounded-[2rem] transform rotate-[-5deg] shadow-2xl animate-in zoom-in-0 fade-in duration-300 slide-in-from-bottom-10 ease-out">
                                         <span className={cn(
-                                            "text-5xl md:text-7xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-neutral-400 drop-shadow-sm whitespace-nowrap",
+                                            "text-3xl md:text-7xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-neutral-400 drop-shadow-sm whitespace-nowrap",
                                             player.textClass
                                         )}>
                                             {animationText}
@@ -247,14 +249,14 @@ export default function ScoreboardPage() {
                         </div>
 
                         {/* Controls Area (Bottom Half) */}
-                        <div className="flex-none p-4 md:p-8 bg-black/20 backdrop-blur-sm border-t border-white/5">
+                        <div className="flex-none p-4 landscape:p-2 md:p-8 bg-black/20 backdrop-blur-sm border-t border-white/5">
                             <div className="grid grid-cols-2 gap-3 md:gap-4 max-w-lg mx-auto">
                                 <button
                                     onClick={() => handleScore(player.id, 1, "Spin Finish")}
                                     disabled={animatingPlayerId !== null}
-                                    className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-4 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group"
+                                    className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-4 landscape:p-2 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group"
                                 >
-                                    <span className="text-3xl md:text-4xl font-bold group-hover:text-primary transition-colors">+1</span>
+                                    <span className="text-3xl landscape:text-2xl md:text-4xl font-bold group-hover:text-primary transition-colors">+1</span>
                                     <span className="text-xs md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Spin Finish</span>
                                 </button>
 
@@ -262,11 +264,11 @@ export default function ScoreboardPage() {
                                     onClick={() => handleScore(player.id, 2, "Burst Finish")}
                                     disabled={animatingPlayerId !== null}
                                     className={cn(
-                                        "relative overflow-hidden bg-gradient-to-br p-4 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-lg group border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed",
+                                        "relative overflow-hidden bg-gradient-to-br p-4 landscape:p-2 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-lg group border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed",
                                         player.bgClass
                                     )}
                                 >
-                                    <span className="text-3xl md:text-4xl font-bold text-white drop-shadow-md group-hover:scale-110 transition-transform">+2</span>
+                                    <span className="text-3xl landscape:text-2xl md:text-4xl font-bold text-white drop-shadow-md group-hover:scale-110 transition-transform">+2</span>
                                     <span className="text-xs md:text-sm font-bold text-white/90 uppercase tracking-wider">Burst Finish</span>
                                     <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </button>
@@ -274,18 +276,18 @@ export default function ScoreboardPage() {
                                 <button
                                     onClick={() => handleScore(player.id, 2, "Over Finish")}
                                     disabled={animatingPlayerId !== null}
-                                    className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-4 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group"
+                                    className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-4 landscape:p-2 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group"
                                 >
-                                    <span className="text-3xl md:text-4xl font-bold group-hover:text-yellow-400 transition-colors">+2</span>
+                                    <span className="text-3xl landscape:text-2xl md:text-4xl font-bold group-hover:text-yellow-400 transition-colors">+2</span>
                                     <span className="text-xs md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Over Finish</span>
                                 </button>
 
                                 <button
                                     onClick={() => handleScore(player.id, 3, "Xtreme Finish")}
                                     disabled={animatingPlayerId !== null}
-                                    className="bg-neutral-900 border border-white/10 hover:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed text-white p-4 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group shadow-inner"
+                                    className="bg-neutral-900 border border-white/10 hover:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed text-white p-4 landscape:p-2 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group shadow-inner"
                                 >
-                                    <span className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 group-hover:scale-110 transition-transform">+3</span>
+                                    <span className="text-3xl landscape:text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 group-hover:scale-110 transition-transform">+3</span>
                                     <span className="text-xs md:text-sm font-black text-muted-foreground group-hover:text-white uppercase tracking-wider">Xtreme</span>
                                 </button>
                             </div>
