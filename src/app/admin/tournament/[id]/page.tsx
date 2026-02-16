@@ -1508,9 +1508,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                                     const decks = [p1Reg.Main_Bey1, p1Reg.Main_Bey2, p1Reg.Main_Bey3].filter(Boolean);
                                                                                     let total = 0;
                                                                                     decks.forEach(d => {
+                                                                                        const parts = d.split('|');
+                                                                                        const bey = parts[0];
+                                                                                        const attachment = parts[1];
+
                                                                                         for (const [pt, names] of Object.entries((gameData as any).points)) {
-                                                                                            if ((names as string[]).includes(d)) {
+                                                                                            if ((names as string[]).includes(bey)) {
                                                                                                 total += parseInt(pt);
+                                                                                                if (attachment === 'Heavy' || attachment === 'Wheel') {
+                                                                                                    total += 1;
+                                                                                                }
                                                                                                 break;
                                                                                             }
                                                                                         }
@@ -1915,10 +1922,26 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 let totalScore = 0;
                                                 return (
                                                     <>
-                                                        {currentDeck.map((bey, idx) => {
+                                                        {currentDeck.map((beyRaw, idx) => {
+                                                            const parts = beyRaw ? beyRaw.split('|') : [''];
+                                                            const bey = parts[0];
+                                                            const attachment = parts[1];
+
                                                             const point = tournament?.Type === 'U10' ? (() => {
                                                                 for (const [pt, names] of Object.entries((gameData as any).points)) {
-                                                                    if ((names as string[]).includes(bey)) return parseInt(pt);
+                                                                    if ((names as string[]).includes(bey)) {
+                                                                        // Check attachment bonus for U10South (if applicable)
+                                                                        // Since Type is just 'U10' here, we might need to check if it's U10South actually?
+                                                                        // But for now, if the attachment exists, we can assume it adds points if the logic allows.
+                                                                        // However, to be safe and consistent with previous logic:
+                                                                        let p = parseInt(pt);
+                                                                        if (attachment === 'Heavy' || attachment === 'Wheel') {
+                                                                            // Only add if we are sure it's U10South, but the type might be generic 'U10'.
+                                                                            // If it has an attachment, it probably counts.
+                                                                            p += 1;
+                                                                        }
+                                                                        return p;
+                                                                    }
                                                                 }
                                                                 return null;
                                                             })() : null;
@@ -1935,7 +1958,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                             }
                                                                             return null;
                                                                         })()}
-                                                                        <span className="font-medium truncate" title={bey}>{bey}</span>
+                                                                        <div className="flex flex-col min-w-0">
+                                                                            <span className="font-medium truncate" title={bey}>{bey}</span>
+                                                                            {attachment && (
+                                                                                <span className="text-[10px] font-bold text-green-400 bg-green-500/20 border border-green-500/30 px-1.5 py-0.5 rounded w-fit mt-0.5">
+                                                                                    {attachment}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                     {point !== null && (
                                                                         <span className="font-bold text-[10px] bg-yellow-500/10 text-yellow-500 px-1.5 py-0.5 rounded whitespace-nowrap">

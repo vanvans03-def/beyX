@@ -1,12 +1,19 @@
 "use client";
 
+import { useState } from "react";
+
 import { useRegistration } from "./useRegistration";
 import { cn } from "@/lib/utils";
-import { Loader2, AlertTriangle, CheckCircle2, Plus, Trash2, Globe, Eye, XCircle, MessageCircle } from "lucide-react";
+import { ChevronDown, Plus, Trophy, AlertTriangle, Shield, Swords, XCircle, CheckCircle2, Globe, Eye, Trash2, Loader2 } from "lucide-react";
+import { Modal } from "../ui/Modal";
 import appConfig from "@/data/app-config.json";
 import { VisualSelector } from "@/components/ui/VisualSelector";
+import { CXAttachmentSelector } from "@/components/ui/CXAttachmentSelector";
 import { BladeSlot } from "./BladeSlot";
 import gameData from "@/data/game-data.json";
+import gameDataStandard from "@/data/game-data-standard.json";
+import gameDataSouth from "@/data/game-data-south.json";
+import beySeries from "@/data/bey-series.json";
 
 const allBeys = Object.entries(gameData.points).flatMap(([point, names]) =>
     names.map((name) => ({ name, point: parseInt(point) }))
@@ -40,11 +47,12 @@ export function RegistrationView({
         setActiveTab,
         setSelectingState,
         handleSelect,
+        handleAttachmentSelect,
+        handleReset,
         addReserveDeck,
         removeReserveDeck,
         addProfile,
         deleteProfile,
-        copyComboFromFirst,
         updateProfile,
         handleSubmit,
         validateDeck,
@@ -54,6 +62,16 @@ export function RegistrationView({
         closePlayerList
     } = hook;
 
+    // State for CX attachment selection
+    const [selectingAttachment, setSelectingAttachment] = useState<{
+        profileIndex: number;
+        type: 'main' | 'reserve';
+        deckIndex: number;
+        slotIndex: number;
+        beyName: string;
+    } | null>(null);
+    const [showResetConfirm, setShowResetConfirm] = useState(false); // State for reset modal
+
     // Derived
     const activeProfile = profiles[activeTab];
     if (!activeProfile) return null; // Should not happen
@@ -62,6 +80,31 @@ export function RegistrationView({
     const currentSelectorDeck = selectingState && profiles[selectingState.profileIndex]
         ? (selectingState.type === 'main' ? profiles[selectingState.profileIndex].mainBeys : profiles[selectingState.profileIndex].reserveDecks[selectingState.deckIndex])
         : [];
+
+    // Helper function to check if Bey is CX Line
+    const isCXBey = (beyName: string): boolean => {
+        return beySeries.series.CX.includes(beyName);
+    };
+
+    // Wrapper for handleSelect to trigger CX attachment selection
+    const handleBeySelect = (val: string) => {
+        if (!selectingState) return;
+
+        // First, select the Bey
+        handleSelect(val);
+
+        // Then, if it's a CX Bey and mode is U10South, show attachment selector
+        const profile = profiles[selectingState.profileIndex];
+        if (profile.mode === "Under10South" && isCXBey(val)) {
+            setSelectingAttachment({
+                profileIndex: selectingState.profileIndex,
+                type: selectingState.type,
+                deckIndex: selectingState.deckIndex,
+                slotIndex: selectingState.slotIndex,
+                beyName: val
+            });
+        }
+    };
 
     return (
         <div className="pb-24" data-aos="fade-in" suppressHydrationWarning>
@@ -125,10 +168,11 @@ export function RegistrationView({
                         <span className={cn(
                             "px-3 py-1 rounded-full text-xs font-bold border",
                             tournamentType === 'U10' ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
-                                tournamentType === 'NoMoreMeta' ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
-                                    "bg-green-500/20 text-green-400 border-green-500/30"
+                                tournamentType === 'U10South' ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" :
+                                    tournamentType === 'NoMoreMeta' ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
+                                        "bg-green-500/20 text-green-400 border-green-500/30"
                         )}>
-                            TOURNAMENT FORMAT: {tournamentType === 'NoMoreMeta' ? 'NMM' : tournamentType === 'U10' ? 'U10' : 'OPEN'}
+                            TOURNAMENT FORMAT: {tournamentType === 'NoMoreMeta' ? 'NMM' : tournamentType === 'U10' ? 'U10' : tournamentType === 'U10South' ? 'U10 SOUTH' : 'OPEN'}
                         </span>
                     </div>
                 )}
@@ -179,17 +223,6 @@ export function RegistrationView({
                             {loadingPlayers ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                         </button>
                     </div>
-
-                    {/* Copy Combo Button */}
-                    {activeTab > 0 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && tournamentType !== 'Standard' && (
-                        <button
-                            type="button"
-                            onClick={() => copyComboFromFirst(activeTab)}
-                            className="text-xs text-primary hover:underline flex items-center gap-1 ml-1"
-                        >
-                            Make combo same as Player 1
-                        </button>
-                    )}
                 </div>
 
                 {/* Mode Selection - Hide if tournamentType is set (which it always should be in this refactor) */}
@@ -218,16 +251,41 @@ export function RegistrationView({
                 {activeProfile.mode !== 'Standard' && (
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
-                            <h3 className="text-lg font-bold text-foreground">{t('reg.deck.main')}</h3>
-                            {activeProfile.mode === "Under10" && (
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-lg font-bold text-foreground">{t('reg.deck.main')}</h3>
+                                <button
+                                    onClick={() => setShowResetConfirm(true)}
+                                    className="p-1.5 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                                    title="Reset Main Deck"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            </div>
+                            {(activeProfile.mode === "Under10" || activeProfile.mode === "Under10South") && (
                                 <span className={cn(
                                     "text-sm font-bold px-2 py-0.5 rounded",
-                                    (validateDeck(activeProfile.mainBeys, activeProfile.mode).points || 0) <= 10 ? "bg-primary/20 text-primary" : "bg-destructive/20 text-destructive"
+                                    (validateDeck(activeProfile.mainBeys, activeProfile.mode, activeProfile.mainBeyAttachments).points || 0) <= 10 ? "bg-primary/20 text-primary" : "bg-destructive/20 text-destructive"
                                 )}>
-                                    {(validateDeck(activeProfile.mainBeys, activeProfile.mode).points || 0)}/10 pts
+                                    {(validateDeck(activeProfile.mainBeys, activeProfile.mode, activeProfile.mainBeyAttachments).points || 0)}/10 pts
                                 </span>
                             )}
                         </div>
+
+                        {/* Reset Confirmation Modal */}
+                        <Modal
+                            isOpen={showResetConfirm}
+                            onClose={() => setShowResetConfirm(false)}
+                            title="Reset Main Deck"
+                            description="Are you sure you want to reset your main deck? This action cannot be undone."
+                            type="confirm"
+                            confirmText="Reset"
+                            cancelText="Cancel"
+                            variant="destructive"
+                            onConfirm={() => {
+                                handleReset(activeTab, 'main');
+                                setShowResetConfirm(false);
+                            }}
+                        />
 
                         <div className="space-y-2">
                             {activeProfile.mainBeys.map((bey, i) => (
@@ -243,6 +301,17 @@ export function RegistrationView({
                                         setSelectingState({ profileIndex: activeTab, type: 'main', deckIndex: 0, slotIndex: i })
                                     }}
                                     t={t}
+                                    attachment={activeProfile.mainBeyAttachments[i]}
+                                    onAttachmentPress={() => {
+                                        if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)) return;
+                                        setSelectingAttachment({
+                                            profileIndex: activeTab,
+                                            type: 'main',
+                                            deckIndex: 0,
+                                            slotIndex: i,
+                                            beyName: bey
+                                        });
+                                    }}
                                 />
                             ))}
                         </div>
@@ -259,13 +328,13 @@ export function RegistrationView({
                         </div>
 
                         {activeProfile.reserveDecks.map((deck, dIdx) => {
-                            const val = validateDeck(deck, activeProfile.mode);
+                            const val = validateDeck(deck, activeProfile.mode, activeProfile.reserveDeckAttachments[dIdx]);
                             return (
                                 <div key={dIdx} className="space-y-2 bg-secondary/10 p-3 rounded-xl border border-border/50">
                                     <div className="flex items-center justify-between">
                                         <h4 className="text-sm font-bold text-muted-foreground uppercase">{t('reg.deck.reserve_item', { n: dIdx + 1 })}</h4>
                                         <div className="flex items-center gap-2">
-                                            {activeProfile.mode === "Under10" && (
+                                            {(activeProfile.mode === "Under10" || activeProfile.mode === "Under10South") && (
                                                 <span className={cn("text-xs font-bold", val.points! <= 10 ? "text-primary" : "text-destructive")}>
                                                     {val.points}/10
                                                 </span>
@@ -291,6 +360,17 @@ export function RegistrationView({
                                                 setSelectingState({ profileIndex: activeTab, type: 'reserve', deckIndex: dIdx, slotIndex: sIdx })
                                             }}
                                             t={t}
+                                            attachment={activeProfile.reserveDeckAttachments[dIdx]?.[sIdx]}
+                                            onAttachmentPress={() => {
+                                                if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)) return;
+                                                setSelectingAttachment({
+                                                    profileIndex: activeTab,
+                                                    type: 'reserve',
+                                                    deckIndex: dIdx,
+                                                    slotIndex: sIdx,
+                                                    beyName: bey
+                                                });
+                                            }}
                                         />
                                     ))}
                                 </div>
@@ -355,18 +435,61 @@ export function RegistrationView({
                 )}
             </div>
 
+
             {selectingState && (() => {
                 const activeP = profiles[selectingState.profileIndex];
                 let maxPoint: number | undefined = undefined;
 
+                // Determine which point data to use based on mode
+                let pointData = gameData;
                 if (activeP.mode === 'Under10') {
+                    pointData = gameDataStandard;
+                } else if (activeP.mode === 'Under10South') {
+                    pointData = gameDataSouth;
+                }
+
+                // Create allBeys from the correct point data
+                const allBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
+                    names.map((name) => ({ name, point: parseInt(point) }))
+                );
+                allBeys.sort((a, b) => a.name.localeCompare(b.name));
+
+                if (activeP.mode === 'Under10' || activeP.mode === 'Under10South') {
                     // Calculate points used by other slots
+                    const modeAllBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
+                        names.map((name) => ({ name, point: parseInt(point) }))
+                    );
+
                     const otherSlots = currentSelectorDeck.filter((_, idx) => idx !== selectingState.slotIndex);
-                    const usedPoints = otherSlots.reduce((sum, name) => {
-                        const b = allBeys.find(b => b.name === name);
-                        return sum + (b?.point || 0);
+                    const usedPoints = otherSlots.reduce((sum, name, idx) => {
+                        // Find the actual index in the deck to get the correct attachment
+                        // currentSelectorDeck is just a value array, we need the index from the map if possible
+                        // But here we are iterating otherSlots which are just names.
+                        // We need to map back to original indices.
+
+                        // Better approach: Iterate over the FULL deck and skip current slot index
+                        return sum;
                     }, 0);
-                    maxPoint = 10 - usedPoints;
+
+                    // Refactored logic:
+                    const currentDeckAttachments = selectingState.type === 'main'
+                        ? activeP.mainBeyAttachments
+                        : (activeP.reserveDeckAttachments[selectingState.deckIndex] || [null, null, null]);
+
+                    const totalUsedPoints = currentSelectorDeck.reduce((sum, name, idx) => {
+                        if (idx === selectingState.slotIndex) return sum; // Skip current slot being edited
+
+                        const b = modeAllBeys.find(b => b.name === name);
+                        const beyPoint = b?.point || 0;
+
+                        let attachmentPoint = 0;
+                        const att = currentDeckAttachments[idx];
+                        if (att === "Heavy" || att === "Wheel") attachmentPoint = 1;
+
+                        return sum + beyPoint + attachmentPoint;
+                    }, 0);
+
+                    maxPoint = 10 - totalUsedPoints;
                 }
 
                 return (
@@ -377,7 +500,7 @@ export function RegistrationView({
                                 ? activeP.mainBeys[selectingState.slotIndex]
                                 : activeP.reserveDecks[selectingState.deckIndex][selectingState.slotIndex]
                         }
-                        onChange={handleSelect}
+                        onChange={handleBeySelect}
                         onClose={() => setSelectingState(null)}
                         maxPoint={maxPoint}
                         options={allBeys.map(bey => {
@@ -442,6 +565,33 @@ export function RegistrationView({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* CX Attachment Selector */}
+            {selectingAttachment && (
+                <CXAttachmentSelector
+                    currentAttachment={
+                        selectingAttachment.type === 'main'
+                            ? profiles[selectingAttachment.profileIndex].mainBeyAttachments[selectingAttachment.slotIndex]
+                            : profiles[selectingAttachment.profileIndex].reserveDeckAttachments[selectingAttachment.deckIndex]?.[selectingAttachment.slotIndex]
+                    }
+                    usedAttachments={
+                        selectingAttachment.type === 'main'
+                            ? profiles[selectingAttachment.profileIndex].mainBeyAttachments.filter((_, idx) => idx !== selectingAttachment.slotIndex)
+                            : (profiles[selectingAttachment.profileIndex].reserveDeckAttachments[selectingAttachment.deckIndex] || []).filter((_, idx) => idx !== selectingAttachment.slotIndex)
+                    }
+                    onSelect={(attachment) => {
+                        handleAttachmentSelect(
+                            selectingAttachment.profileIndex,
+                            selectingAttachment.type,
+                            selectingAttachment.deckIndex,
+                            selectingAttachment.slotIndex,
+                            attachment
+                        );
+                        setSelectingAttachment(null);
+                    }}
+                    onClose={() => setSelectingAttachment(null)}
+                />
             )}
         </div>
     );

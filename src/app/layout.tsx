@@ -27,6 +27,11 @@ export const metadata: Metadata = {
     locale: 'th_TH',
     type: 'website',
   },
+  icons: {
+    icon: '/bey-x-logo-circle.png',
+    shortcut: '/bey-x-logo-circle.png',
+    apple: '/bey-x-logo-circle.png',
+  },
 };
 
 import { AOSInit } from "@/components/AOSInit";

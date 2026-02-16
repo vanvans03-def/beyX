@@ -6,6 +6,7 @@ export const locales = {
         "reg.placeholder.name": "กรอกชื่อที่ใช้ในการแข่งขัน", // Enter your Display Name
         "reg.label.name": "ชื่อผู้เล่น", // Player Name
         "reg.mode.u10": "รุ่น U10 (แต้ม)", // U10 (Points)
+        "reg.mode.u10south": "รุ่น U10 (ภาคใต้)", // U10 (South)
         "reg.mode.nmm": "รุ่น No More Meta", // No More Meta
         "reg.deck.main": "เด็คหลัก", // Main Deck
         "reg.deck.reserve": "เด็คสำรอง", // Reserve Decks
@@ -181,6 +182,7 @@ export const locales = {
         "admin.matches.win_confirm_text_suffix": "ชนะ?",
 
         "type.U10": "3 Bey Under 10 Point",
+        "type.U10South": "3 Bey Under 10 Point สายใต้",
         "type.NoMoreMeta": "No More Meta",
         "type.Open": "Open",
         "type.Standard": "Open",
@@ -198,6 +200,7 @@ export const locales = {
         "reg.placeholder.name": "Enter your Display Name",
         "reg.label.name": "Player Name",
         "reg.mode.u10": "U10 (Points)",
+        "reg.mode.u10south": "U10 (South)",
         "reg.mode.nmm": "No More Meta",
         "reg.deck.main": "Main Deck",
         "reg.deck.reserve": "Reserve Decks",
@@ -373,6 +376,7 @@ export const locales = {
         "admin.matches.win_confirm_text_suffix": "winner?",
 
         "type.U10": "3 Bey Under 10 Point",
+        "type.U10South": "3 Bey Under 10 Point (South)",
         "type.NoMoreMeta": "No More Meta",
         "type.Open": "Open",
         "type.Standard": "Open",

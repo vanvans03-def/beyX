@@ -61,6 +61,7 @@ export async function POST(req: Request) {
         const body = await req.json();
         if (!body.name) throw new Error("Name is required");
 
+        console.log('[DEBUG] Creating tournament with type:', body.type);
         const newT = await createTournament(body.name, userId, body.type, body.ban_list);
         // Map back to PascalCase
         const mapped = {

@@ -74,5 +74,8 @@
     "WizardRod": "/images/Blade/Wizard Rod.webp",
     "WyvernGale": "/images/Blade/Wyvern Gale.webp",
     "WyverHover": "/images/Blade/Wyvern Hover.webp",
-    "XenoXcalibur": "/images/Blade/Xeno Xcalibur.webp"
+    "XenoXcalibur": "/images/Blade/Xeno Xcalibur.webp",
+    "Heavy": "/images/Blade/Heavy.webp",
+    "Wheel": "/images/Blade/Wheel.webp",
+    "Flare": "/images/Blade/Flare.webp"
 }

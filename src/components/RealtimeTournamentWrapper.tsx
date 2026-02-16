@@ -15,7 +15,7 @@ type Tournament = {
     id: string;
     name: string;
     status: 'OPEN' | 'CLOSED' | 'STARTED' | 'COMPLETED';
-    type: 'U10' | 'NoMoreMeta' | 'Open';
+    type: 'U10' | 'U10South' | 'NoMoreMeta' | 'Open';
     ban_list: string[];
     challonge_url?: string;
     organizer_name?: string;

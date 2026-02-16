@@ -3,8 +3,12 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 import gameData from "@/data/game-data.json";
+import gameDataStandard from "@/data/game-data-standard.json";
+import gameDataSouth from "@/data/game-data-south.json";
+import cxAttachments from "@/data/cx-attachments.json";
+import beySeries from "@/data/bey-series.json";
 
-export type RegistrationMode = "Under10" | "NoMoreMeta" | "Standard";
+export type RegistrationMode = "Under10" | "Under10South" | "NoMoreMeta" | "Standard";
 
 export type Profile = {
     internalId: number;
@@ -12,7 +16,9 @@ export type Profile = {
     name: string;
     mode: RegistrationMode;
     mainBeys: string[];
+    mainBeyAttachments: (string | null)[]; // CX attachments for main deck (Heavy, Wheel, or null)
     reserveDecks: string[][];
+    reserveDeckAttachments: (string | null)[][]; // CX attachments for reserve decks
     status: 'draft' | 'submitted';
     errorMsg?: string;
     validationPoints?: number;
@@ -24,9 +30,15 @@ const allBeys = Object.entries(gameData.points).flatMap(([point, names]) =>
 
 const getModeFromType = (type?: string): RegistrationMode => {
     if (type === 'U10') return 'Under10';
+    if (type === 'U10South') return 'Under10South';
     if (type === 'NoMoreMeta') return 'NoMoreMeta';
     if (type === 'Standard' || type === 'Open') return 'Standard';
     return 'Under10';
+};
+
+// Helper function to check if a Beyblade is from CX Line
+const isCXBey = (beyName: string): boolean => {
+    return beySeries.series.CX.includes(beyName);
 };
 // allBeys.sort((a, b) => a.name.localeCompare(b.name)); // Done globally/once usually
 
@@ -53,13 +65,17 @@ export function useRegistration({
     const [existingPlayers, setExistingPlayers] = useState<string[]>([]);
     const [loadingPlayers, setLoadingPlayers] = useState(false);
 
+    console.log('[useRegistration DEBUG] tournamentType:', tournamentType, 'mode:', getModeFromType(tournamentType));
+
     const [profiles, setProfiles] = useState<Profile[]>([
         {
             internalId: 1,
             name: "",
             mode: getModeFromType(tournamentType),
             mainBeys: ["", "", ""],
+            mainBeyAttachments: [null, null, null],
             reserveDecks: [],
+            reserveDeckAttachments: [],
             status: 'draft'
         }
     ]);
@@ -128,15 +144,61 @@ export function useRegistration({
                 })
                 .then(json => {
                     if (json.success && json.data.length > 0) {
-                        const loadedProfiles = json.data.map((r: any, idx: number) => ({
-                            internalId: idx + 1,
-                            id: r.id,
-                            name: r.player_name,
-                            mode: r.mode,
-                            mainBeys: r.main_deck,
-                            reserveDecks: r.reserve_decks || [],
-                            status: 'submitted'
-                        }));
+                        const loadedProfiles = json.data.map((r: any, idx: number) => {
+                            // Parse Main Deck
+                            const mainBeys: string[] = [];
+                            const mainAttachments: (string | null)[] = [];
+                            (r.main_deck || []).forEach((item: string) => {
+                                if (item && item.includes('|')) {
+                                    const parts = item.split('|');
+                                    mainBeys.push(parts[0]);
+                                    mainAttachments.push(parts[1] || null);
+                                } else {
+                                    mainBeys.push(item || "");
+                                    mainAttachments.push(null);
+                                }
+                            });
+                            // Ensure length 3
+                            while (mainBeys.length < 3) mainBeys.push("");
+                            while (mainAttachments.length < 3) mainAttachments.push(null);
+
+                            // Parse Reserve Decks
+                            const reserveDecks: string[][] = [];
+                            const reserveAttachments: (string | null)[][] = [];
+
+                            (r.reserve_decks || []).forEach((deck: string[]) => {
+                                const dBeys: string[] = [];
+                                const dAtt: (string | null)[] = [];
+                                deck.forEach((item: string) => {
+                                    if (item && item.includes('|')) {
+                                        const parts = item.split('|');
+                                        dBeys.push(parts[0]);
+                                        dAtt.push(parts[1] || null);
+                                    } else {
+                                        dBeys.push(item || "");
+                                        dAtt.push(null);
+                                    }
+                                });
+                                // Ensure length 3
+                                while (dBeys.length < 3) dBeys.push("");
+                                while (dAtt.length < 3) dAtt.push(null);
+
+                                reserveDecks.push(dBeys);
+                                reserveAttachments.push(dAtt);
+                            });
+
+                            return {
+                                internalId: idx + 1,
+                                id: r.id,
+                                name: r.player_name,
+                                mode: r.mode,
+                                mainBeys: mainBeys,
+                                mainBeyAttachments: mainAttachments,
+                                reserveDecks: reserveDecks,
+                                reserveDeckAttachments: reserveAttachments,
+                                status: 'submitted'
+                            };
+                        });
                         setProfiles(loadedProfiles);
                     }
                 })
@@ -152,39 +214,85 @@ export function useRegistration({
         });
     };
 
-    const validateDeck = (deck: string[], mode: RegistrationMode) => {
-        if (mode === "Standard") return { valid: true, message: "" };
+    const validateDeck = (deck: string[], mode: RegistrationMode, attachments?: (string | null)[]) => {
+        let currentPoints = 0;
 
-        // 1. Full
-        if (deck.some(b => !b)) return { valid: false, message: t('reg.validation.incomplete') };
-        // 2. Unique
-        if (new Set(deck).size !== 3) return { valid: false, message: t('reg.validation.duplicate') };
+        // Calculate points if U10/U10South (even if incomplete)
+        if (mode === "Under10" || mode === "Under10South") {
+            const pointData = mode === "Under10South" ? gameDataSouth : gameDataStandard;
+            const modeAllBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
+                names.map((name) => ({ name, point: parseInt(point) }))
+            );
 
-        // 3. Mode
-        if (mode === "Under10") {
             const total = deck.reduce((sum, name) => {
-                const b = allBeys.find(x => x.name === name);
+                if (!name) return sum;
+                const b = modeAllBeys.find(x => x.name === name);
                 return sum + (b?.point || 0);
             }, 0);
-            if (total > 10) return { valid: false, message: t('reg.validation.points', { pts: total }), points: total };
-            return { valid: true, points: total };
-        } else {
+
+            // Add CX attachment points for U10South mode only
+            let attachmentPoints = 0;
+            if (mode === "Under10South" && attachments) {
+                attachmentPoints = attachments.reduce((sum, attachment) => {
+                    if (attachment && (attachment === "Heavy" || attachment === "Wheel")) {
+                        return sum + 1; // Each attachment adds +1 point
+                    }
+                    return sum;
+                }, 0);
+            }
+            currentPoints = total + attachmentPoints;
+        }
+
+        if (mode === "Standard") return { valid: true, message: "", points: 0 };
+
+        // 1. Full
+        if (deck.some(b => !b)) return { valid: false, message: t('reg.validation.incomplete'), points: currentPoints };
+        // 2. Unique
+        if (new Set(deck).size !== 3) return { valid: false, message: t('reg.validation.duplicate'), points: currentPoints };
+
+        // 3. Point Limit
+        if ((mode === "Under10" || mode === "Under10South") && currentPoints > 10) {
+            return { valid: false, message: t('reg.validation.points', { pts: currentPoints }), points: currentPoints };
+        }
+
+        if (mode === "NoMoreMeta") {
+            // Check banned
             const effectiveBanList = (banList && banList.length > 0) ? banList : gameData.banList;
             const banned = deck.filter(name => effectiveBanList.includes(name));
-            if (banned.length > 0) return { valid: false, message: t('reg.validation.banned') };
-            return { valid: true, message: "" };
+            if (banned.length > 0) return { valid: false, message: t('reg.validation.banned'), points: currentPoints };
         }
+
+        return { valid: true, message: "", points: currentPoints };
     };
 
     const validateProfile = (p: Profile) => {
-        const mainVal = validateDeck(p.mainBeys, p.mode);
+        const mainVal = validateDeck(p.mainBeys, p.mode, p.mainBeyAttachments);
         if (!mainVal.valid) return { valid: false, section: t('reg.deck.main'), message: mainVal.message, points: mainVal.points };
 
         for (let i = 0; i < p.reserveDecks.length; i++) {
-            const resVal = validateDeck(p.reserveDecks[i], p.mode);
+            const resVal = validateDeck(p.reserveDecks[i], p.mode, p.reserveDeckAttachments[i]);
             if (!resVal.valid) return { valid: false, section: t('reg.deck.reserve_item', { n: i + 1 }), message: resVal.message, points: resVal.points };
         }
         return { valid: true, section: "", message: "", points: mainVal.points };
+    };
+
+    const validateAllProfiles = () => {
+        const updated = profiles.map(p => {
+            if (p.status === 'submitted') return p;
+            if (!p.name.trim()) return { ...p, errorMsg: 'Please enter player name', validationPoints: undefined };
+
+            const mainVal = validateDeck(p.mainBeys, p.mode, p.mainBeyAttachments);
+            if (!mainVal.valid) return { ...p, errorMsg: mainVal.message, validationPoints: mainVal.points };
+
+            for (let i = 0; i < p.reserveDecks.length; i++) {
+                const resVal = validateDeck(p.reserveDecks[i], p.mode, p.reserveDeckAttachments[i]);
+                if (!resVal.valid) return { ...p, errorMsg: `${t('reg.deck.reserve')} ${i + 1}: ${resVal.message}`, validationPoints: resVal.points };
+            }
+
+            return { ...p, errorMsg: undefined, validationPoints: mainVal.points };
+        });
+        setProfiles(updated);
+        return updated.every(p => !p.errorMsg);
     };
 
     const handleSelect = (val: string) => {
@@ -196,13 +304,57 @@ export function useRegistration({
         if (selectingState.type === 'main') {
             const newBeys = [...profile.mainBeys];
             newBeys[selectingState.slotIndex] = val;
-            updateProfile(pIndex, { mainBeys: newBeys });
+
+            // Reset attachment for this slot
+            const newAttachments = [...profile.mainBeyAttachments];
+            newAttachments[selectingState.slotIndex] = null;
+
+            updateProfile(pIndex, { mainBeys: newBeys, mainBeyAttachments: newAttachments });
         } else {
             const newDecks = [...profile.reserveDecks];
             newDecks[selectingState.deckIndex][selectingState.slotIndex] = val;
-            updateProfile(pIndex, { reserveDecks: newDecks });
+
+            // Reset attachment for this slot
+            const newAttachments = [...profile.reserveDeckAttachments];
+            if (newAttachments[selectingState.deckIndex]) {
+                const deckAttachments = [...newAttachments[selectingState.deckIndex]];
+                deckAttachments[selectingState.slotIndex] = null;
+                newAttachments[selectingState.deckIndex] = deckAttachments;
+                updateProfile(pIndex, { reserveDecks: newDecks, reserveDeckAttachments: newAttachments });
+            } else {
+                updateProfile(pIndex, { reserveDecks: newDecks });
+            }
         }
         setSelectingState(null);
+    };
+
+    const handleAttachmentSelect = (pIndex: number, type: 'main' | 'reserve', deckIndex: number, slotIndex: number, attachment: string | null) => {
+        const profile = profiles[pIndex];
+
+        if (type === 'main') {
+            const newAttachments = [...profile.mainBeyAttachments];
+            newAttachments[slotIndex] = attachment;
+            updateProfile(pIndex, { mainBeyAttachments: newAttachments });
+        } else {
+            const newAttachments = [...profile.reserveDeckAttachments];
+            if (!newAttachments[deckIndex]) {
+                newAttachments[deckIndex] = [null, null, null];
+            }
+            newAttachments[deckIndex][slotIndex] = attachment;
+            updateProfile(pIndex, { reserveDeckAttachments: newAttachments });
+        }
+    };
+
+    const handleReset = (pIndex: number, type: 'main' | 'reserve', deckIndex: number = 0) => {
+        const profile = profiles[pIndex];
+        if (!profile) return;
+
+        if (type === 'main') {
+            updateProfile(pIndex, {
+                mainBeys: ["", "", ""],
+                mainBeyAttachments: [null, null, null]
+            });
+        }
     };
 
     const addReserveDeck = (pIndex: number) => {
@@ -225,7 +377,9 @@ export function useRegistration({
             name: "",
             mode: getModeFromType(tournamentType),
             mainBeys: ["", "", ""],
+            mainBeyAttachments: [null, null, null],
             reserveDecks: [],
+            reserveDeckAttachments: [],
             status: 'draft'
         }]);
         setActiveTab(profiles.length);
@@ -287,6 +441,7 @@ export function useRegistration({
             } else if (tournamentType && p.mode !== tournamentType && !(tournamentType === 'Open' && p.mode === 'Standard')) {
                 let isValidType = false;
                 if (tournamentType === 'U10' && p.mode === 'Under10') isValidType = true;
+                else if (tournamentType === 'U10South' && p.mode === 'Under10South') isValidType = true;
                 else if (tournamentType === 'NoMoreMeta' && p.mode === 'NoMoreMeta') isValidType = true;
                 else if ((tournamentType === 'Open' || tournamentType === 'Standard') && p.mode === 'Standard') isValidType = true;
 
@@ -323,8 +478,15 @@ export function useRegistration({
                     deviceUUID,
                     playerName: p.name,
                     mode: p.mode,
-                    mainBeys: p.mainBeys,
-                    reserveDecks: p.reserveDecks,
+                    mainBeys: p.mainBeys.map((bey, idx) => {
+                        return (bey && p.mainBeyAttachments[idx]) ? `${bey}|${p.mainBeyAttachments[idx]}` : bey;
+                    }),
+                    reserveDecks: p.reserveDecks.map((deck, dIdx) => {
+                        return deck.map((bey, bIdx) => {
+                            const attachment = p.reserveDeckAttachments[dIdx]?.[bIdx];
+                            return (bey && attachment) ? `${bey}|${attachment}` : bey;
+                        });
+                    }),
                     totalPoints: validation.points || 0,
                     tournamentId
                 };
@@ -410,16 +572,19 @@ export function useRegistration({
         setSelectingState,
         setShowPlayerList,
         handleSelect,
+        handleAttachmentSelect,
         addReserveDeck,
         removeReserveDeck,
-        addProfile,
-        deleteProfile,
-        copyComboFromFirst,
+        handleReset,
         updateProfile,
+        addProfile,
+        deleteProfile, // Assuming 'removeProfile' in instruction meant 'deleteProfile'
         handleSubmit,
+        fetchExistingPlayers, // Assuming this should be added as per the Code Edit
         validateProfile,
         validateDeck,
         triggerFetchExistingPlayers,
         closePlayerList: () => setShowPlayerList(false)
     };
 }
+

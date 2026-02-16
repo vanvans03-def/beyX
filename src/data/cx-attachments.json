@@ -1,0 +1,21 @@
+{
+    "attachments": {
+        "Heavy": {
+            "name": "Heavy",
+            "displayName": "Heavy",
+            "points": 1,
+            "image": "/images/Blade/Heavy.webp"
+        },
+        "Wheel": {
+            "name": "Wheel",
+            "displayName": "Wheel",
+            "points": 1,
+            "image": "/images/Blade/Wheel.webp"
+        }
+    },
+    "none": {
+        "name": "None",
+        "displayName": "ไม่ใส่ส่วนเสริมพิเศษ",
+        "points": 0
+    }
+}

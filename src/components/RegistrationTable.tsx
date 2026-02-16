@@ -3,6 +3,8 @@
 import { useMemo, memo } from "react";
 import { CheckCircle, XCircle, Trash2, Users, Loader2 } from "lucide-react";
 import gameData from "@/data/game-data.json";
+import gameDataStandard from "@/data/game-data-standard.json";
+import gameDataSouth from "@/data/game-data-south.json";
 
 // Define Types (subset of what is used in page.tsx)
 type Registration = {
@@ -47,10 +49,11 @@ const validateRow = (row: Registration, tournamentType?: string) => {
     if (tournamentType) {
         let isMatch = false;
         if (tournamentType === 'U10' && row.Mode === 'Under10') isMatch = true;
+        else if (tournamentType === 'U10South' && row.Mode === 'Under10South') isMatch = true;
         else if (tournamentType === 'NoMoreMeta' && row.Mode === 'NoMoreMeta') isMatch = true;
         else if ((tournamentType === 'Open' || tournamentType === 'Standard') && (row.Mode === 'Standard' || row.Mode === 'Open')) isMatch = true;
         // Also allow legacy/loose matching if needed, but per request we strictly validate what is displayed.
-        // row.Mode comes from DB enum potentially? Or just strings. Frontend sends: "Under10", "NoMoreMeta", "Standard"
+        // row.Mode comes from DB enum potentially? Or just strings. Frontend sends: "Under10", "Under10South", "NoMoreMeta", "Standard"
 
         if (!isMatch) {
             return { status: "fail", msg: `Type Mismatch (${row.Mode})`, reserveDecks };
@@ -58,16 +61,32 @@ const validateRow = (row: Registration, tournamentType?: string) => {
     }
 
     const checkDeck = (deck: string[]) => {
-        if (row.Mode === "Under10") {
+        // Strip attachments for validation
+        const cleanDeck = deck.map(d => d ? d.split('|')[0] : '');
+
+        if (row.Mode === "Under10" || row.Mode === "Under10South") {
+            // Use appropriate point mapping based on mode
+            const pointData = row.Mode === "Under10South" ? gameDataSouth : gameDataStandard;
             const pointsMap: Record<string, number> = {};
-            Object.entries(gameData.points).forEach(([pt, names]) => {
+            Object.entries(pointData.points).forEach(([pt, names]) => {
                 names.forEach(name => pointsMap[name] = parseInt(pt));
             });
-            const pts = deck.reduce((sum, name) => sum + (pointsMap[name] || 0), 0);
+            let pts = cleanDeck.reduce((sum, name) => sum + (pointsMap[name] || 0), 0);
+
+            // Add points for attachments if U10South
+            if (row.Mode === "Under10South") {
+                deck.forEach(d => {
+                    const parts = d.split('|');
+                    if (parts.length > 1 && (parts[1] === 'Heavy' || parts[1] === 'Wheel')) {
+                        pts += 1;
+                    }
+                });
+            }
+
             if (pts > 10) return { valid: false, msg: `${pts}/10` };
             return { valid: true, msg: "OK" };
         } else {
-            const banned = deck.filter(name => gameData.banList.includes(name));
+            const banned = cleanDeck.filter(name => gameData.banList.includes(name));
             if (banned.length > 0) return { valid: false, msg: "Banned" };
             return { valid: true, msg: "OK" };
         }
@@ -178,28 +197,46 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                 </div>
                             </td>
                             <td className="p-4 whitespace-nowrap">
-                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" : row.Mode === "Standard" || row.Mode === "Open" ? "bg-green-500/20 text-green-400" : "bg-purple-500/20 text-purple-400"}`}>
-                                    {row.Mode === "Under10" ? "U10" : row.Mode === "Standard" || row.Mode === "Open" ? "OPEN" : "NMM"}
+                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" :
+                                    row.Mode === "Under10South" ? "bg-cyan-500/20 text-cyan-400" :
+                                        row.Mode === "Standard" || row.Mode === "Open" ? "bg-green-500/20 text-green-400" :
+                                            "bg-purple-500/20 text-purple-400"
+                                    }`}>
+                                    {row.Mode === "Under10" ? "U10" :
+                                        row.Mode === "Under10South" ? "U10S" :
+                                            row.Mode === "Standard" || row.Mode === "Open" ? "OPEN" : "NMM"}
                                 </span>
                             </td>
                             <td className="p-4 text-xs space-y-1 min-w-[200px]">
                                 <div className="flex gap-1 flex-wrap">
-                                    {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => (
-                                        <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap">
-                                            {b}
-                                        </span>
-                                    ))}
+                                    {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => {
+                                        const parts = b ? b.split('|') : [''];
+                                        const name = parts[0];
+                                        const attachment = parts[1];
+                                        return (
+                                            <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap flex items-center gap-1">
+                                                {name}
+                                                {attachment && <span className="text-[9px] text-muted-foreground bg-black/20 px-1 rounded">{attachment}</span>}
+                                            </span>
+                                        );
+                                    })}
                                 </div>
                             </td>
                             <td className="p-4 text-xs space-y-2 min-w-[200px]">
                                 {row.reserveDecks.map((deck, idx) => (
                                     <div key={idx} className="flex gap-1 items-center opacity-80 flex-wrap">
                                         <span className="text-[9px] w-4 text-muted-foreground">#{idx + 1}</span>
-                                        {deck.map((b, bIdx) => (
-                                            <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap">
-                                                {b}
-                                            </span>
-                                        ))}
+                                        {deck.map((b, bIdx) => {
+                                            const parts = b ? b.split('|') : [''];
+                                            const name = parts[0];
+                                            const attachment = parts[1];
+                                            return (
+                                                <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap flex items-center gap-1">
+                                                    {name}
+                                                    {attachment && <span className="text-[8px] text-muted-foreground bg-black/20 px-0.5 rounded">{attachment}</span>}
+                                                </span>
+                                            );
+                                        })}
                                     </div>
                                 ))}
                             </td>

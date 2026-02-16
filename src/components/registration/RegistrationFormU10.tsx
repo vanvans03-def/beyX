@@ -7,6 +7,7 @@ type Props = {
     tournamentId: string;
     tournamentName?: string;
     tournamentStatus?: string;
+    tournamentType?: string;
     banList?: string[];
     challongeUrl?: string;
 };
@@ -15,12 +16,13 @@ export default function RegistrationFormU10({
     tournamentId,
     tournamentName,
     tournamentStatus,
+    tournamentType,
     banList,
     challongeUrl
 }: Props) {
     const hook = useRegistration({
         tournamentId,
-        tournamentType: "U10", // Hardcoded
+        tournamentType: (tournamentType as "U10" | "U10South") || "U10",
         banList,
         tournamentStatus,
         challongeUrl
@@ -29,7 +31,7 @@ export default function RegistrationFormU10({
     return (
         <RegistrationView
             hook={hook}
-            tournamentType="U10"
+            tournamentType={tournamentType || "U10"}
             tournamentStatus={tournamentStatus}
             challongeUrl={challongeUrl}
             banList={banList}

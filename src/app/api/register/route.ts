@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createRegistration } from "@/lib/repository";
 import gameData from "@/data/game-data.json";
+import gameDataStandard from "@/data/game-data-standard.json";
+import gameDataSouth from "@/data/game-data-south.json";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
@@ -12,23 +14,42 @@ function validatePayload(body: any) {
         return { valid: false, message: "Invalid payload structure" };
     }
 
+    // Parse names (strip custom suffixes like "|Heavy")
+    const cleanBeys = mainBeys.map((name: string) => name ? name.split('|')[0] : '');
+
     // Check Bans if NoMoreMeta
     if (mode === "NoMoreMeta") {
-        const banned = mainBeys.filter((name: string) => gameData.banList.includes(name));
+        const banned = cleanBeys.filter((name: string) => gameData.banList.includes(name));
         if (banned.length > 0) {
             return { valid: false, message: `Contains Banned Beys: ${banned.join(", ")}` };
         }
     }
 
-    // Check Points if Under10
-    if (mode === "Under10") {
+    // Check Points if Under10 or Under10South
+    if (mode === "Under10" || mode === "Under10South") {
+        // Use appropriate point mapping based on mode
+        const pointData = mode === "Under10South" ? gameDataSouth : gameDataStandard;
         // Re-calculate points to be sure
         const pointsMap: Record<string, number> = {};
-        Object.entries(gameData.points).forEach(([pt, names]) => {
+        Object.entries(pointData.points).forEach(([pt, names]) => {
             names.forEach(name => pointsMap[name] = parseInt(pt));
         });
 
-        const calculatedPoints = mainBeys.reduce((sum: number, name: string) => sum + (pointsMap[name] || 0), 0);
+        let calculatedPoints = cleanBeys.reduce((sum: number, name: string) => sum + (pointsMap[name] || 0), 0);
+
+        // Add attachment points for U10South
+        if (mode === "Under10South") {
+            // We have to look at original strings for attachments
+            mainBeys.forEach((rawName: string) => {
+                if (rawName.includes('|')) {
+                    const parts = rawName.split('|');
+                    if (parts[1] === 'Heavy' || parts[1] === 'Wheel') {
+                        calculatedPoints += 1;
+                    }
+                }
+            });
+        }
+
         if (calculatedPoints > 10) {
             return { valid: false, message: `Total Points ${calculatedPoints} exceeds limit.` };
         }

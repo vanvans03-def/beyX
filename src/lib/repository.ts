@@ -8,7 +8,7 @@ export type Tournament = {
     name: string;
     status: 'OPEN' | 'CLOSED' | 'STARTED' | 'COMPLETED';
     created_at: Date;
-    type: 'U10' | 'NoMoreMeta' | 'Open';
+    type: 'U10' | 'U10South' | 'NoMoreMeta' | 'Open';
     ban_list: string[];
     challonge_url?: string;
     user_id?: string; // Added for ownership check
@@ -113,7 +113,7 @@ export async function getTournament(id: string): Promise<Tournament | null> {
     };
 }
 
-export async function createTournament(name: string, userId: string, type: 'U10' | 'NoMoreMeta' | 'Open' = 'U10', ban_list: string[] = []): Promise<Tournament> {
+export async function createTournament(name: string, userId: string, type: 'U10' | 'U10South' | 'NoMoreMeta' | 'Open' = 'U10', ban_list: string[] = []): Promise<Tournament> {
     if (!userId) throw new Error("Unauthorized: Cannot create tournament without userId");
 
     const id = uuidv4();

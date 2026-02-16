@@ -24,6 +24,7 @@
             "Hunt"
         ],
         "5": [
+            "HellsScythe",
             "DranSword",
             "SharkEdge",
             "CrimsonGaruda",
@@ -39,7 +40,6 @@
             "Might"
         ],
         "3": [
-            "HellsScythe",
             "DranDagger",
             "HellsChain",
             "BlackShell",
@@ -50,7 +50,8 @@
             "SharkGill",
             "HellsHammer",
             "Brush",
-            "Eclipse"
+            "Eclipse",
+            "Flare"
         ],
         "2": [
             "KnightShield",
