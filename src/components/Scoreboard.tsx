@@ -235,7 +235,7 @@ export default function Scoreboard({ onBack }: ScoreboardProps) {
                                 "flex-none p-4 landscape:p-1 md:p-6 bg-black/20 backdrop-blur-sm z-20",
                                 // Border separation depends on layout
                                 "border-t landscape:border-t-0 border-white/5",
-                                isTwoPlayer && "landscape:w-24 md:landscape:w-32 lg:landscape:w-40 landscape:border-l border-white/5",
+                                isTwoPlayer && "landscape:w-24 md:landscape:w-32 lg:landscape:w-40 landscape:border-l border-white/5 landscape:pt-24",
                                 isTwoPlayer && isPlayerOne && "landscape:border-l-0 landscape:border-r"
                             )}>
                                 <div className={cn(
