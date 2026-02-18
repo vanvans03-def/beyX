@@ -12,6 +12,40 @@ type Props = {
     params: Promise<{ id: string }>
 }
 
+export async function generateMetadata(
+    { params }: Props,
+    parent: ResolvingMetadata
+): Promise<Metadata> {
+    const { id } = await params;
+    const tournament = await getTournament(id);
+
+    // optionally access and extend (rather than replace) parent metadata
+    const previousImages = (await parent).openGraph?.images || []
+
+    if (!tournament) {
+        return {
+            title: "Tournament Not Found",
+            description: "The requested tournament does not exist.",
+        }
+    }
+
+    return {
+        title: tournament.name,
+        description: `Join the ${tournament.name} tournament! Status: ${tournament.status}`,
+        openGraph: {
+            title: tournament.name,
+            description: `Join the ${tournament.name} tournament! Status: ${tournament.status}`,
+            images: [`/register/${id}/opengraph-image`, ...previousImages],
+        },
+        twitter: {
+            card: 'summary_large_image',
+            title: tournament.name,
+            description: `Join the ${tournament.name} tournament! Status: ${tournament.status}`,
+            images: [`/register/${id}/opengraph-image`],
+        }
+    }
+}
+
 export default async function RegisterPage({ params }: Props) {
     const { id } = await params;
     const tournament = await getTournament(id);

@@ -32,6 +32,12 @@ export const metadata: Metadata = {
     shortcut: '/bey-x-logo-circle.png',
     apple: '/bey-x-logo-circle.png',
   },
+  twitter: {
+    card: 'summary_large_image',
+    title: "BeyX System",
+    description: "Tournament Registration & Management Platform",
+    images: ['/opengraph-image'], // Fallback to root OG image
+  },
 };
 
 import { AOSInit } from "@/components/AOSInit";
