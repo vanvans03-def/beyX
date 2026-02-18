@@ -178,50 +178,50 @@ export default function Scoreboard({ onBack }: ScoreboardProps) {
 
             {/* Main Content */}
             <main className="flex-1 flex flex-col md:flex-row landscape:flex-row relative min-h-0 landscape:pt-0">
-                {activePlayers.map((player) => (
-                    <div
-                        key={player.id}
-                        className={cn(
-                            "flex-1 flex flex-col relative transition-all duration-500 ease-in-out min-h-0",
-                            activePlayers.length === 3
-                                ? "md:border-r landscape:border-r last:border-r-0 border-white/5"
-                                : "md:first:border-r landscape:first:border-r border-white/5"
-                        )}
-                    >
-                        {/* Background Tint */}
-                        <div className={cn("absolute inset-0 opacity-5 bg-gradient-to-b pointer-events-none", player.bgClass)} />
+                {activePlayers.map((player, index) => {
+                    const isTwoPlayer = activePlayers.length === 2;
+                    const isPlayerOne = index === 0;
 
-                        {/* Score Area (Top Half) */}
-                        <div className="flex-[1.5] flex flex-col items-center justify-center relative p-8 landscape:p-2 md:p-8 min-h-0 z-10">
-                            <h2 className={cn("text-2xl landscape:text-lg md:text-4xl font-black italic tracking-widest uppercase mb-4 landscape:mb-0 opacity-80 landscape:opacity-50", player.textClass)}>
-                                {player.name}
-                            </h2>
+                    return (
+                        <div
+                            key={player.id}
+                            className={cn(
+                                "flex-1 flex flex-col relative transition-all duration-500 ease-in-out min-h-0",
+                                // Border logic
+                                activePlayers.length === 3
+                                    ? "md:border-r landscape:border-r last:border-r-0 border-white/5"
+                                    : "md:first:border-r landscape:first:border-r border-white/5",
+                                // 2P Landscape Layout: P1 Row-Reverse (Controls Left), P2 Row (Controls Right)
+                                isTwoPlayer && "landscape:flex-row",
+                                isTwoPlayer && isPlayerOne && "landscape:flex-row-reverse"
+                            )}
+                        >
+                            {/* Background Tint */}
+                            <div className={cn("absolute inset-0 opacity-5 bg-gradient-to-b pointer-events-none", player.bgClass)} />
 
-                            <div className="relative group cursor-default flex-1 flex items-center justify-center">
-                                {/* Huge Score Number */}
-                                <div className={cn(
-                                    "text-[100px] landscape:text-[140px] md:text-[200px] leading-none font-black text-white drop-shadow-2xl tabular-nums transition-transform duration-150 z-[1] relative select-none",
-                                    animatingPlayerId === player.id ? "scale-110" : "scale-100"
-                                )}>
-                                    {player.score}
+                            {/* Score Area (Top/Center) */}
+                            <div className="flex-1 flex flex-col items-center justify-center relative p-0 min-h-0 z-0 w-full overflow-hidden">
+                                <h2 className={cn("text-2xl landscape:text-xl md:text-3xl font-black italic tracking-widest uppercase mb-4 landscape:mb-0 opacity-80 landscape:opacity-50 absolute top-8 landscape:top-4 z-10", player.textClass)}>
+                                    {player.name}
+                                </h2>
+
+                                <div className="relative group cursor-default flex-1 flex items-center justify-center w-full h-full">
+                                    {/* Huge Score Number */}
+                                    <div className={cn(
+                                        "text-[150px] landscape:text-[250px] md:text-[400px] leading-none font-black text-white drop-shadow-2xl tabular-nums transition-transform duration-150 z-[1] relative select-none flex items-center justify-center h-full w-full",
+                                        animatingPlayerId === player.id ? "scale-105" : "scale-100"
+                                    )}>
+                                        {player.score}
+                                    </div>
                                 </div>
-
-                                {/* Decrement Button */}
-                                <button
-                                    onClick={() => decrementScore(player.id)}
-                                    className="absolute -right-8 md:-right-12 top-1/2 -translate-y-1/2 p-2 md:p-3 rounded-full bg-white/5 hover:bg-red-500/20 text-muted-foreground hover:text-red-500 transition-all opacity-100 active:scale-90"
-                                    title="Remove 1 point"
-                                >
-                                    <Minus className="h-6 w-6 md:h-8 md:w-8" />
-                                </button>
                             </div>
 
-                            {/* Animation Overlay */}
+                            {/* Animation Overlay - Moved to be a sibling of the score/controls area but fixed relative to screen or container with high Z */}
                             {animatingPlayerId === player.id && (
-                                <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
-                                    <div className="bg-black/80 backdrop-blur-md border border-white/20 px-6 py-4 md:px-12 md:py-8 rounded-2xl md:rounded-[2rem] transform rotate-[-5deg] shadow-2xl animate-in zoom-in-0 fade-in duration-300 slide-in-from-bottom-10 ease-out">
+                                <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-none overflow-hidden">
+                                    <div className="bg-black/90 backdrop-blur-xl border border-white/20 px-6 py-4 landscape:px-8 landscape:py-4 md:px-16 md:py-10 rounded-[1.5rem] md:rounded-[3rem] transform rotate-[-3deg] shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-in zoom-in-50 fade-in duration-200 slide-in-from-bottom-10 ease-out">
                                         <span className={cn(
-                                            "text-3xl md:text-7xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-neutral-400 drop-shadow-sm whitespace-nowrap",
+                                            "text-3xl landscape:text-4xl md:text-8xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-neutral-400 drop-shadow-sm whitespace-nowrap",
                                             player.textClass
                                         )}>
                                             {animationText}
@@ -229,54 +229,74 @@ export default function Scoreboard({ onBack }: ScoreboardProps) {
                                     </div>
                                 </div>
                             )}
-                        </div>
 
-                        {/* Controls Area (Bottom Half) */}
-                        <div className="flex-none p-4 landscape:p-3 md:p-8 bg-black/20 backdrop-blur-sm border-t border-white/5 z-10 landscape:pb-4">
-                            <div className="grid grid-cols-2 gap-3 landscape:gap-2 md:gap-4 max-w-lg mx-auto">
-                                <button
-                                    onClick={() => handleScore(player.id, 1, "Spin Finish")}
-                                    disabled={animatingPlayerId !== null}
-                                    className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-4 landscape:p-3 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group"
-                                >
-                                    <span className="text-2xl landscape:text-xl md:text-4xl font-bold group-hover:text-primary transition-colors">+1</span>
-                                    <span className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Spin Finish</span>
-                                </button>
+                            {/* Controls Area (Bottom/Side) */}
+                            <div className={cn(
+                                "flex-none p-4 landscape:p-1 md:p-6 bg-black/20 backdrop-blur-sm z-20",
+                                // Border separation depends on layout
+                                "border-t landscape:border-t-0 border-white/5",
+                                isTwoPlayer && "landscape:w-24 md:landscape:w-32 lg:landscape:w-40 landscape:border-l border-white/5",
+                                isTwoPlayer && isPlayerOne && "landscape:border-l-0 landscape:border-r"
+                            )}>
+                                <div className={cn(
+                                    "grid gap-2 mx-auto h-full content-center",
+                                    // Grid columns: 2 cols for mobile portrait, 1 col for side controls in landscape
+                                    isTwoPlayer ? "grid-cols-2 landscape:grid-cols-1" : "grid-cols-2"
+                                )}>
+                                    <button
+                                        onClick={() => handleScore(player.id, 1, "Spin Finish")}
+                                        disabled={animatingPlayerId !== null}
+                                        className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group relative overflow-hidden"
+                                    >
+                                        <span className="text-lg landscape:text-xl md:text-2xl font-bold group-hover:text-primary transition-colors">+1</span>
+                                        <span className="text-[8px] md:text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center leading-tight">Spin</span>
+                                    </button>
 
-                                <button
-                                    onClick={() => handleScore(player.id, 2, "Burst Finish")}
-                                    disabled={animatingPlayerId !== null}
-                                    className={cn(
-                                        "relative overflow-hidden bg-gradient-to-br p-4 landscape:p-3 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-lg group border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed",
-                                        player.bgClass
-                                    )}
-                                >
-                                    <span className="text-2xl landscape:text-xl md:text-4xl font-bold text-white drop-shadow-md group-hover:scale-110 transition-transform">+2</span>
-                                    <span className="text-[10px] md:text-sm font-bold text-white/90 uppercase tracking-wider">Burst Finish</span>
-                                    <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </button>
+                                    <button
+                                        onClick={() => handleScore(player.id, 2, "Burst Finish")}
+                                        disabled={animatingPlayerId !== null}
+                                        className={cn(
+                                            "relative overflow-hidden bg-gradient-to-br p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 shadow-lg group border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed",
+                                            player.bgClass
+                                        )}
+                                    >
+                                        <span className="text-lg landscape:text-xl md:text-2xl font-bold text-white drop-shadow-md group-hover:scale-110 transition-transform">+2</span>
+                                        <span className="text-[8px] md:text-[10px] font-bold text-white/90 uppercase tracking-wider text-center leading-tight">Burst</span>
+                                        <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </button>
 
-                                <button
-                                    onClick={() => handleScore(player.id, 2, "Over Finish")}
-                                    disabled={animatingPlayerId !== null}
-                                    className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-4 landscape:p-3 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group"
-                                >
-                                    <span className="text-2xl landscape:text-xl md:text-4xl font-bold group-hover:text-yellow-400 transition-colors">+2</span>
-                                    <span className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Over Finish</span>
-                                </button>
+                                    <button
+                                        onClick={() => handleScore(player.id, 2, "Over Finish")}
+                                        disabled={animatingPlayerId !== null}
+                                        className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group relative overflow-hidden"
+                                    >
+                                        <span className="text-lg landscape:text-xl md:text-2xl font-bold group-hover:text-yellow-400 transition-colors">+2</span>
+                                        <span className="text-[8px] md:text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center leading-tight">Over</span>
+                                    </button>
 
-                                <button
-                                    onClick={() => handleScore(player.id, 3, "Xtreme Finish")}
-                                    disabled={animatingPlayerId !== null}
-                                    className="bg-neutral-900 border border-white/10 hover:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed text-white p-4 landscape:p-3 md:p-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group shadow-inner"
-                                >
-                                    <span className="text-2xl landscape:text-xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 group-hover:scale-110 transition-transform">+3</span>
-                                    <span className="text-[10px] md:text-sm font-black text-muted-foreground group-hover:text-white uppercase tracking-wider">Xtreme</span>
-                                </button>
+                                    <button
+                                        onClick={() => handleScore(player.id, 3, "Xtreme Finish")}
+                                        disabled={animatingPlayerId !== null}
+                                        className="bg-neutral-900 border border-white/10 hover:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group shadow-inner relative overflow-hidden"
+                                    >
+                                        <span className="text-lg landscape:text-xl md:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 group-hover:scale-110 transition-transform">+3</span>
+                                        <span className="text-[8px] md:text-[10px] font-black text-muted-foreground group-hover:text-white uppercase tracking-wider text-center leading-tight">Xtreme</span>
+                                    </button>
+
+                                    {/* Decrement Button - Moved Here */}
+                                    <button
+                                        onClick={() => decrementScore(player.id)}
+                                        disabled={animatingPlayerId !== null}
+                                        className="col-span-2 landscape:col-span-1 bg-white/5 hover:bg-red-500/20 active:bg-red-500/30 border border-white/5 hover:border-red-500/30 text-muted-foreground hover:text-red-500 p-2 landscape:p-2 md:p-3 rounded-lg flex flex-row landscape:flex-col items-center justify-center gap-2 transition-all active:scale-95 group mt-2 landscape:mt-4"
+                                    >
+                                        <Minus className="h-4 w-4" />
+                                        <span className="text-[10px] font-bold uppercase tracking-wider">Remove</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </main>
 
             <Modal
