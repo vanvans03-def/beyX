@@ -585,16 +585,17 @@ export default function AdminPage() {
                         </div>
 
                         {/* Tab Navigation */}
-                        <div className="flex bg-secondary/30 p-1 rounded-lg">
+                        {/* Tab Navigation - Scrollable on mobile if needed or just flex */}
+                        <div className="flex bg-secondary/30 p-1 rounded-lg shrink-0">
                             <button
                                 onClick={() => setActiveTab('tournaments')}
-                                className={cn("px-4 py-1.5 rounded-md text-sm font-medium transition-all", activeTab === 'tournaments' ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:text-foreground")}
+                                className={cn("px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap", activeTab === 'tournaments' ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:text-foreground")}
                             >
                                 Tournaments
                             </button>
                             <button
                                 onClick={() => setActiveTab('events')}
-                                className={cn("px-4 py-1.5 rounded-md text-sm font-medium transition-all", activeTab === 'events' ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:text-foreground")}
+                                className={cn("px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap", activeTab === 'events' ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:text-foreground")}
                             >
                                 Events
                             </button>
@@ -602,7 +603,7 @@ export default function AdminPage() {
 
                         {/* Global Event Toggle */}
                         {activeTab === 'events' && (
-                            <div className="flex items-center gap-2 bg-secondary/20 px-3 py-1.5 rounded-lg border border-white/5">
+                            <div className="flex items-center gap-2 bg-secondary/20 px-3 py-1.5 rounded-lg border border-white/5 shrink-0">
                                 <span className="text-xs font-bold text-muted-foreground uppercase">Event System</span>
                                 <button
                                     onClick={handleToggleEventSystem}
@@ -619,13 +620,14 @@ export default function AdminPage() {
                             </div>
                         )}
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-end">
                             <Link
                                 href="/admin/users/create"
-                                className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5"
+                                className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5 whitespace-nowrap"
                             >
                                 <UserPlus className="w-4 h-4" />
-                                <span>Add Shop</span>
+                                <span className="hidden sm:inline">Add Shop</span>
+                                <span className="sm:hidden">Shop</span>
                             </Link>
 
                             <button
@@ -637,7 +639,7 @@ export default function AdminPage() {
                                     router.refresh();
                                     router.push("/");
                                 }}
-                                className="text-xs text-muted-foreground hover:text-destructive underline"
+                                className="text-xs text-muted-foreground hover:text-destructive underline whitespace-nowrap"
                             >
                                 Logout
                             </button>
@@ -757,17 +759,17 @@ export default function AdminPage() {
                                                     <div key={t.TournamentID} className={`glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors ${isStarted(t) ? 'bg-amber-500/10 border-amber-500/30' : 'bg-gradient-to-r from-transparent to-primary/5'}`}>
                                                         <div>
                                                             <h3 className="font-bold text-lg text-white">{t.Name}</h3>
-                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                                                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
                                                                 <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${isStarted(t) ? 'bg-amber-500/20 text-amber-500' : 'bg-green-500/20 text-green-500'}`}>
                                                                     {t.Status === 'OPEN' && isStarted(t) ? 'STARTED' : t.Status}
                                                                 </span>
                                                                 {t.Type && (
-                                                                    <span className="px-1.5 py-0.5 rounded font-bold uppercase border border-white/10">
+                                                                    <span className="px-1.5 py-0.5 rounded font-bold uppercase border border-white/10 whitespace-normal break-words max-w-full">
                                                                         {/* @ts-ignore */}
                                                                         {(locales[lang] as any)[`type.${t.Type}`] || t.Type}
                                                                     </span>
                                                                 )}
-                                                                <span>• Created {new Date(t.CreatedAt).toLocaleDateString()}</span>
+                                                                <span className="shrink-0">• Created {new Date(t.CreatedAt).toLocaleDateString()}</span>
                                                             </div>
                                                         </div>
 

@@ -360,7 +360,10 @@ export function useRegistration({
     const addReserveDeck = (pIndex: number) => {
         const profile = profiles[pIndex];
         if (profile.reserveDecks.length < 3) {
-            updateProfile(pIndex, { reserveDecks: [...profile.reserveDecks, ["", "", ""]] });
+            updateProfile(pIndex, {
+                reserveDecks: [...profile.reserveDecks, ["", "", ""]],
+                reserveDeckAttachments: [...profile.reserveDeckAttachments, [null, null, null]]
+            });
         }
     };
 
@@ -368,7 +371,14 @@ export function useRegistration({
         const profile = profiles[pIndex];
         const newDecks = [...profile.reserveDecks];
         newDecks.splice(deckIndex, 1);
-        updateProfile(pIndex, { reserveDecks: newDecks });
+
+        const newAttachments = [...profile.reserveDeckAttachments];
+        newAttachments.splice(deckIndex, 1);
+
+        updateProfile(pIndex, {
+            reserveDecks: newDecks,
+            reserveDeckAttachments: newAttachments
+        });
     };
 
     const addProfile = () => {
