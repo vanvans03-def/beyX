@@ -2,11 +2,10 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { hashPassword } from '@/lib/auth';
 
+export const runtime = 'edge';
+
 export async function POST(request: Request) {
     try {
-        // Authorization check (optional: strictly restrict to 'admin' username if needed)
-        // For now, relying on Middleware which ensures user is logged in.
-
         const body = await request.json();
         const { username, password, challongeApiKey, shopName } = body;
 
@@ -47,3 +46,33 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
+
+// Reset password — re-hashes using PBKDF2 (Edge-compatible format)
+export async function PUT(request: Request) {
+    try {
+        const body = await request.json();
+        const { username, newPassword } = body;
+
+        if (!username || !newPassword) {
+            return NextResponse.json({ error: 'Missing username or newPassword' }, { status: 400 });
+        }
+
+        const passwordHash = await hashPassword(newPassword);
+
+        const { error } = await supabaseAdmin
+            .from('users')
+            .update({ password_hash: passwordHash })
+            .eq('username', username);
+
+        if (error) {
+            throw new Error(error.message);
+        }
+
+        return NextResponse.json({ success: true, message: 'Password updated successfully' });
+
+    } catch (err: any) {
+        console.error("Reset Password Error:", err);
+        return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+}
+

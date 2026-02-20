@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw } from "lucide-react";
+import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw, KeyRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -628,6 +628,15 @@ export default function AdminPage() {
                                 <UserPlus className="w-4 h-4" />
                                 <span className="hidden sm:inline">Add Shop</span>
                                 <span className="sm:hidden">Shop</span>
+                            </Link>
+
+                            <Link
+                                href="/admin/reset-password"
+                                className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5 whitespace-nowrap"
+                            >
+                                <KeyRound className="w-4 h-4" />
+                                <span className="hidden sm:inline">Change Password</span>
+                                <span className="sm:hidden">Password</span>
                             </Link>
 
                             <button

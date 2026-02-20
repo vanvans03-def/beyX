@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import * as sheets from '@/lib/sheets';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);

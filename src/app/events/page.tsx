@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Metadata, ResolvingMetadata } from "next";
 
 //export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 export const revalidate = 60;
 
 type Props = {

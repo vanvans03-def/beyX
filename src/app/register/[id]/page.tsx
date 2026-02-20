@@ -7,6 +7,7 @@ import { getTournamentStandings } from "@/lib/challonge";
 import RealtimeTournamentWrapper from "@/components/RealtimeTournamentWrapper";
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 type Props = {
     params: Promise<{ id: string }>

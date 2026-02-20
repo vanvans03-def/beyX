@@ -8,6 +8,8 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Create client with service key to bypass RLS for admin writes
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+export const runtime = 'edge';
+
 export async function POST(req: Request) {
     try {
         console.log("Receiving Challonge Webhook...");
