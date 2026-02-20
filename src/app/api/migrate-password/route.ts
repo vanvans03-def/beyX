@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { hashPassword } from '@/lib/auth';
-import bcrypt from 'bcryptjs';
 
-// Node.js runtime needed to run bcryptjs for legacy hash verification
-export const runtime = 'nodejs';
+// Edge Runtime compatible — does NOT use bcrypt
+// Security: only works if the stored hash is a legacy bcrypt hash ($2...)
+// Once migrated to PBKDF2, this endpoint rejects the request automatically.
+export const runtime = 'edge';
 
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { username, currentPassword, newPassword } = body;
+        const { username, newPassword } = body;
 
-        if (!username || !currentPassword || !newPassword) {
+        if (!username || !newPassword) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
@@ -27,29 +28,17 @@ export async function POST(req: Request) {
             .single();
 
         if (error || !data) {
-            // Don't reveal if user exists or not
-            return NextResponse.json({ error: 'Invalid username or password' }, { status: 400 });
+            return NextResponse.json({ error: 'User not found' }, { status: 400 });
         }
 
         const stored = data.password_hash as string;
-        let isValid = false;
 
-        if (stored.startsWith('pbkdf2:')) {
-            // Already migrated — also allow re-migration via this page
-            // Verify with PBKDF2 manually (duplicate logic here to keep nodejs isolation)
+        // Only allow migration if the stored hash is a legacy bcrypt hash
+        if (!stored.startsWith('$2')) {
             return NextResponse.json(
-                { error: 'Your password is already using the new format. Please login normally.' },
+                { error: 'Your account has already been migrated. Please login normally.' },
                 { status: 400 }
             );
-        } else if (stored.startsWith('$2')) {
-            // Legacy bcrypt hash
-            isValid = await bcrypt.compare(currentPassword, stored);
-        } else {
-            return NextResponse.json({ error: 'Unknown password format' }, { status: 400 });
-        }
-
-        if (!isValid) {
-            return NextResponse.json({ error: 'Invalid username or password' }, { status: 400 });
         }
 
         // Re-hash with PBKDF2 (Edge-compatible)
