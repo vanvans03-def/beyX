@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-//export const runtime = 'edge';
+export const runtime = 'edge';
 
 const SECRET_KEY = new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key-change-me');
 const ALG = 'HS256';
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     // 1. Identify Protected Routes
