@@ -248,9 +248,9 @@ export async function getMatchesFromDB(tournamentIdentifier: string) {
         underway_at: m.underway_at,
         completed_at: m.completed_at,
         updated_at: m.updated_at,
-        // Fallback: Provide placeholder objects so frontend doesn't crash on match.player1.name
-        player1: { id: m.player1_id, name: "Player " + (m.player1_id || "?"), misc: "" },
-        player2: { id: m.player2_id, name: "Player " + (m.player2_id || "?"), misc: "" }
+        // Use cached names from DB — populated during Challonge sync
+        player1: { id: m.player1_id, name: m.player1_name || ("Player " + (m.player1_id || "?")), misc: "" },
+        player2: { id: m.player2_id, name: m.player2_name || ("Player " + (m.player2_id || "?")), misc: "" }
     }));
 }
 

@@ -35,6 +35,8 @@ export async function GET(request: Request) {
                 tournament_id: m.tournament_id,
                 player1_id: m.player1_id,
                 player2_id: m.player2_id,
+                player1_name: m.player1?.name ?? null,  // Cache name to avoid re-fetching from Challonge
+                player2_name: m.player2?.name ?? null,
                 score_csv: m.scores_csv, // Note mapping difference
                 state: m.state,
                 winner_id: m.winner_id,
