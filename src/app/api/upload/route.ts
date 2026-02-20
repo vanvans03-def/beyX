@@ -1,7 +1,6 @@
 import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 
-export const runtime = 'edge';
 
 export async function POST(request: Request): Promise<NextResponse> {
     const { searchParams } = new URL(request.url);

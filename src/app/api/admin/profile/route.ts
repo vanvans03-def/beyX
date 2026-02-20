@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-export const runtime = 'edge';
 
 export async function GET(req: Request) {
     const userId = req.headers.get('x-user-id');

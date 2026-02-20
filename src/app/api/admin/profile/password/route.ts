@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { hashPassword, verifyPassword } from '@/lib/auth';
 
-export const runtime = 'edge';
 
 export async function POST(req: Request) {
     const userId = req.headers.get('x-user-id');

@@ -6,7 +6,6 @@ import gameDataSouth from "@/data/game-data-south.json";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
 
 // Validation Logic (Duplicated from Frontend for security, usually shared via lib/types but keeping simple here)
 function validatePayload(body: any) {

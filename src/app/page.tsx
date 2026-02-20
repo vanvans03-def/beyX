@@ -6,7 +6,6 @@ import { getSystemSetting } from "@/lib/repository";
 import appConfig from "@/data/app-config.json";
 
 //export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
 export const revalidate = 60;
 
 export default async function Home() {

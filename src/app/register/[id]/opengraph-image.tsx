@@ -1,7 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { createClient } from '@supabase/supabase-js';
 
-export const runtime = 'edge';
 
 // Image metadata
 export const alt = 'BeyX Tournament Info';

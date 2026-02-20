@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { createTournament, getTournaments, getTournament, updateTournamentStatus, getUserApiKey, getMatchesFromDB } from "@/lib/repository";
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
+
 
 export async function GET(request: Request) {
     const userId = request.headers.get('x-user-id');

@@ -5,7 +5,6 @@ import { hashPassword } from '@/lib/auth';
 // Edge Runtime compatible — does NOT use bcrypt
 // Security: only works if the stored hash is a legacy bcrypt hash ($2...)
 // Once migrated to PBKDF2, this endpoint rejects the request automatically.
-export const runtime = 'edge';
 
 export async function POST(req: Request) {
     try {
