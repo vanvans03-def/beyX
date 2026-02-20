@@ -1,5 +1,4 @@
 import { supabaseAdmin } from "@/lib/supabase";
-import * as sheets from "@/lib/sheets";
 import { v4 as uuidv4 } from 'uuid';
 
 // Types (Mirrors DB Schema)
