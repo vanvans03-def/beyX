@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { verifyPassword, createSession } from '@/lib/auth';
+import bcrypt from 'bcryptjs';
 
-export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
     try {
@@ -27,8 +28,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
-        // Verify password
-        const isValid = await verifyPassword(password, user.password_hash);
+        // Verify password — support both PBKDF2 (new) and bcrypt (legacy)
+        let isValid = await verifyPassword(password, user.password_hash);
+        if (!isValid && user.password_hash?.startsWith('$2')) {
+            // Fallback: bcrypt legacy hash (requires Node.js runtime)
+            isValid = await bcrypt.compare(password, user.password_hash);
+        }
         if (!isValid) {
             console.log("Password mismatch for:", username);
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
