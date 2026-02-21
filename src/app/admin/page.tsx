@@ -575,6 +575,14 @@ export default function AdminPage() {
                                                 </>
                                             )}
                                         </div>
+
+                                        {/* Change Password Link */}
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            <KeyRound className="w-3 h-3" />
+                                            <Link href="/admin/reset-password" className="text-gray-500 hover:text-white transition-colors underline">
+                                                Change Password
+                                            </Link>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -630,14 +638,7 @@ export default function AdminPage() {
                                 <span className="sm:hidden">Shop</span>
                             </Link>
 
-                            <Link
-                                href="/admin/reset-password"
-                                className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5 whitespace-nowrap"
-                            >
-                                <KeyRound className="w-4 h-4" />
-                                <span className="hidden sm:inline">Change Password</span>
-                                <span className="sm:hidden">Password</span>
-                            </Link>
+
 
                             <button
                                 onClick={async () => {
