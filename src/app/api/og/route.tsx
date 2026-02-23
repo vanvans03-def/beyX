@@ -28,16 +28,20 @@ export async function GET(request: Request) {
         }
 
         const eventDate = new Date(event.event_date);
+
+        // Force Thai timezone for formatting
         const dateStr = eventDate.toLocaleDateString('th-TH', {
             weekday: 'long',
             day: 'numeric',
             month: 'long',
-            year: 'numeric'
+            year: 'numeric',
+            timeZone: 'Asia/Bangkok'
         });
         const timeStr = eventDate.toLocaleTimeString('th-TH', {
             hour: '2-digit',
             minute: '2-digit',
-            hour12: false
+            hour12: false,
+            timeZone: 'Asia/Bangkok'
         });
 
         return new ImageResponse(
@@ -54,7 +58,7 @@ export async function GET(request: Request) {
                 >
                     {/* Left Side: Event Image (Portrait Handling) */}
                     <div style={{
-                        width: '45%',
+                        width: '60%', // Adjusted from 45% based on user request
                         height: '100%',
                         display: 'flex',
                         alignItems: 'center',
@@ -96,7 +100,7 @@ export async function GET(request: Request) {
 
                     {/* Right Side: Details */}
                     <div style={{
-                        width: '55%',
+                        width: '40%', // Adjusted from 55% based on user request
                         height: '100%',
                         display: 'flex',
                         flexDirection: 'column',
@@ -108,7 +112,7 @@ export async function GET(request: Request) {
                     }}>
                         <div style={{
                             color: '#4ade80',
-                            fontSize: 20,
+                            fontSize: 18,
                             fontWeight: 900,
                             letterSpacing: '2px',
                             marginBottom: 10,
@@ -118,9 +122,9 @@ export async function GET(request: Request) {
                         </div>
 
                         <div style={{
-                            fontSize: 48,
+                            fontSize: 42,
                             fontWeight: 900,
-                            lineHeight: 1.1,
+                            lineHeight: 1.2,
                             marginBottom: 20,
                             textOverflow: 'ellipsis',
                             overflow: 'hidden',
@@ -137,9 +141,9 @@ export async function GET(request: Request) {
                         <div style={{
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '10px',
+                            gap: '12px',
                             marginTop: '20px',
-                            fontSize: 24,
+                            fontSize: 20,
                             color: '#ddd',
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
