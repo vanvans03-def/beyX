@@ -102,6 +102,8 @@ export const locales = {
         "admin.matches.empty": "ไม่พบการแข่งขัน",
         "admin.matches.round": "รอบที่ {n}",
         "admin.matches.win": "ชนะ",
+        "admin.matches.winner_bracket": "สายบน",
+        "admin.matches.loser_bracket": "สายล่าง",
         "admin.matches.view_all": "ดูทั้งหมด",
 
         "table.header.time": "เวลา",
@@ -296,6 +298,8 @@ export const locales = {
         "admin.matches.empty": "No active matches found.",
         "admin.matches.round": "Round {n}",
         "admin.matches.win": "Win",
+        "admin.matches.winner_bracket": "Winner Bracket",
+        "admin.matches.loser_bracket": "Loser Bracket",
         "admin.matches.view_all": "View All",
 
         "table.header.time": "Time",
@@ -374,6 +378,7 @@ export const locales = {
         "admin.matches.confirm_win": "Confirm Winner",
         "admin.matches.win_confirm_text_prefix": "Declare",
         "admin.matches.win_confirm_text_suffix": "winner?",
+
 
         "type.U10": "3 Bey Under 10 Point",
         "type.U10South": "3 Bey Under 10 Point (South)",

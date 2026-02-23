@@ -1201,6 +1201,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         .filter(m => m.state === 'complete')
         .sort((a, b) => new Date(b.completed_at || b.updated_at || "").getTime() - new Date(a.completed_at || a.updated_at || "").getTime());
 
+    // Computed properties for the active matches
+    const isDoubleElim = matches.some(m => m.round < 0);
+
     // Polling active matches
     // Polling active matches & Tournament Status
     useEffect(() => {
@@ -1450,32 +1453,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 )}
 
                                                 {/* Header Section */}
-                                                <div className="flex items-center justify-between min-h-[24px]">
-                                                    {/* Round Info (Left) */}
-                                                    <div className="flex items-center gap-2">
-                                                        {isLockedByMe && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
-                                                        {match.suggested_play_order ? (
-                                                            <div className="flex items-baseline gap-2">
-                                                                <span className="text-sm font-black text-primary tracking-wide uppercase">
-                                                                    MATCH {match.suggested_play_order}
-                                                                </span>
-                                                                <span className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-widest border-l border-white/10 pl-2">
-                                                                    {t('admin.matches.round').replace('{n}', match.round.toString())}
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                                                {t('admin.matches.round').replace('{n}', match.round.toString())}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between min-h-[24px] gap-3 mb-2">
 
-                                                    {/* Play/Lock Button (Right) */}
-                                                    <div className="z-10 ml-2">
+                                                    {/* Play/Lock Button (Top on mobile, Right on desktop) */}
+                                                    <div className="z-10 order-1 md:order-2 flex w-full md:w-auto justify-end">
                                                         {isLockedByOther ? (
-                                                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-[10px] font-bold text-muted-foreground cursor-not-allowed" title={`Judged by ${lock.judgeName}`}>
+                                                            <div className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-white/5 border border-white/5 text-[10px] font-bold text-muted-foreground cursor-not-allowed w-full md:w-auto" title={`Judged by ${lock.judgeName}`}>
                                                                 <Lock className="h-3 w-3" />
-                                                                <span className="max-w-[60px] truncate">{lock.judgeName}</span>
+                                                                <span className="max-w-[100px] truncate">{lock.judgeName}</span>
                                                                 {lock.arena && <span className="ml-1 text-purple-400">#{lock.arena}</span>}
                                                             </div>
                                                         ) : (
@@ -1485,7 +1470,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                     toggleMatchLock(match.id);
                                                                 }}
                                                                 className={cn(
-                                                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm",
+                                                                    "flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm w-full md:w-auto",
                                                                     isLockedByMe
                                                                         ? "bg-primary text-black border-primary hover:bg-primary/90"
                                                                         : "bg-secondary text-foreground border-white/10 hover:border-primary/50 hover:text-primary"
@@ -1494,17 +1479,50 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             >
                                                                 {isLockedByMe ? (
                                                                     <>
-                                                                        <Gavel className="h-3 w-3" />
-                                                                        <span>{t('admin.matches.judging')}</span>
-                                                                        {lock.arena && <span className="ml-1 bg-black/20 px-1 rounded text-white/90">#{lock.arena}</span>}
+                                                                        <Gavel className="h-4 w-4 md:h-3 md:w-3" />
+                                                                        <span className="text-sm md:text-xs">{t('admin.matches.judging')}</span>
+                                                                        {lock.arena && <span className="ml-1 bg-black/20 px-1.5 rounded text-white/90">#{lock.arena}</span>}
                                                                     </>
                                                                 ) : (
                                                                     <>
-                                                                        <Play className="h-3 w-3" />
-                                                                        <span>{t('admin.matches.judge')}</span>
+                                                                        <Play className="h-4 w-4 md:h-3 md:w-3" />
+                                                                        <span className="text-sm md:text-xs">{t('admin.matches.judge')}</span>
                                                                     </>
                                                                 )}
                                                             </button>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Round Info (Bottom on mobile, Left on desktop) */}
+                                                    <div className="flex flex-row flex-wrap items-center gap-2 order-2 md:order-1 flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            {isLockedByMe && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
+                                                            {match.suggested_play_order ? (
+                                                                <div className="flex items-baseline gap-2">
+                                                                    <span className="text-sm font-black text-primary tracking-wide uppercase">
+                                                                        MATCH {match.suggested_play_order}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-widest border-l border-white/10 pl-2">
+                                                                        {t('admin.matches.round').replace('{n}', Math.abs(match.round).toString())}
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                                                                    {t('admin.matches.round').replace('{n}', Math.abs(match.round).toString())}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {isDoubleElim && (
+                                                            <div className="flex items-center">
+                                                                <span className={cn(
+                                                                    "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider",
+                                                                    match.round > 0
+                                                                        ? "bg-blue-600 text-white shadow-[0_0_10px_rgba(37,99,235,0.3)]"
+                                                                        : "bg-orange-600 text-white shadow-[0_0_10px_rgba(234,88,12,0.3)]"
+                                                                )}>
+                                                                    {match.round > 0 ? t('admin.matches.winner_bracket', 'Winner Bracket') : t('admin.matches.loser_bracket', 'Loser Bracket')}
+                                                                </span>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1811,7 +1829,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             .map(match => (
                                                 <div key={match.id} className="bg-secondary/30 p-3 rounded flex items-center justify-between border border-white/5">
                                                     <div className="flex flex-col gap-1 text-sm flex-1">
-                                                        <div className="text-xs text-muted-foreground uppercase">Round {match.round}</div>
+                                                        <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase">
+                                                            <span>Round {Math.abs(match.round)}</span>
+                                                            {isDoubleElim && (
+                                                                <span className={cn(
+                                                                    "text-[9px] font-bold px-1.5 py-0.5 rounded border",
+                                                                    match.round > 0
+                                                                        ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                                                                        : "bg-orange-500/10 text-orange-400 border-orange-500/30"
+                                                                )}>
+                                                                    {match.round > 0 ? "WB" : "LB"}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex items-center gap-2">
                                                             <span className={(!updatingMatchIds.includes(match.id) && match.winner_id === match.player1_id) ? "font-bold text-green-400 whitespace-normal break-all flex-1 min-w-0 text-right leading-tight" : "whitespace-normal break-all flex-1 min-w-0 text-right leading-tight"}>{match.player1?.name}</span>
                                                             <span className="text-muted-foreground shrink-0 px-1">vs</span>
