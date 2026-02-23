@@ -1,9 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { ArrowRight, Trophy, LockKeyhole, Calendar, MessageCircle } from "lucide-react";
 
 import { getSystemSetting } from "@/lib/repository";
 import appConfig from "@/data/app-config.json";
+
+export const metadata: Metadata = {
+  title: "BeyX System | เว็บจัดการทัวร์นาเม้นเบย์เบลด",
+  description:
+    "BeyX System ระบบจัดการแข่งขัน Beyblade X อย่างมืออาชีพ สร้างสายการแข่ง (Bracket) จัดการผู้เล่น และสรุปผลทัวร์นาเมนต์เบย์เบลดได้ในเว็บเดียว",
+};
 
 //export const dynamic = 'force-dynamic';
 export const revalidate = 60;
@@ -21,11 +27,16 @@ export default async function Home() {
 
       <main className="relative z-10 flex flex-col items-center text-center space-y-8 max-w-md w-full" data-aos="fade-in" suppressHydrationWarning>
         <div className="space-y-4">
-          <h1 className="text-5xl font-black italic tracking-tighter text-white">
-            BEYX <span className="text-primary">SYSTEM</span>
+          {/* SEO h1 — visually hidden but readable by Google bots */}
+          <h1 className="sr-only">
+            BeyX System - เว็บจัดการทัวร์นาเม้นเบย์เบลด X ที่ดีที่สุด (Beyblade X Tournament Manager)
           </h1>
+          {/* Visual heading — styled separately */}
+          <p aria-hidden="true" className="text-5xl font-black italic tracking-tighter text-white">
+            BEYX <span className="text-primary">SYSTEM</span>
+          </p>
           <p className="text-muted-foreground text-lg">
-            Tournament Registration & Management Platform
+            ระบบจัดทัวร์นาเมนต์ Beyblade X · Tournament Registration &amp; Management
           </p>
         </div>
 

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSystemSetting, setSystemSetting } from "@/lib/repository";
 
+export const dynamic = 'force-dynamic';
+
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
