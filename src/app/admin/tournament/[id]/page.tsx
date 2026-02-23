@@ -1520,7 +1520,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                         ? "bg-blue-600 text-white shadow-[0_0_10px_rgba(37,99,235,0.3)]"
                                                                         : "bg-orange-600 text-white shadow-[0_0_10px_rgba(234,88,12,0.3)]"
                                                                 )}>
-                                                                    {match.round > 0 ? t('admin.matches.winner_bracket', 'Winner Bracket') : t('admin.matches.loser_bracket', 'Loser Bracket')}
+                                                                    {match.round > 0 ? t('admin.matches.winner_bracket') : t('admin.matches.loser_bracket')}
                                                                 </span>
                                                             </div>
                                                         )}
