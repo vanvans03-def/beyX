@@ -1336,11 +1336,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     {/* Match Management Section */}
                     {bracketUrl && (
                         <div className="bg-secondary/20 border border-white/10 rounded-xl p-4 mt-6">
-                            <div className="sticky top-0 z-20 flex flex-col md:flex-row items-center justify-between gap-4 bg-black/80 backdrop-blur-xl p-4 -mx-4 -mt-4 mb-4 border-b border-white/10 rounded-t-xl transition-all">
-                                <h3 className="text-lg font-bold flex items-center gap-2">
-                                    <Trophy className="h-5 w-5 text-yellow-500" />
-                                    {t('admin.matches.title')}
-                                </h3>
+                            <div className="sticky top-0 z-20 flex flex-col items-stretch gap-2 md:gap-3 bg-black/80 backdrop-blur-xl p-3 md:p-4 -mx-4 -mt-4 mb-4 border-b border-white/10 rounded-t-xl transition-all">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm md:text-lg font-bold flex items-center gap-2 whitespace-nowrap">
+                                        <Trophy className="h-4 w-4 md:h-5 md:w-5 text-yellow-500" />
+                                        {t('admin.matches.title')}
+                                    </h3>
+                                </div>
                                 <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
                                     {/* Row 1: Search + History, Scroll, Refresh */}
                                     <div className="flex items-center gap-2 w-full md:w-auto">
