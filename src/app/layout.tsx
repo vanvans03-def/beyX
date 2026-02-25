@@ -23,6 +23,7 @@ export const metadata: Metadata = {
   keywords: [
     "beyx system",
     "beyblade x tournament",
+    "เว็บจัดแข่งเบย์เบลด",
     "เว็บจัดการทัวร์นาเมนต์เบย์เบลด",
     "จัดแข่งเบย์เบลด",
     "ระบบจัดแข่งเบย์เบลด",
