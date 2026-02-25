@@ -264,7 +264,7 @@ export default function Scoreboard({ onBack }: ScoreboardProps) {
 
                             {/* Controls Area (Bottom/Side) */}
                             <div className={cn(
-                                "flex-none p-4 landscape:p-1 md:p-6 bg-black/20 backdrop-blur-sm z-20",
+                                "flex-none p-4 landscape:p-1 landscape:pt-12 md:p-6 bg-black/20 backdrop-blur-sm z-20",
                                 // Border separation depends on layout
                                 "border-t landscape:border-t-0 border-white/5",
                                 isTwoPlayer && "landscape:w-24 md:landscape:w-32 lg:landscape:w-40 landscape:border-l border-white/5",

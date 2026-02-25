@@ -1342,16 +1342,57 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     {t('admin.matches.title')}
                                 </h3>
                                 <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
-                                    <div className="relative w-full md:w-64">
-                                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <input
-                                            type="text"
-                                            placeholder="ค้นหาการแข่งขัน.. ชื่อผู้เล่น หรือ เลขการแข่งขัน"
-                                            value={matchSearchQuery}
-                                            onChange={(e) => setMatchSearchQuery(e.target.value)}
-                                            className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-all"
-                                        />
+                                    {/* Row 1: Search + History, Scroll, Refresh */}
+                                    <div className="flex items-center gap-2 w-full md:w-auto">
+                                        <div className="relative flex-1 md:w-64">
+                                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                            <input
+                                                type="text"
+                                                placeholder="ค้นหาการแข่งขัน.."
+                                                value={matchSearchQuery}
+                                                onChange={(e) => setMatchSearchQuery(e.target.value)}
+                                                className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-all"
+                                            />
+                                        </div>
+                                        {/* History Button */}
+                                        <button
+                                            onClick={handleShowHistory}
+                                            className={`flex-none flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap ${historyTooltip ? "bg-primary text-black border-primary" : "bg-secondary border-transparent hover:border-white/10"}`}
+                                        >
+                                            <Clock className="h-4 w-4" />
+                                            <span className="hidden md:inline">History</span>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (activeMatchesRef.current) {
+                                                    activeMatchesRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+                                                }
+                                            }}
+                                            className="flex-none p-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-transparent hover:border-white/10"
+                                            title="Scroll to Top"
+                                        >
+                                            <ArrowUp className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (activeMatchesRef.current) {
+                                                    activeMatchesRef.current.scrollTo({ top: activeMatchesRef.current.scrollHeight, behavior: 'smooth' });
+                                                }
+                                            }}
+                                            className="flex-none p-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-transparent hover:border-white/10"
+                                            title="Scroll to Bottom"
+                                        >
+                                            <ArrowDown className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => fetchMatches(bracketUrl)}
+                                            className="flex-none text-xs px-2.5 py-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors whitespace-nowrap"
+                                        >
+                                            <RefreshCw className="h-4 w-4 md:hidden" />
+                                            <span className="hidden md:inline">{t('admin.matches.refresh')}</span>
+                                        </button>
                                     </div>
+                                    {/* Row 2: Scoreboard + 3-2-1 */}
                                     <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
                                         {/* Scoreboard Button */}
                                         <button
@@ -1396,42 +1437,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         >
                                             <Volume2 className={cn("h-4 w-4", isCountdownPlaying && "animate-bounce")} />
                                             <span>{isCountdownPlaying ? "กำลังเล่น..." : "3-2-1"}</span>
-                                        </button>
-                                        {/* History Button */}
-                                        <button
-                                            onClick={handleShowHistory}
-                                            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap ${historyTooltip ? "bg-primary text-black border-primary" : "bg-secondary border-transparent hover:border-white/10"}`}
-                                        >
-                                            <Clock className="h-4 w-4" />
-                                            <span>History</span>
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (activeMatchesRef.current) {
-                                                    activeMatchesRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-                                                }
-                                            }}
-                                            className="p-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-transparent hover:border-white/10"
-                                            title="Scroll to Top"
-                                        >
-                                            <ArrowUp className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (activeMatchesRef.current) {
-                                                    activeMatchesRef.current.scrollTo({ top: activeMatchesRef.current.scrollHeight, behavior: 'smooth' });
-                                                }
-                                            }}
-                                            className="p-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors border border-transparent hover:border-white/10"
-                                            title="Scroll to Bottom"
-                                        >
-                                            <ArrowDown className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => fetchMatches(bracketUrl)}
-                                            className="text-xs px-3 py-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors whitespace-nowrap"
-                                        >
-                                            {t('admin.matches.refresh')}
                                         </button>
                                     </div>
                                 </div>
