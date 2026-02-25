@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "https://www.beyx-system.com"),
   title: {
-    default: "BeyX System | เว็บจัดการทัวร์นาเม้นเบย์เบลด (Beyblade X Tournament)",
+    default: "BeyX System | เว็บจัดการทัวร์นาเมนต์เบย์เบลด (Beyblade X Tournament)",
     template: "%s | BeyX System",
   },
   description:
@@ -23,7 +23,8 @@ export const metadata: Metadata = {
   keywords: [
     "beyx system",
     "beyblade x tournament",
-    "เว็บจัดการทัวร์นาเม้นเบย์เบลด",
+    "เว็บจัดการทัวร์นาเมนต์เบย์เบลด",
+    "จัดแข่งเบย์เบลด",
     "ระบบจัดแข่งเบย์เบลด",
     "จัดสายแข่งเบย์เบลด",
     "beyblade tournament manager",

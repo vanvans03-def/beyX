@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ArrowLeft, RotateCcw, Minus, Users } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ArrowLeft, RotateCcw, Minus, Users, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 
@@ -65,6 +65,8 @@ export default function Scoreboard({ onBack }: ScoreboardProps) {
     // Animation State
     const [animatingPlayerId, setAnimatingPlayerId] = useState<number | null>(null);
     const [animationText, setAnimationText] = useState<string>("");
+    const [isCountdownPlaying, setIsCountdownPlaying] = useState(false);
+    const countdownAudioRef = useRef<HTMLAudioElement | null>(null);
 
     // Modal State
     const [modalConfig, setModalConfig] = useState<{
@@ -160,6 +162,36 @@ export default function Scoreboard({ onBack }: ScoreboardProps) {
                 >
                     <ArrowLeft className="h-4 w-4" />
                     <span className="font-bold text-xs">Back</span>
+                </button>
+
+                <button
+                    onClick={() => {
+                        if (countdownAudioRef.current) {
+                            countdownAudioRef.current.pause();
+                            countdownAudioRef.current.currentTime = 0;
+                            countdownAudioRef.current = null;
+                            setIsCountdownPlaying(false);
+                            return;
+                        }
+                        const audio = new Audio('/sound/321goshoot.mp3');
+                        countdownAudioRef.current = audio;
+                        audio.addEventListener('ended', () => {
+                            setIsCountdownPlaying(false);
+                            countdownAudioRef.current = null;
+                        });
+                        audio.play().then(() => {
+                            setIsCountdownPlaying(true);
+                        }).catch(() => { });
+                    }}
+                    className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all font-bold text-xs active:scale-95 border",
+                        isCountdownPlaying
+                            ? "bg-amber-500 text-black border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)] animate-pulse landscape:bg-amber-500"
+                            : "bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30 landscape:bg-amber-500/30"
+                    )}
+                >
+                    <Volume2 className={cn("h-4 w-4", isCountdownPlaying && "animate-bounce")} />
+                    <span>{isCountdownPlaying ? "กำลังเล่น..." : "3-2-1"}</span>
                 </button>
 
                 <div className="flex items-center gap-4">

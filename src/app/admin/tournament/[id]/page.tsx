@@ -7,7 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2 } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -91,6 +91,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [bracketUrl, setBracketUrl] = useState<string>("");
     const [generatingBracket, setGeneratingBracket] = useState(false);
     const [isScoreboardOpen, setIsScoreboardOpen] = useState(false);
+    const [isCountdownPlaying, setIsCountdownPlaying] = useState(false);
+    const countdownAudioRef = useRef<HTMLAudioElement | null>(null);
 
     // New States for Enhancements
     const [matches, setMatches] = useState<Match[]>([]);
@@ -1364,6 +1366,36 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         >
                                             <MonitorPlay className="h-4 w-4" />
                                             <span>Scoreboard</span>
+                                        </button>
+                                        {/* 321 Go Shoot Sound Button */}
+                                        <button
+                                            onClick={() => {
+                                                if (countdownAudioRef.current) {
+                                                    countdownAudioRef.current.pause();
+                                                    countdownAudioRef.current.currentTime = 0;
+                                                    countdownAudioRef.current = null;
+                                                    setIsCountdownPlaying(false);
+                                                    return;
+                                                }
+                                                const audio = new Audio('/sound/321goshoot.mp3');
+                                                countdownAudioRef.current = audio;
+                                                audio.addEventListener('ended', () => {
+                                                    setIsCountdownPlaying(false);
+                                                    countdownAudioRef.current = null;
+                                                });
+                                                audio.play().then(() => {
+                                                    setIsCountdownPlaying(true);
+                                                }).catch(() => toast.error("ไม่สามารถเล่นเสียงได้"));
+                                            }}
+                                            className={cn(
+                                                "flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap active:scale-95",
+                                                isCountdownPlaying
+                                                    ? "bg-amber-500 text-black border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)] animate-pulse"
+                                                    : "bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30"
+                                            )}
+                                        >
+                                            <Volume2 className={cn("h-4 w-4", isCountdownPlaying && "animate-bounce")} />
+                                            <span>{isCountdownPlaying ? "กำลังเล่น..." : "3-2-1"}</span>
                                         </button>
                                         {/* History Button */}
                                         <button
