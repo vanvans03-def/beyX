@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, memo } from "react";
-import { CheckCircle, XCircle, Trash2, Users, Loader2 } from "lucide-react";
+import { CheckCircle, XCircle, Trash2, Users, Loader2, ArrowLeftRight } from "lucide-react";
 import gameData from "@/data/game-data.json";
 import gameDataStandard from "@/data/game-data-standard.json";
 import gameDataSouth from "@/data/game-data-south.json";
@@ -27,6 +27,9 @@ type Props = {
     searchQuery: string;
     onDelete: (row: Registration) => void;
     tournamentType?: string;
+    sameDeviceConflicts?: number[];
+    swapSelection?: number[];
+    onSwapSelect?: (index: number) => void;
 };
 
 // Extracted validation logic
@@ -109,7 +112,7 @@ const validateRow = (row: Registration, tournamentType?: string) => {
 // Wrap in memo to prevent re-renders when parent state changes (like modals)
 import { useTranslation } from "@/hooks/useTranslation";
 
-const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, tournamentType }: Props) {
+const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, tournamentType, sameDeviceConflicts = [], swapSelection = [], onSwapSelect }: Props) {
     const { t } = useTranslation();
 
     // Memoize the processed data to avoid re-parsing JSON and re-validating on every render
@@ -126,7 +129,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
             r.PlayerName.toLowerCase().includes(searchQuery.toLowerCase())
         );
 
-        return filtered.map(row => {
+        return filtered.map((row, filteredIdx) => {
             const validation = validateRow(row, tournamentType);
             const isMulti = (deviceCounts[row.DeviceUUID] || 0) > 1;
 
@@ -139,15 +142,23 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                 deviceColor = `hsl(${hue}, 70%, 60%)`;
             }
 
+            // Find original index in data (before search filter) for conflict matching
+            const originalIdx = data.indexOf(row);
+            const isConflict = sameDeviceConflicts.includes(originalIdx);
+            const isSwapSelected = swapSelection.includes(originalIdx);
+
             return {
                 ...row,
                 validation,
                 isMulti,
                 deviceColor,
+                isConflict,
+                isSwapSelected,
+                originalIdx,
                 reserveDecks: validation.reserveDecks
             };
         });
-    }, [data, searchQuery, tournamentType]);
+    }, [data, searchQuery, tournamentType, sameDeviceConflicts, swapSelection]);
 
     if (loading) {
         return (
@@ -168,6 +179,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
             <table className="w-full text-sm text-left">
                 <thead className="bg-secondary/50 text-muted-foreground uppercase text-xs font-bold tracking-wider">
                     <tr>
+                        <th className="p-4 whitespace-nowrap w-8">#</th>
                         <th className="p-4 whitespace-nowrap">{t('table.header.time')}</th>
                         <th className="p-4 whitespace-nowrap">{t('table.header.player')}</th>
                         <th className="p-4 whitespace-nowrap">{t('table.header.mode')}</th>
@@ -178,7 +190,22 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                 </thead>
                 <tbody className="divide-y divide-border">
                     {processedData.map((row, i) => (
-                        <tr key={`${row.RoundID}-${i}`} className="hover:bg-accent/5 transition-colors group">
+                        <tr
+                            key={`${row.RoundID}-${i}`}
+                            className={`hover:bg-accent/5 transition-colors group ${row.isConflict ? 'bg-amber-500/10 border-l-2 border-l-amber-500' : ''} ${row.isSwapSelected ? 'bg-blue-500/15 ring-1 ring-blue-500/50' : ''} ${onSwapSelect ? 'cursor-pointer select-none' : ''}`}
+                            onClick={() => {
+                                if (onSwapSelect) onSwapSelect(row.originalIdx);
+                            }}
+                        >
+                            <td className="p-4 whitespace-nowrap text-muted-foreground text-xs">
+                                <div className="flex items-center gap-1">
+                                    {row.isSwapSelected ? (
+                                        <ArrowLeftRight className="h-3.5 w-3.5 text-blue-400" />
+                                    ) : (
+                                        <span>{row.originalIdx + 1}</span>
+                                    )}
+                                </div>
+                            </td>
                             <td className="p-4 whitespace-nowrap text-muted-foreground">
                                 {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </td>
@@ -267,7 +294,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                     ))}
                     {processedData.length === 0 && !loading && (
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                            <td colSpan={7} className="p-8 text-center text-muted-foreground">
                                 {t('table.empty')}
                             </td>
                         </tr>

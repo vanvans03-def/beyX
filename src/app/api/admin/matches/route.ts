@@ -116,6 +116,8 @@ export async function PUT(request: Request) {
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const errorDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+        console.error('Match update API error details:', errorDetail);
+        return NextResponse.json({ error: error.message, details: errorDetail }, { status: 500 });
     }
 }

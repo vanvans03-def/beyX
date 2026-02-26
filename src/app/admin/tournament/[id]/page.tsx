@@ -7,7 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2 } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2, ArrowLeftRight } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -166,6 +166,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     // Shuffle State
     const [isListShuffled, setIsListShuffled] = useState(false);
     const [shuffledData, setShuffledData] = useState<Registration[] | null>(null);
+    const [sameDeviceConflicts, setSameDeviceConflicts] = useState<number[]>([]);
+    const [swapSelection, setSwapSelection] = useState<number[]>([]);
+    const [isSwapMode, setIsSwapMode] = useState(false);
 
     // Combo Display Settings
     const [showPlayerCombo, setShowPlayerCombo] = useState(true);
@@ -540,7 +543,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     tournamentId: id
                 })
             });
-            if (!res.ok) throw new Error("Failed to update match");
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                const detailStr = errorData.details || errorData.error || "Failed to update match";
+                throw new Error(detailStr);
+            }
 
             // Await the fetch to ensure UI stays in loading state until data is fresh
             await fetchMatches(bracketUrl, true);
@@ -553,14 +560,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             });
 
             toast.success("Match result updated successfully!");
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
             // Revert or just refresh to get true state
             fetchMatches(bracketUrl, true);
             setModalConfig({
                 isOpen: true,
-                title: "Error",
-                desc: "Failed to update match result.",
+                title: "Error Updating Match",
+                desc: e.message || "Failed to update match result.",
                 type: "alert",
                 variant: "destructive"
             });
@@ -608,109 +615,128 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const handleGenerateBracket = async () => {
         if (!tournament?.Name) return;
-        setSettingsModalOpen(false); // Close modal
-        setGeneratingBracket(true);
-        // Save settings
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(`tournament_settings_${id}_showCombo`, String(showPlayerCombo));
-        }
 
-        // Check Challonge Limits
-        if (data.length > 256) {
-            toast.error(t('admin.error.limit_exceeded'), {
-                description: t('admin.error.limit_desc', { n: data.length })
-            });
-            setGeneratingBracket(false);
-            return;
-        }
+        const executeBracketGeneration = async () => {
+            setSettingsModalOpen(false); // Close modal
+            setModalConfig(prev => ({ ...prev, isOpen: false })); // Close confirm modal if open
+            setGeneratingBracket(true);
+            // Save settings
+            if (typeof window !== 'undefined') {
+                localStorage.setItem(`tournament_settings_${id}_showCombo`, String(showPlayerCombo));
+            }
 
-        try {
-            // Prepare players list
-            const players = data.map(r => ({
-                username: r.PlayerName,
-                beyblade_combo: `${r.Main_Bey1} / ${r.Main_Bey2} / ${r.Main_Bey3}`
-            }));
-
-            const res = await fetch('/api/generate-bracket', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    roomName: tournament.Name,
-                    players,
-                    type: tournamentType,
-                    shuffle: isShuffle,
-                    quickAdvance: isQuickAdvance,
-                    tournamentId: id, // Send ID to save URL
-                    arenaCount: arenaCount // Send Arena Count
-                })
-            });
-
-            const json = await res.json();
-
-            // Validate Registrations here before starting
-            // While RegistrationTable calculates it visually, we should ensure no "fail" status exists
-            // Since we don't have the table's internal calculation here easily without duplicating logic,
-            // we will do a quick check similarly or trust the standard "fail" logic reuse.
-            // Let's reuse a simplified check or iterate similar to validateRow from table (re-implemented briefly here or check raw data)
-
-            // Re-implement basic check:
-            const invalidPlayers = data.filter(r => {
-                let isMatch = false;
-                if (tournament?.Type === 'U10' && r.Mode === 'Under10') isMatch = true;
-                else if (tournament?.Type === 'NoMoreMeta' && r.Mode === 'NoMoreMeta') isMatch = true;
-                else if ((tournament?.Type === 'Open' || tournament?.Type === 'Standard') && (r.Mode === 'Standard' || r.Mode === 'Open')) isMatch = true;
-                return !isMatch;
-            });
-
-            if (invalidPlayers.length > 0) {
-                toast.error(t('admin.error.start_failed'), {
-                    description: t('admin.error.mismatched_modes', { n: invalidPlayers.length })
+            // Check Challonge Limits
+            if (data.length > 256) {
+                toast.error(t('admin.error.limit_exceeded'), {
+                    description: t('admin.error.limit_desc', { n: data.length })
                 });
                 setGeneratingBracket(false);
                 return;
             }
 
-            if (!res.ok) {
-                throw new Error(json.error || 'Failed to generate bracket');
-            }
+            try {
+                // Use shuffled order if available
+                const orderedData = isListShuffled && shuffledData ? shuffledData : data;
+                // Prepare players list (in shuffled order)
+                const players = orderedData.map(r => ({
+                    username: r.PlayerName,
+                    beyblade_combo: `${r.Main_Bey1} / ${r.Main_Bey2} / ${r.Main_Bey3}`
+                }));
 
-            setBracketUrl(json.url);
-
-            // Update Status to STARTED
-            await fetch('/api/admin/tournaments', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tournamentId: id, status: 'STARTED' })
-            });
-            // Update local state
-            setTournament((prev: any) => ({ ...prev, Status: 'STARTED' }));
-
-            fetchMatches(json.url); // Load matches immediately
-
-            toast.success("Tournament bracket created successfully!");
-
-        } catch (error: any) {
-            console.error('Bracket generation failed:', error);
-
-            const errorMessage = error.message;
-
-            // Check if it's an API Key related error
-            if (errorMessage && (errorMessage.includes("API Key") || errorMessage.includes("401"))) {
-                setModalConfig({
-                    isOpen: true,
-                    title: t('admin.error.challonge_auth'),
-                    desc: t('admin.error.challonge_auth_desc'),
-                    type: "alert",
-                    variant: 'destructive'
+                const res = await fetch('/api/generate-bracket', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        roomName: tournament.Name,
+                        players,
+                        type: tournamentType,
+                        shuffle: false, // Always false — we handle order client-side
+                        quickAdvance: isQuickAdvance,
+                        tournamentId: id, // Send ID to save URL
+                        arenaCount: arenaCount // Send Arena Count
+                    })
                 });
-            } else {
-                toast.error(errorMessage || "Failed to generate bracket");
-            }
 
-        } finally {
-            setGeneratingBracket(false);
+                const json = await res.json();
+
+                // Validate Registrations here before starting
+                // Re-implement basic check aligned with RegistrationTable
+                const invalidPlayers = data.filter(r => {
+                    let isMatch = false;
+                    const type = tournament?.Type;
+                    const mode = r.Mode;
+                    if (type === 'U10' && mode === 'Under10') isMatch = true;
+                    else if (type === 'U10South' && mode === 'Under10South') isMatch = true;
+                    else if (type === 'NoMoreMeta' && mode === 'NoMoreMeta') isMatch = true;
+                    else if ((type === 'Open' || type === 'Standard') && (mode === 'Standard' || mode === 'Open')) isMatch = true;
+                    return !isMatch;
+                });
+
+                if (invalidPlayers.length > 0) {
+                    toast.error(t('admin.error.start_failed'), {
+                        description: t('admin.error.mismatched_modes', { n: invalidPlayers.length })
+                    });
+                    setGeneratingBracket(false);
+                    return;
+                }
+
+                if (!res.ok) {
+                    throw new Error(json.error || 'Failed to generate bracket');
+                }
+
+                setBracketUrl(json.url);
+
+                // Update Status to STARTED
+                await fetch('/api/admin/tournaments', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tournamentId: id, status: 'STARTED' })
+                });
+                // Update local state
+                setTournament((prev: any) => ({ ...prev, Status: 'STARTED' }));
+
+                fetchMatches(json.url); // Load matches immediately
+
+                toast.success("Tournament bracket created successfully!");
+
+            } catch (error: any) {
+                console.error('Bracket generation failed:', error);
+
+                const errorMessage = error.message;
+
+                // Check if it's an API Key related error
+                if (errorMessage && (errorMessage.includes("API Key") || errorMessage.includes("401"))) {
+                    setModalConfig({
+                        isOpen: true,
+                        title: t('admin.error.challonge_auth'),
+                        desc: t('admin.error.challonge_auth_desc'),
+                        type: "alert",
+                        variant: 'destructive'
+                    });
+                } else {
+                    toast.error(errorMessage || "Failed to generate bracket");
+                }
+
+            } finally {
+                setGeneratingBracket(false);
+            }
+        };
+
+        // Confirm start if not shuffled
+        if (!isListShuffled) {
+            setModalConfig({
+                isOpen: true,
+                type: 'confirm',
+                title: 'ยังไม่ได้สุ่มตำแหน่ง',
+                desc: 'คุณยังไม่ได้กดสุ่มตำแหน่งผู้เล่น ยืนยันที่จะเริ่มทัวร์นาเมนต์เลยหรือไม่?',
+                onConfirm: executeBracketGeneration
+            });
+            return;
         }
+
+        executeBracketGeneration();
     };
+
 
     const handleEndTournament = async () => {
         setModalConfig({
@@ -843,10 +869,136 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     };
 
     const handleShufflePlayers = () => {
-        // Must allow unique shuffle every time
-        const shuffled = [...data].sort(() => Math.random() - 0.5);
-        setShuffledData(shuffled);
+        // Smart shuffle: Fisher-Yates + same-device separation
+        const arr = [...data];
+        const n = arr.length;
+
+        // Step 1: Fisher-Yates shuffle for true randomness
+        for (let i = n - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+
+        // Step 2: Identify multi-device groups
+        const deviceGroups = new Map<string, number[]>();
+        arr.forEach((p, idx) => {
+            const uuid = p.DeviceUUID;
+            if (!deviceGroups.has(uuid)) deviceGroups.set(uuid, []);
+            deviceGroups.get(uuid)!.push(idx);
+        });
+
+        // Filter to only groups with 2+ players (same device)
+        const multiDeviceGroups = Array.from(deviceGroups.entries()).filter(([, indices]) => indices.length > 1);
+
+        // Step 3: Try to redistribute same-device players to be spaced apart
+        if (multiDeviceGroups.length > 0 && n > 2) {
+            // Attempt multiple passes to separate same-device players
+            for (let pass = 0; pass < 50; pass++) {
+                let hasConflict = false;
+                for (let i = 0; i < n - 1; i++) {
+                    if (arr[i].DeviceUUID === arr[i + 1].DeviceUUID) {
+                        // Found adjacent same-device players, try to swap the second one with a random non-adjacent position
+                        hasConflict = true;
+                        // Find a valid swap candidate
+                        const candidates: number[] = [];
+                        for (let k = 0; k < n; k++) {
+                            if (k === i || k === i + 1) continue;
+                            // Check if swapping arr[i+1] with arr[k] would not create new conflicts
+                            const wouldConflictAtK =
+                                (k > 0 && arr[k - 1].DeviceUUID === arr[i + 1].DeviceUUID) ||
+                                (k < n - 1 && arr[k + 1].DeviceUUID === arr[i + 1].DeviceUUID);
+                            const wouldConflictAtI =
+                                (arr[i].DeviceUUID === arr[k].DeviceUUID) ||
+                                (i + 2 < n && arr[i + 2]?.DeviceUUID === arr[k].DeviceUUID);
+                            if (!wouldConflictAtK && !wouldConflictAtI) {
+                                candidates.push(k);
+                            }
+                        }
+                        if (candidates.length > 0) {
+                            const swapIdx = candidates[Math.floor(Math.random() * candidates.length)];
+                            [arr[i + 1], arr[swapIdx]] = [arr[swapIdx], arr[i + 1]];
+                        }
+                    }
+                }
+                if (!hasConflict) break;
+            }
+        }
+
+        // Step 4: Detect remaining conflicts
+        const conflicts: number[] = [];
+        for (let i = 0; i < n - 1; i++) {
+            if (arr[i].DeviceUUID === arr[i + 1].DeviceUUID) {
+                // Check if this device has multiple players (not just coincidence of admin-manual UUIDs)
+                const uuid = arr[i].DeviceUUID;
+                const count = deviceGroups.get(uuid)?.length || 0;
+                if (count > 1) {
+                    if (!conflicts.includes(i)) conflicts.push(i);
+                    if (!conflicts.includes(i + 1)) conflicts.push(i + 1);
+                }
+            }
+        }
+
+        setShuffledData(arr);
         setIsListShuffled(true);
+        setSameDeviceConflicts(conflicts);
+        setSwapSelection([]);
+        setIsSwapMode(false);
+
+        if (conflicts.length > 0) {
+            toast.warning(t('admin.warning.same_device'));
+        }
+    };
+
+    // Manual swap: select 2 players by index, then swap
+    const handleSwapSelect = (index: number) => {
+        if (!isSwapMode) return;
+        setSwapSelection(prev => {
+            if (prev.includes(index)) {
+                // Deselect
+                return prev.filter(i => i !== index);
+            }
+            if (prev.length >= 2) {
+                // Replace the second one
+                return [prev[0], index];
+            }
+            return [...prev, index];
+        });
+    };
+
+    const confirmSwap = () => {
+        if (swapSelection.length !== 2) return;
+
+        // Ensure we are working with a mutable list
+        const currentData = isListShuffled && shuffledData ? [...shuffledData] : [...data];
+
+        const [idx1, idx2] = swapSelection;
+        [currentData[idx1], currentData[idx2]] = [currentData[idx2], currentData[idx1]];
+
+        setShuffledData(currentData);
+        setIsListShuffled(true); // Treating any custom ordered array as our active "shuffled" array
+
+        // Re-detect conflicts after swap
+        const deviceGroups = new Map<string, number>();
+        currentData.forEach(p => {
+            deviceGroups.set(p.DeviceUUID, (deviceGroups.get(p.DeviceUUID) || 0) + 1);
+        });
+        const newConflicts: number[] = [];
+        for (let i = 0; i < currentData.length - 1; i++) {
+            if (currentData[i].DeviceUUID === currentData[i + 1].DeviceUUID && (deviceGroups.get(currentData[i].DeviceUUID) || 0) > 1) {
+                if (!newConflicts.includes(i)) newConflicts.push(i);
+                if (!newConflicts.includes(i + 1)) newConflicts.push(i + 1);
+            }
+        }
+        setSameDeviceConflicts(newConflicts);
+
+        toast.success(`สลับตำแหน่งผู้เล่นสำเร็จ`);
+        setSwapSelection([]);
+        setIsSwapMode(false);
+    };
+
+    const cancelSwap = () => {
+        setSwapSelection([]);
+        setIsSwapMode(false);
     };
 
     // Modal State
@@ -1716,8 +1868,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <>
                                     <button
                                         onClick={handleEndTournament}
-                                        disabled={tournament?.Status === 'CLOSED'}
-                                        className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-green-500/20 text-white hover:text-green-400 px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10 disabled:opacity-50"
+                                        disabled={tournament?.Status === 'CLOSED' || activeMatches.length > 0}
+                                        className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-green-500/20 text-white hover:text-green-400 px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <CheckCircle className="h-4 w-4" />
                                         {tournament?.Status === 'COMPLETED' ? t('admin.btn.completed') : t('admin.btn.end')}
@@ -1785,16 +1937,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         </select>
                                     </div>
 
-                                    <div className="flex items-center gap-3">
-                                        <input
-                                            type="checkbox"
-                                            id="shuffle"
-                                            checked={isShuffle}
-                                            onChange={(e) => setIsShuffle(e.target.checked)}
-                                            className="w-4 h-4 rounded border-gray-600"
-                                        />
-                                        <label htmlFor="shuffle" className="text-sm">{t('admin.settings.shuffle')}</label>
-                                    </div>
+                                    {/* Shuffle checkbox removed — shuffle is now mandatory via the Shuffle button */}
 
                                     <div className="flex items-center gap-3">
                                         <input
@@ -2601,42 +2744,92 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </div>
                     )}
 
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                         <h3 className="font-bold text-lg flex items-center gap-2">
                             <Users className="h-5 w-5 text-primary" />
                             Registered Players ({data.length})
                         </h3>
-                        <div className="flex items-center gap-2">
-                            {/* Reset Order (Only visible when shuffled) */}
-                            {isListShuffled && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {/* Reordering Controls Group */}
+                            <div className="flex items-center gap-1 bg-secondary/30 p-1 rounded-lg border border-white/5">
+                                {/* Reset Order (Now always visible, enabled when shuffled) */}
                                 <button
                                     onClick={() => {
                                         setIsListShuffled(false);
                                         setShuffledData(null);
+                                        setSameDeviceConflicts([]);
+                                        setSwapSelection([]);
+                                        setIsSwapMode(false);
                                     }}
-                                    className="text-xs text-muted-foreground hover:text-destructive transition-colors px-2 font-bold"
+                                    disabled={!isListShuffled || !!bracketUrl || (tournament?.Status && tournament.Status !== 'OPEN')}
+                                    className="text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors px-3 py-1.5 rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                                    title="Reset to Original Order"
                                 >
-                                    Reset Order
+                                    Reset
+                                </button>
+
+                                <button
+                                    onClick={handleShufflePlayers}
+                                    disabled={!!bracketUrl || (tournament?.Status && tournament.Status !== 'OPEN')}
+                                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-secondary rounded-md text-xs font-bold transition-colors text-foreground disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/10 first:border-0"
+                                >
+                                    <Shuffle className="h-3.5 w-3.5" />
+                                    Shuffle
+                                </button>
+                            </div>
+
+                            {/* Swap Mode Toggle / Actions (Moved next to Copy) */}
+                            {isSwapMode ? (
+                                <div className="flex items-center gap-1 bg-blue-500/10 border border-blue-500/30 p-1 rounded-lg">
+                                    <button
+                                        onClick={cancelSwap}
+                                        className="text-xs text-muted-foreground hover:bg-white/10 hover:text-foreground px-3 py-1.5 rounded-md font-bold transition-colors"
+                                    >
+                                        ยกเลิก
+                                    </button>
+                                    <button
+                                        onClick={confirmSwap}
+                                        disabled={swapSelection.length !== 2}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-md text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <ArrowLeftRight className="h-3.5 w-3.5" />
+                                        ยืนยันสลับ ({swapSelection.length}/2)
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => setIsSwapMode(true)}
+                                    disabled={!!bracketUrl || (tournament?.Status && tournament.Status !== 'OPEN')}
+                                    className="flex items-center justify-center p-2 bg-secondary/80 text-foreground rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-white/5"
+                                    title="สลับผู้เล่น"
+                                >
+                                    <ArrowLeftRight className="h-4 w-4" />
                                 </button>
                             )}
 
                             <button
-                                onClick={handleShufflePlayers}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-secondary hover:bg-secondary/80 rounded-lg text-xs font-bold transition-all text-foreground"
-                            >
-                                <Shuffle className="h-3.5 w-3.5" />
-                                Shuffle
-                            </button>
-
-                            <button
                                 onClick={copyToClipboard}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-black rounded-lg text-xs font-bold hover:bg-green-600 transition-colors"
+                                title="Copy Player List"
+                                className="flex items-center justify-center p-2 bg-green-500/10 text-green-500 rounded-lg hover:bg-green-500/20 transition-colors border border-green-500/20"
                             >
-                                <Copy className="h-3.5 w-3.5" />
-                                Copy List
+                                <Copy className="h-4 w-4" />
                             </button>
                         </div>
                     </div>
+
+                    {/* Swap mode indicator */}
+                    {isSwapMode && (
+                        <div className="mb-3 p-2 bg-blue-500/10 border border-blue-500/30 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2">
+                            <div className="flex items-center gap-2 text-blue-400">
+                                <ArrowLeftRight className="h-3.5 w-3.5" />
+                                <span>
+                                    {swapSelection.length === 0 && 'คลิกที่ชื่อผู้เล่น 2 คน เพื่อสลับตำแหน่ง'}
+                                    {swapSelection.length === 1 && 'เลือกผู้เล่นอีก 1 คน เพื่อสลับตำแหน่ง'}
+                                    {swapSelection.length === 2 && 'กดปุ่มยืนยันเพื่อสลับตำแหน่ง'}
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     <RegistrationTable
                         data={isListShuffled && shuffledData ? shuffledData : data}
@@ -2644,6 +2837,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         searchQuery={searchQuery}
                         onDelete={handleDelete}
                         tournamentType={tournament?.Type}
+                        sameDeviceConflicts={isListShuffled ? sameDeviceConflicts : []}
+                        swapSelection={isSwapMode ? swapSelection : []}
+                        onSwapSelect={isSwapMode ? handleSwapSelect : undefined}
                     />
 
 
