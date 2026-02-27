@@ -30,23 +30,29 @@ export async function GET(request: Request) {
 
         // Sync to Supabase
         if (matches.length > 0) {
-            const matchesToUpsert = matches.map((m: any) => ({
-                id: m.id,
-                tournament_id: m.tournament_id,
-                player1_id: m.player1_id,
-                player2_id: m.player2_id,
-                player1_name: m.player1?.name ?? null,  // Cache name to avoid re-fetching from Challonge
-                player2_name: m.player2?.name ?? null,
-                score_csv: m.scores_csv, // Note mapping difference
-                state: m.state,
-                winner_id: m.winner_id,
-                round: m.round,
-                identifier: m.identifier,
-                suggested_play_order: m.suggested_play_order,
-                underway_at: m.underway_at,
-                completed_at: m.completed_at,
-                updated_at: m.updated_at
-            }));
+            const matchesToUpsert = matches.map((m: any) => {
+                const upsertData: any = {
+                    id: m.id,
+                    tournament_id: m.tournament_id,
+                    player1_id: m.player1_id,
+                    player2_id: m.player2_id,
+                    score_csv: m.scores_csv,
+                    state: m.state,
+                    winner_id: m.winner_id,
+                    round: m.round,
+                    identifier: m.identifier,
+                    suggested_play_order: m.suggested_play_order,
+                    underway_at: m.underway_at,
+                    completed_at: m.completed_at,
+                    updated_at: m.updated_at
+                };
+
+                // Only update the name if Challonge provided it, to prevent overwriting with null
+                if (m.player1?.name) upsertData.player1_name = m.player1.name;
+                if (m.player2?.name) upsertData.player2_name = m.player2.name;
+
+                return upsertData;
+            });
 
             const { error } = await supabaseAdmin
                 .from('matches')

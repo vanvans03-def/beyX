@@ -11,6 +11,8 @@ interface Match {
     score_csv: string | null;
     state: string;
     winner_id: number | null;
+    player1_name: string | null;
+    player2_name: string | null;
 }
 
 interface LiveMatchesProps {
@@ -82,7 +84,12 @@ export default function LiveMatches({ tournamentId }: LiveMatchesProps) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {matches.map((match) => (
+                {matches.filter((m) => {
+                    // Strictly require both players to have mapped names
+                    if (!m.player1_id || !m.player1_name) return false;
+                    if (!m.player2_id || !m.player2_name) return false;
+                    return true;
+                }).map((match) => (
                     <div key={match.id} className="bg-white/5 p-4 rounded-lg border border-white/10 animate-fade-in">
                         <div className="flex justify-between text-sm text-gray-400 mb-2">
                             <span>Match #{match.id}</span>
@@ -90,13 +97,13 @@ export default function LiveMatches({ tournamentId }: LiveMatchesProps) {
                         </div>
                         <div className="flex justify-between items-center text-lg font-semibold text-white">
                             <div className={match.winner_id === match.player1_id ? "text-green-400" : ""}>
-                                Player 1 (ID: {match.player1_id})
+                                {match.player1_name}
                             </div>
                             <div className="px-4 text-gray-500">
                                 {match.score_csv ? match.score_csv.replace(/,/g, " - ") : "VS"}
                             </div>
                             <div className={match.winner_id === match.player2_id ? "text-green-400" : ""}>
-                                Player 2 (ID: {match.player2_id})
+                                {match.player2_name}
                             </div>
                         </div>
                     </div>

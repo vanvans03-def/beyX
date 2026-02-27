@@ -174,9 +174,15 @@ export async function getMatches(apiKey: string, tournamentIdentifier: string) {
             params: { api_key: apiKey }
         });
 
-        const participantsMap = new Map<number, ChallongeParticipant>();
+        const participantsMap = new Map<number, any>();
         participantsRes.data.forEach((p: any) => {
             participantsMap.set(p.participant.id, p.participant);
+            // In two-stage tournaments, matches use group_player_ids instead of the main ID
+            if (p.participant.group_player_ids && p.participant.group_player_ids.length > 0) {
+                p.participant.group_player_ids.forEach((gId: number) => {
+                    participantsMap.set(gId, p.participant);
+                });
+            }
         });
 
         return matchesRes.data.map((m: any) => {
