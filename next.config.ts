@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
       return execSync('git rev-parse HEAD', { stdio: 'pipe' }).toString().trim();
     } catch (e) {
       // 3. Fallback to a static ID if everything else fails (deterministic)
-      return 'production-build-stable';
+      return 'v1.0.0';
     }
   },
 };
