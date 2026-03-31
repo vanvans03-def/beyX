@@ -4,7 +4,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
   generateBuildId: async () => {
-    // 1. Check for environment variable (useful for CI/CD like Vercel or Docker build args)
+    // 1. Check for environment variable (set via docker build --build-arg)
     if (process.env.NEXT_PUBLIC_BUILD_ID) {
       return process.env.NEXT_PUBLIC_BUILD_ID;
     }
@@ -13,8 +13,8 @@ const nextConfig: NextConfig = {
       // 2. Try to use current git commit hash (local development)
       return execSync('git rev-parse HEAD', { stdio: 'pipe' }).toString().trim();
     } catch (e) {
-      // 3. Fallback to a static ID if everything else fails
-      return 'production-build-' + new Date().toISOString().split('T')[0];
+      // 3. Fallback to a static ID if everything else fails (deterministic)
+      return 'production-build-stable';
     }
   },
 };
