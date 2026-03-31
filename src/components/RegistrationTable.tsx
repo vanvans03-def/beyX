@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, memo } from "react";
-import { CheckCircle, XCircle, Trash2, Users, Loader2, ArrowLeftRight } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2, ArrowLeftRight } from "lucide-react";
 import gameData from "@/data/game-data.json";
 import gameDataStandard from "@/data/game-data-standard.json";
 import gameDataSouth from "@/data/game-data-south.json";
@@ -18,7 +18,6 @@ type Registration = {
     Main_Bey2: string;
     Main_Bey3: string;
     TotalPoints: string;
-    Reserve_Data: string;
 };
 
 type Props = {
@@ -35,18 +34,6 @@ type Props = {
 // Extracted validation logic
 const validateRow = (row: Registration, tournamentType?: string) => {
     const mainBeys = [row.Main_Bey1, row.Main_Bey2, row.Main_Bey3];
-    // Parse reserves
-    let reserveDecks: string[][] = [];
-    try {
-        const parsed = JSON.parse(row.Reserve_Data);
-        // Handle legacy format (single array of strings) if any
-        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-            // @ts-ignore
-            reserveDecks = [parsed];
-        } else {
-            reserveDecks = parsed;
-        }
-    } catch (e) { }
 
     // Check Tournament Type Mismatch
     if (tournamentType) {
@@ -55,11 +42,9 @@ const validateRow = (row: Registration, tournamentType?: string) => {
         else if (tournamentType === 'U10South' && row.Mode === 'Under10South') isMatch = true;
         else if (tournamentType === 'NoMoreMeta' && row.Mode === 'NoMoreMeta') isMatch = true;
         else if ((tournamentType === 'Open' || tournamentType === 'Standard') && (row.Mode === 'Standard' || row.Mode === 'Open')) isMatch = true;
-        // Also allow legacy/loose matching if needed, but per request we strictly validate what is displayed.
-        // row.Mode comes from DB enum potentially? Or just strings. Frontend sends: "Under10", "Under10South", "NoMoreMeta", "Standard"
 
         if (!isMatch) {
-            return { status: "fail", msg: `Type Mismatch (${row.Mode})`, reserveDecks };
+            return { status: "fail", msg: `Type Mismatch (${row.Mode})` };
         }
     }
 
@@ -96,17 +81,9 @@ const validateRow = (row: Registration, tournamentType?: string) => {
     };
 
     const mainVal = checkDeck(mainBeys);
-    if (!mainVal.valid) return { status: "fail", msg: `Main: ${mainVal.msg}`, reserveDecks };
+    if (!mainVal.valid) return { status: "fail", msg: `Main: ${mainVal.msg}` };
 
-    // Check Reserves
-    for (let i = 0; i < reserveDecks.length; i++) {
-        const deck = reserveDecks[i];
-        if (!deck || deck.length === 0) continue;
-        const resVal = checkDeck(deck);
-        if (!resVal.valid) return { status: "fail", msg: `Res ${i + 1}: ${resVal.msg}`, reserveDecks };
-    }
-
-    return { status: "pass", msg: "OK", reserveDecks };
+    return { status: "pass", msg: "OK" };
 };
 
 // Wrap in memo to prevent re-renders when parent state changes (like modals)
@@ -154,8 +131,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                 deviceColor,
                 isConflict,
                 isSwapSelected,
-                originalIdx,
-                reserveDecks: validation.reserveDecks
+                originalIdx
             };
         });
     }, [data, searchQuery, tournamentType, sameDeviceConflicts, swapSelection]);
@@ -184,7 +160,6 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                         <th className="p-4 whitespace-nowrap">{t('table.header.player')}</th>
                         <th className="p-4 whitespace-nowrap">{t('table.header.mode')}</th>
                         <th className="p-4 whitespace-nowrap">{t('table.header.deck')}</th>
-                        <th className="p-4 whitespace-nowrap">{t('table.header.reserves')}</th>
                         <th className="p-4 whitespace-nowrap">{t('table.header.status')}</th>
                     </tr>
                 </thead>
@@ -221,6 +196,14 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                             <Users className="h-3.5 w-3.5" />
                                         </div>
                                     )}
+                                    {row.isConflict && (
+                                        <div
+                                            className="flex items-center justify-center p-1 rounded-full bg-amber-500/20 text-amber-500"
+                                            title="จับคู่เจอเครื่องเดียวกัน! (Same Device Matchup)"
+                                        >
+                                            <AlertCircle className="h-3.5 w-3.5" />
+                                        </div>
+                                    )}
                                 </div>
                             </td>
                             <td className="p-4 whitespace-nowrap">
@@ -249,24 +232,6 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                     })}
                                 </div>
                             </td>
-                            <td className="p-4 text-xs space-y-2 min-w-[200px]">
-                                {row.reserveDecks.map((deck, idx) => (
-                                    <div key={idx} className="flex gap-1 items-center opacity-80 flex-wrap">
-                                        <span className="text-[9px] w-4 text-muted-foreground">#{idx + 1}</span>
-                                        {deck.map((b, bIdx) => {
-                                            const parts = b ? b.split('|') : [''];
-                                            const name = parts[0];
-                                            const attachment = parts[1];
-                                            return (
-                                                <span key={bIdx} className="bg-secondary/50 px-1 py-0.5 rounded border border-border/30 whitespace-nowrap flex items-center gap-1">
-                                                    {name}
-                                                    {attachment && <span className="text-[8px] text-muted-foreground bg-black/20 px-0.5 rounded">{attachment}</span>}
-                                                </span>
-                                            );
-                                        })}
-                                    </div>
-                                ))}
-                            </td>
                             <td className="p-4 whitespace-nowrap">
                                 <div className="flex items-center justify-between gap-4">
                                     <div className="flex items-center gap-2">
@@ -294,7 +259,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                     ))}
                     {processedData.length === 0 && !loading && (
                         <tr>
-                            <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                            <td colSpan={6} className="p-8 text-center text-muted-foreground">
                                 {t('table.empty')}
                             </td>
                         </tr>

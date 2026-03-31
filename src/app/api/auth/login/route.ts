@@ -16,11 +16,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
         }
 
-        // Fetch user from DB
+        // Fetch user from DB (Case-Insensitive)
         const { data: user, error } = await supabaseAdmin
             .from('users')
             .select('*')
-            .eq('username', username)
+            .ilike('username', username)
             .single();
 
         if (error || !user) {

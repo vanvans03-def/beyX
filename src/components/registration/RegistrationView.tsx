@@ -49,8 +49,6 @@ export function RegistrationView({
         handleSelect,
         handleAttachmentSelect,
         handleReset,
-        addReserveDeck,
-        removeReserveDeck,
         addProfile,
         deleteProfile,
         updateProfile,
@@ -65,12 +63,12 @@ export function RegistrationView({
     // State for CX attachment selection
     const [selectingAttachment, setSelectingAttachment] = useState<{
         profileIndex: number;
-        type: 'main' | 'reserve';
-        deckIndex: number;
+        type: 'main';
         slotIndex: number;
         beyName: string;
     } | null>(null);
     const [showResetConfirm, setShowResetConfirm] = useState(false); // State for reset modal
+    const [showUpdateConfirm, setShowUpdateConfirm] = useState(false); // State for update modal
 
     // Derived
     const activeProfile = profiles[activeTab];
@@ -78,7 +76,7 @@ export function RegistrationView({
 
     // Helper for visual selector
     const currentSelectorDeck = selectingState && profiles[selectingState.profileIndex]
-        ? (selectingState.type === 'main' ? profiles[selectingState.profileIndex].mainBeys : profiles[selectingState.profileIndex].reserveDecks[selectingState.deckIndex])
+        ? profiles[selectingState.profileIndex].mainBeys
         : [];
 
     // Helper function to check if Bey is CX Line
@@ -99,7 +97,6 @@ export function RegistrationView({
             setSelectingAttachment({
                 profileIndex: selectingState.profileIndex,
                 type: selectingState.type,
-                deckIndex: selectingState.deckIndex,
                 slotIndex: selectingState.slotIndex,
                 beyName: val
             });
@@ -157,7 +154,12 @@ export function RegistrationView({
                         <CheckCircle2 className="h-5 w-5" />
                         <div>
                             <p className="text-sm font-bold">{t('reg.complete')}</p>
-                            <p className="text-xs opacity-80">{t('reg.locked')}</p>
+                            <p className="text-xs opacity-80">
+                                {tournamentStatus === 'STARTED' || tournamentStatus === 'OPEN' 
+                                    ? "สามารถอัปเดตคอมโบได้ (Combo update allowed)" 
+                                    : t('reg.locked')
+                                }
+                            </p>
                         </div>
                     </div>
                 )}
@@ -287,6 +289,21 @@ export function RegistrationView({
                             }}
                         />
 
+                        {/* Update Confirmation Modal */}
+                        <Modal
+                            isOpen={showUpdateConfirm}
+                            onClose={() => setShowUpdateConfirm(false)}
+                            title={t('reg.modal.update_title')}
+                            description={t('reg.modal.update_desc')}
+                            type="confirm"
+                            confirmText={t('reg.modal.update_confirm')}
+                            cancelText={t('reg.modal.update_cancel')}
+                            onConfirm={() => {
+                                handleSubmit();
+                                setShowUpdateConfirm(false);
+                            }}
+                        />
+
                         <div className="space-y-2">
                             {activeProfile.mainBeys.map((bey, i) => (
                                 <BladeSlot
@@ -297,17 +314,16 @@ export function RegistrationView({
                                     mode={activeProfile.mode}
                                     banList={banList}
                                     onPress={() => {
-                                        if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)) return;
-                                        setSelectingState({ profileIndex: activeTab, type: 'main', deckIndex: 0, slotIndex: i })
+                                        if (tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || (!!challongeUrl && tournamentStatus !== 'STARTED')) return;
+                                        setSelectingState({ profileIndex: activeTab, type: 'main', slotIndex: i })
                                     }}
                                     t={t}
                                     attachment={activeProfile.mainBeyAttachments[i]}
                                     onAttachmentPress={() => {
-                                        if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)) return;
+                                        if (tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || (!!challongeUrl && tournamentStatus !== 'STARTED')) return;
                                         setSelectingAttachment({
                                             profileIndex: activeTab,
                                             type: 'main',
-                                            deckIndex: 0,
                                             slotIndex: i,
                                             beyName: bey
                                         });
@@ -315,78 +331,6 @@ export function RegistrationView({
                                 />
                             ))}
                         </div>
-                    </div>
-                )}
-
-                {/* Reserves - Hide if Standard */}
-                {activeProfile.mode !== 'Standard' && (
-                    <div className="space-y-6 pt-4 border-t border-border">
-                        <div className="flex items-center justify-between px-1">
-                            <h3 className="text-lg font-bold text-foreground">
-                                {t('reg.deck.reserve')} <span className="text-xs font-normal text-muted-foreground">({activeProfile.reserveDecks.length}/3)</span>
-                            </h3>
-                        </div>
-
-                        {activeProfile.reserveDecks.map((deck, dIdx) => {
-                            const val = validateDeck(deck, activeProfile.mode, activeProfile.reserveDeckAttachments[dIdx]);
-                            return (
-                                <div key={dIdx} className="space-y-2 bg-secondary/10 p-3 rounded-xl border border-border/50">
-                                    <div className="flex items-center justify-between">
-                                        <h4 className="text-sm font-bold text-muted-foreground uppercase">{t('reg.deck.reserve_item', { n: dIdx + 1 })}</h4>
-                                        <div className="flex items-center gap-2">
-                                            {(activeProfile.mode === "Under10" || activeProfile.mode === "Under10South") && (
-                                                <span className={cn("text-xs font-bold", val.points! <= 10 ? "text-primary" : "text-destructive")}>
-                                                    {val.points}/10
-                                                </span>
-                                            )}
-                                            {activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && (
-                                                <button type="button" onClick={() => removeReserveDeck(activeTab, dIdx)} className="text-destructive hover:bg-destructive/10 p-1.5 rounded-full">
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                    {deck.map((bey, sIdx) => (
-                                        <BladeSlot
-                                            key={`res-${dIdx}-${sIdx}`}
-                                            name={bey}
-                                            type="reserve"
-                                            deckIndex={dIdx}
-                                            slotIndex={sIdx}
-                                            mode={activeProfile.mode}
-                                            banList={banList}
-                                            onPress={() => {
-                                                if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)) return;
-                                                setSelectingState({ profileIndex: activeTab, type: 'reserve', deckIndex: dIdx, slotIndex: sIdx })
-                                            }}
-                                            t={t}
-                                            attachment={activeProfile.reserveDeckAttachments[dIdx]?.[sIdx]}
-                                            onAttachmentPress={() => {
-                                                if (activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)) return;
-                                                setSelectingAttachment({
-                                                    profileIndex: activeTab,
-                                                    type: 'reserve',
-                                                    deckIndex: dIdx,
-                                                    slotIndex: sIdx,
-                                                    beyName: bey
-                                                });
-                                            }}
-                                        />
-                                    ))}
-                                </div>
-                            );
-                        })}
-
-                        {activeProfile.reserveDecks.length < 3 && activeProfile.status === 'draft' && (!tournamentStatus || tournamentStatus === 'OPEN') && !challongeUrl && (
-                            <button
-                                type="button"
-                                onClick={() => addReserveDeck(activeTab)}
-                                className="w-full py-4 border-2 border-dashed border-border rounded-xl flex items-center justify-center gap-2 text-muted-foreground hover:bg-secondary/50 hover:border-primary/50 hover:text-primary transition-all font-bold"
-                            >
-                                <Plus className="h-5 w-5" />
-                                {t('reg.btn.add_reserve')}
-                            </button>
-                        )}
                     </div>
                 )}
 
@@ -429,9 +373,20 @@ export function RegistrationView({
                         </div>
                     )
                 ) : (
-                    <div className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-4 text-sm font-bold text-muted-foreground cursor-not-allowed">
-                        <CheckCircle2 className="h-4 w-4" /> Submitted
-                    </div>
+                    (tournamentStatus === 'OPEN' || tournamentStatus === 'STARTED') ? (
+                        <button
+                            type="button"
+                            onClick={() => setShowUpdateConfirm(true)}
+                            disabled={loading}
+                            className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-green-600 px-6 py-4 text-sm font-bold text-white shadow-lg shadow-green-900/20 transition-all hover:bg-green-500 disabled:opacity-50 disabled:shadow-none"
+                        >
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Registration (อัปเดตคอมโบ)"}
+                        </button>
+                    ) : (
+                        <div className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-4 text-sm font-bold text-muted-foreground cursor-not-allowed">
+                            <CheckCircle2 className="h-4 w-4" /> Submitted & Locked
+                        </div>
+                    )
                 )}
             </div>
 
@@ -455,26 +410,11 @@ export function RegistrationView({
                 allBeys.sort((a, b) => a.name.localeCompare(b.name));
 
                 if (activeP.mode === 'Under10' || activeP.mode === 'Under10South') {
-                    // Calculate points used by other slots
                     const modeAllBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
                         names.map((name) => ({ name, point: parseInt(point) }))
                     );
 
-                    const otherSlots = currentSelectorDeck.filter((_, idx) => idx !== selectingState.slotIndex);
-                    const usedPoints = otherSlots.reduce((sum, name, idx) => {
-                        // Find the actual index in the deck to get the correct attachment
-                        // currentSelectorDeck is just a value array, we need the index from the map if possible
-                        // But here we are iterating otherSlots which are just names.
-                        // We need to map back to original indices.
-
-                        // Better approach: Iterate over the FULL deck and skip current slot index
-                        return sum;
-                    }, 0);
-
-                    // Refactored logic:
-                    const currentDeckAttachments = selectingState.type === 'main'
-                        ? activeP.mainBeyAttachments
-                        : (activeP.reserveDeckAttachments[selectingState.deckIndex] || [null, null, null]);
+                    const currentDeckAttachments = activeP.mainBeyAttachments;
 
                     const totalUsedPoints = currentSelectorDeck.reduce((sum, name, idx) => {
                         if (idx === selectingState.slotIndex) return sum; // Skip current slot being edited
@@ -494,22 +434,13 @@ export function RegistrationView({
 
                 return (
                     <VisualSelector
-                        label={selectingState.type === 'main' ? t('reg.deck.main') : t('reg.deck.reserve')}
-                        value={
-                            selectingState.type === 'main'
-                                ? activeP.mainBeys[selectingState.slotIndex]
-                                : activeP.reserveDecks[selectingState.deckIndex][selectingState.slotIndex]
-                        }
+                        label={t('reg.deck.main')}
+                        value={activeP.mainBeys[selectingState.slotIndex]}
                         onChange={handleBeySelect}
                         onClose={() => setSelectingState(null)}
                         maxPoint={maxPoint}
                         options={allBeys.map(bey => {
-                            const isSelectedInCurrentDeck = currentSelectorDeck.includes(bey.name) && bey.name !== (
-                                selectingState.type === 'main'
-                                    ? activeP.mainBeys[selectingState.slotIndex]
-                                    : activeP.reserveDecks[selectingState.deckIndex][selectingState.slotIndex]
-                            );
-
+                            const isSelectedInCurrentDeck = currentSelectorDeck.includes(bey.name) && bey.name !== activeP.mainBeys[selectingState.slotIndex];
                             const isBanned = (activeP.mode === 'NoMoreMeta') && (banList || gameData.banList).includes(bey.name);
 
                             return {
@@ -570,21 +501,13 @@ export function RegistrationView({
             {/* CX Attachment Selector */}
             {selectingAttachment && (
                 <CXAttachmentSelector
-                    currentAttachment={
-                        selectingAttachment.type === 'main'
-                            ? profiles[selectingAttachment.profileIndex].mainBeyAttachments[selectingAttachment.slotIndex]
-                            : profiles[selectingAttachment.profileIndex].reserveDeckAttachments[selectingAttachment.deckIndex]?.[selectingAttachment.slotIndex]
-                    }
-                    usedAttachments={
-                        selectingAttachment.type === 'main'
-                            ? profiles[selectingAttachment.profileIndex].mainBeyAttachments.filter((_, idx) => idx !== selectingAttachment.slotIndex)
-                            : (profiles[selectingAttachment.profileIndex].reserveDeckAttachments[selectingAttachment.deckIndex] || []).filter((_, idx) => idx !== selectingAttachment.slotIndex)
-                    }
+                    currentAttachment={profiles[selectingAttachment.profileIndex].mainBeyAttachments[selectingAttachment.slotIndex]}
+                    usedAttachments={profiles[selectingAttachment.profileIndex].mainBeyAttachments.filter((_, idx) => idx !== selectingAttachment.slotIndex)}
                     onSelect={(attachment) => {
                         handleAttachmentSelect(
                             selectingAttachment.profileIndex,
-                            selectingAttachment.type,
-                            selectingAttachment.deckIndex,
+                            'main',
+                            0, // deckIndex
                             selectingAttachment.slotIndex,
                             attachment
                         );

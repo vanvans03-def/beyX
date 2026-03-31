@@ -18,8 +18,7 @@ allBeys.sort((a, b) => a.name.localeCompare(b.name));
 
 type BladeSlotProps = {
     name: string;
-    type: 'main' | 'reserve';
-    deckIndex?: number;
+    type: 'main';
     slotIndex: number;
     mode: RegistrationMode | "Standard";
     onPress: () => void;
@@ -32,7 +31,6 @@ type BladeSlotProps = {
 export const BladeSlot = ({
     name,
     type,
-    deckIndex = 0,
     slotIndex,
     mode,
     onPress,

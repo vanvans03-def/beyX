@@ -12,11 +12,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // Check if username exists
+        // Check if username exists (Case-Insensitive)
         const { data: existing } = await supabaseAdmin
             .from('users')
             .select('id')
-            .eq('username', username)
+            .ilike('username', username)
             .single();
 
         if (existing) {
@@ -61,7 +61,7 @@ export async function PUT(request: Request) {
         const { error } = await supabaseAdmin
             .from('users')
             .update({ password_hash: passwordHash })
-            .eq('username', username);
+            .ilike('username', username);
 
         if (error) {
             throw new Error(error.message);

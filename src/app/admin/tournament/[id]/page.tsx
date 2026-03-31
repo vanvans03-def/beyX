@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
+import gameDataSouth from "@/data/game-data-south.json";
+import gameDataStandard from "@/data/game-data-standard.json";
 import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
@@ -30,7 +32,6 @@ type Registration = {
     Main_Bey2: string;
     Main_Bey3: string;
     TotalPoints: string;
-    Reserve_Data: string;
 };
 
 type Match = {
@@ -868,76 +869,162 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         }
     };
 
+
+    const getBracketMatchups = (n: number) => {
+        if (n < 2) return [];
+        const size = Math.pow(2, Math.ceil(Math.log2(n)));
+
+        // 1. Generate full seed list (e.g., [1, 32, 16, 17, ...])
+        let seeds = [1, 2];
+        for (let i = 1; i < Math.log2(size); i++) {
+            const nextSeeds: number[] = [];
+            const sum = Math.pow(2, i + 1) + 1;
+            seeds.forEach(s => {
+                nextSeeds.push(s);
+                nextSeeds.push(sum - s);
+            });
+            seeds = nextSeeds;
+        }
+
+        const matchups: Set<string> = new Set();
+
+        // 2. For each player, find their FIRST actual opponent
+        for (let s1 = 1; s1 <= n; s1++) {
+            let currentLevelSeeds = [...seeds];
+            let found = false;
+
+            while (currentLevelSeeds.length >= 2 && !found) {
+                const idx1 = currentLevelSeeds.indexOf(s1);
+                const idx2 = idx1 % 2 === 0 ? idx1 + 1 : idx1 - 1;
+                const s2 = currentLevelSeeds[idx2];
+
+                if (s2 <= n) {
+                    // Match found!
+                    const pair = [s1 - 1, s2 - 1].sort((a, b) => a - b);
+                    matchups.add(JSON.stringify(pair));
+                    found = true;
+                } else {
+                    // s2 is a Bye, move s1 to next round
+                    const nextLevel: number[] = [];
+                    for (let i = 0; i < currentLevelSeeds.length; i += 2) {
+                        const p1 = currentLevelSeeds[i];
+                        const p2 = currentLevelSeeds[i + 1];
+                        // Winner is whoever is <= n, or if both > n, the smallest seed (doesn't matter)
+                        nextLevel.push(Math.min(p1, p2));
+                    }
+                    currentLevelSeeds = nextLevel;
+                }
+            }
+        }
+
+        return Array.from(matchups).map(s => JSON.parse(s) as [number, number]);
+    };
+
+    const checkConflicts = (arr: Registration[]) => {
+        const n = arr.length;
+        if (n < 2) return [];
+        const conflicts: number[] = [];
+        const matchups = getBracketMatchups(n);
+
+        const deviceCounts = new Map<string, number>();
+        arr.forEach(p => {
+            deviceCounts.set(p.DeviceUUID, (deviceCounts.get(p.DeviceUUID) || 0) + 1);
+        });
+
+        // 1. Adjacency conflicts
+        for (let i = 0; i < n - 1; i++) {
+            if (arr[i].DeviceUUID === arr[i + 1].DeviceUUID && (deviceCounts.get(arr[i].DeviceUUID) || 0) > 1) {
+                if (!conflicts.includes(i)) conflicts.push(i);
+                if (!conflicts.includes(i + 1)) conflicts.push(i + 1);
+            }
+        }
+
+        // 2. Matchup conflicts (Direct Round 1 opponents)
+        matchups.forEach(([idx1, idx2]) => {
+            if (idx1 !== null && idx2 !== null && arr[idx1].DeviceUUID === arr[idx2].DeviceUUID && (deviceCounts.get(arr[idx1].DeviceUUID) || 0) > 1) {
+                if (!conflicts.includes(idx1)) conflicts.push(idx1);
+                if (!conflicts.includes(idx2)) conflicts.push(idx2);
+            }
+        });
+
+        return conflicts;
+    };
+
     const handleShufflePlayers = () => {
-        // Smart shuffle: Fisher-Yates + same-device separation
         const arr = [...data];
         const n = arr.length;
+        if (n < 2) return;
 
-        // Step 1: Fisher-Yates shuffle for true randomness
+        // Step 1: Fisher-Yates shuffle
         for (let i = n - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [arr[i], arr[j]] = [arr[j], arr[i]];
         }
 
-        // Step 2: Identify multi-device groups
-        const deviceGroups = new Map<string, number[]>();
-        arr.forEach((p, idx) => {
-            const uuid = p.DeviceUUID;
-            if (!deviceGroups.has(uuid)) deviceGroups.set(uuid, []);
-            deviceGroups.get(uuid)!.push(idx);
-        });
+        // Step 2: Try to redistribute conflicts
+        const matchups = getBracketMatchups(n);
+        for (let pass = 0; pass < 100; pass++) {
+            let conflictIdx = -1;
 
-        // Filter to only groups with 2+ players (same device)
-        const multiDeviceGroups = Array.from(deviceGroups.entries()).filter(([, indices]) => indices.length > 1);
-
-        // Step 3: Try to redistribute same-device players to be spaced apart
-        if (multiDeviceGroups.length > 0 && n > 2) {
-            // Attempt multiple passes to separate same-device players
-            for (let pass = 0; pass < 50; pass++) {
-                let hasConflict = false;
-                for (let i = 0; i < n - 1; i++) {
-                    if (arr[i].DeviceUUID === arr[i + 1].DeviceUUID) {
-                        // Found adjacent same-device players, try to swap the second one with a random non-adjacent position
-                        hasConflict = true;
-                        // Find a valid swap candidate
-                        const candidates: number[] = [];
-                        for (let k = 0; k < n; k++) {
-                            if (k === i || k === i + 1) continue;
-                            // Check if swapping arr[i+1] with arr[k] would not create new conflicts
-                            const wouldConflictAtK =
-                                (k > 0 && arr[k - 1].DeviceUUID === arr[i + 1].DeviceUUID) ||
-                                (k < n - 1 && arr[k + 1].DeviceUUID === arr[i + 1].DeviceUUID);
-                            const wouldConflictAtI =
-                                (arr[i].DeviceUUID === arr[k].DeviceUUID) ||
-                                (i + 2 < n && arr[i + 2]?.DeviceUUID === arr[k].DeviceUUID);
-                            if (!wouldConflictAtK && !wouldConflictAtI) {
-                                candidates.push(k);
-                            }
-                        }
-                        if (candidates.length > 0) {
-                            const swapIdx = candidates[Math.floor(Math.random() * candidates.length)];
-                            [arr[i + 1], arr[swapIdx]] = [arr[swapIdx], arr[i + 1]];
-                        }
+            // Find first conflict (matchup or adjacency)
+            for (let i = 0; i < n; i++) {
+                // Check adjacency
+                if (i < n - 1 && arr[i].DeviceUUID === arr[i + 1].DeviceUUID) {
+                    conflictIdx = i + 1;
+                    break;
+                }
+                // Check matchups
+                const m = matchups.find(pair => pair.includes(i));
+                if (m) {
+                    const other = m[0] === i ? m[1] : m[0];
+                    if (other !== null && other < n && arr[i].DeviceUUID === arr[other].DeviceUUID) {
+                        conflictIdx = i;
+                        break;
                     }
                 }
-                if (!hasConflict) break;
             }
-        }
 
-        // Step 4: Detect remaining conflicts
-        const conflicts: number[] = [];
-        for (let i = 0; i < n - 1; i++) {
-            if (arr[i].DeviceUUID === arr[i + 1].DeviceUUID) {
-                // Check if this device has multiple players (not just coincidence of admin-manual UUIDs)
-                const uuid = arr[i].DeviceUUID;
-                const count = deviceGroups.get(uuid)?.length || 0;
-                if (count > 1) {
-                    if (!conflicts.includes(i)) conflicts.push(i);
-                    if (!conflicts.includes(i + 1)) conflicts.push(i + 1);
+            if (conflictIdx === -1) break; // No more conflicts!
+
+            // Try to swap conflictIdx with a random index that doesn't create new conflicts
+            const candidates: number[] = [];
+            for (let k = 0; k < n; k++) {
+                if (k === conflictIdx) continue;
+                // Swap tentatively
+                [arr[conflictIdx], arr[k]] = [arr[k], arr[conflictIdx]];
+
+                // Check if this swap was good (no conflicts at both swapped positions)
+                const hasNewConflict = (idx: number) => {
+                    // Adjacency
+                    if (idx > 0 && arr[idx].DeviceUUID === arr[idx - 1].DeviceUUID) return true;
+                    if (idx < n - 1 && arr[idx].DeviceUUID === arr[idx + 1].DeviceUUID) return true;
+                    // Matchups
+                    const mm = matchups.filter(pair => pair.includes(idx));
+                    for (const pair of mm) {
+                        const other = pair[0] === idx ? pair[1] : pair[0];
+                        if (other !== null && other < n && other !== idx && arr[idx].DeviceUUID === arr[other].DeviceUUID) return true;
+                    }
+                    return false;
+                };
+
+                if (!hasNewConflict(conflictIdx) && !hasNewConflict(k)) {
+                    candidates.push(k);
                 }
+                // Swap back
+                [arr[conflictIdx], arr[k]] = [arr[k], arr[conflictIdx]];
+            }
+
+            if (candidates.length > 0) {
+                const swapIdx = candidates[Math.floor(Math.random() * candidates.length)];
+                [arr[conflictIdx], arr[swapIdx]] = [arr[swapIdx], arr[conflictIdx]];
+            } else {
+                // If no perfect swap, move to a random position to jitter
+                const swapIdx = Math.floor(Math.random() * n);
+                [arr[conflictIdx], arr[swapIdx]] = [arr[swapIdx], arr[conflictIdx]];
             }
         }
 
+        const conflicts = checkConflicts(arr);
         setShuffledData(arr);
         setIsListShuffled(true);
         setSameDeviceConflicts(conflicts);
@@ -975,23 +1062,22 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         [currentData[idx1], currentData[idx2]] = [currentData[idx2], currentData[idx1]];
 
         setShuffledData(currentData);
-        setIsListShuffled(true); // Treating any custom ordered array as our active "shuffled" array
+        setIsListShuffled(true);
 
-        // Re-detect conflicts after swap
-        const deviceGroups = new Map<string, number>();
-        currentData.forEach(p => {
-            deviceGroups.set(p.DeviceUUID, (deviceGroups.get(p.DeviceUUID) || 0) + 1);
-        });
-        const newConflicts: number[] = [];
-        for (let i = 0; i < currentData.length - 1; i++) {
-            if (currentData[i].DeviceUUID === currentData[i + 1].DeviceUUID && (deviceGroups.get(currentData[i].DeviceUUID) || 0) > 1) {
-                if (!newConflicts.includes(i)) newConflicts.push(i);
-                if (!newConflicts.includes(i + 1)) newConflicts.push(i + 1);
-            }
-        }
+        const newConflicts = checkConflicts(currentData);
         setSameDeviceConflicts(newConflicts);
 
-        toast.success(`สลับตำแหน่งผู้เล่นสำเร็จ`);
+        // Check if the swapped players are now part of any conflict
+        const hasNewConflict = newConflicts.includes(idx1) || newConflicts.includes(idx2);
+
+        if (hasNewConflict) {
+            toast.warning(`ตรวจพบการจับคู่เจอเครื่องเดียวกัน!`, {
+                description: `ผู้เล่นที่สลับตำแหน่งมา (ลำดับที่ ${idx1 + 1} หรือ ${idx2 + 1}) มีการจับคู่ที่ซ้ำซ้อน กรุณาตรวจสอบแท็บสีส้ม`
+            });
+        } else {
+            toast.success(`สลับตำแหน่งผู้เล่นสำเร็จ`);
+        }
+
         setSwapSelection([]);
         setIsSwapMode(false);
     };
@@ -1876,7 +1962,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     </button>
                                     <button
                                         onClick={handleResetTournament}
-                                        className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-destructive/20 text-white hover:text-destructive px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10"
+                                        className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-4 py-2.5 rounded-lg font-bold transition-all border border-red-500/20"
                                     >
                                         <Trash2 className="h-4 w-4" />
                                         {t('admin.btn.reset')}
@@ -2113,46 +2199,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         <div
                             className="fixed z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-left"
                             style={{
-                                left: Math.min(hoveredCombo.x, window.innerWidth - 300), // Prevent overflow right
+                                left: Math.min(hoveredCombo.x, window.innerWidth - 300),
                                 top: hoveredCombo.y
                             }}
-                            onClick={(e) => e.stopPropagation()} // Prevent close when clicking inside
+                            onClick={(e) => e.stopPropagation()}
                         >
                             <div className="bg-popover/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 w-[280px] text-popover-foreground">
                                 {(() => {
-                                    // Parse Decks Logic
                                     const mainDeck = [hoveredCombo.data.Main_Bey1, hoveredCombo.data.Main_Bey2, hoveredCombo.data.Main_Bey3].filter(Boolean);
-                                    let reserveDecks: string[][] = [];
-                                    try {
-                                        const parsed = JSON.parse(hoveredCombo.data.Reserve_Data || "[]");
-                                        // Handle legacy single-array vs multi-array
-                                        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-                                            reserveDecks = [parsed as unknown as string[]];
-                                        } else {
-                                            reserveDecks = parsed;
-                                        }
-                                    } catch (e) {
-                                        // Ignore parse errors, just show main deck
-                                    }
-
-                                    const allDecks = [mainDeck, ...reserveDecks].filter(d => d && d.length > 0);
-                                    const currentDeck = allDecks[hoveredCombo.deckIndex] || [];
-                                    const isMain = hoveredCombo.deckIndex === 0;
-
-                                    // Navigation Handlers
-                                    const handlePrev = (e: React.MouseEvent) => {
-                                        e.stopPropagation();
-                                        if (hoveredCombo.deckIndex > 0) {
-                                            setHoveredCombo(prev => prev ? ({ ...prev, deckIndex: prev.deckIndex - 1 }) : null);
-                                        }
-                                    };
-
-                                    const handleNext = (e: React.MouseEvent) => {
-                                        e.stopPropagation();
-                                        if (hoveredCombo.deckIndex < allDecks.length - 1) {
-                                            setHoveredCombo(prev => prev ? ({ ...prev, deckIndex: prev.deckIndex + 1 }) : null);
-                                        }
-                                    };
 
                                     return (
                                         <>
@@ -2162,7 +2216,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     <div className="flex flex-col">
                                                         <span>{hoveredCombo.data.PlayerName}</span>
                                                         <span className="text-[10px] text-muted-foreground font-normal">
-                                                            {isMain ? "Main Deck" : `Reserve Deck ${hoveredCombo.deckIndex}`}
+                                                            Main Deck
                                                         </span>
                                                     </div>
                                                 </h4>
@@ -2176,26 +2230,26 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     let totalScore = 0;
                                                     return (
                                                         <>
-                                                            {currentDeck.map((beyRaw, idx) => {
+                                                            {mainDeck.map((beyRaw, idx) => {
                                                                 const parts = beyRaw ? beyRaw.split('|') : [''];
                                                                 const bey = parts[0];
                                                                 const attachment = parts[1];
 
                                                                 const point = tournament?.Type === 'U10' ? (() => {
-                                                                    for (const [pt, names] of Object.entries((gameData as any).points)) {
-                                                                        if ((names as string[]).includes(bey)) {
-                                                                            // Check attachment bonus for U10South (if applicable)
-                                                                            // Since Type is just 'U10' here, we might need to check if it's U10South actually?
-                                                                            // But for now, if the attachment exists, we can assume it adds points if the logic allows.
-                                                                            // However, to be safe and consistent with previous logic:
-                                                                            let p = parseInt(pt);
-                                                                            if (attachment === 'Heavy' || attachment === 'Wheel') {
-                                                                                // Only add if we are sure it's U10South, but the type might be generic 'U10'.
-                                                                                // If it has an attachment, it probably counts.
-                                                                                p += 1;
-                                                                            }
-                                                                            return p;
+                                                                    const pointData = tournament.Type === 'U10' ? (
+                                                                        hoveredCombo.data.Mode === "Under10South" ? gameDataSouth : gameDataStandard
+                                                                    ) : null;
+
+                                                                    if (pointData) {
+                                                                        const ptsMap: Record<string, number> = {};
+                                                                        Object.entries(pointData.points).forEach(([pt, names]) => {
+                                                                            (names as string[]).forEach(name => ptsMap[name] = parseInt(pt));
+                                                                        });
+                                                                        const p = ptsMap[bey] || 0;
+                                                                        if (hoveredCombo.data.Mode === "Under10South") {
+                                                                            if (attachment === "Heavy" || attachment === "Wheel") return p + 1;
                                                                         }
+                                                                        return p;
                                                                     }
                                                                     return null;
                                                                 })() : null;
@@ -2204,7 +2258,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 return (
                                                                     <div key={idx} className="flex items-center justify-between text-xs p-2 bg-secondary/50 rounded border border-white/5">
                                                                         <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                            {/* Lazy Image */}
                                                                             {(() => {
                                                                                 const imgUrl = (imageMap as any)[bey];
                                                                                 if (imgUrl) {
@@ -2241,37 +2294,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     );
                                                 })()}
                                             </div >
-
-                                            {/* Navigation Controls */}
-                                            {
-                                                allDecks.length > 1 && (
-                                                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
-                                                        <button
-                                                            onClick={handlePrev}
-                                                            disabled={hoveredCombo.deckIndex === 0}
-                                                            className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                                                        >
-                                                            <ArrowLeft className="h-4 w-4" />
-                                                        </button>
-                                                        <span className="text-[10px] text-muted-foreground">
-                                                            {hoveredCombo.deckIndex + 1} / {allDecks.length}
-                                                        </span>
-                                                        <button
-                                                            onClick={handleNext}
-                                                            disabled={hoveredCombo.deckIndex === allDecks.length - 1}
-                                                            className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                                                        >
-                                                            <ArrowLeft className="h-4 w-4 rotate-180" />
-                                                        </button>
-                                                    </div>
-                                                )
-                                            }
                                         </>
                                     );
                                 })()}
                             </div>
                         </div>
                     )}
+
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Rules & Info */}
@@ -2404,10 +2433,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         </button>
                                     </div>
 
+
+
                                     <div className="flex gap-2">
                                         {tournament?.Type && (
                                             <span className={
-                                                `px-2 py-0.5 rounded text-[10px] font-bold uppercase border ` +
+                                                `px-2 py-1 rounded-lg text-[10px] font-bold uppercase border ` +
                                                 (tournament.Type === 'U10' ? 'border-blue-500/30 text-blue-400 bg-blue-500/10' :
                                                     tournament.Type === 'NoMoreMeta' ? 'border-purple-500/30 text-purple-400 bg-purple-500/10' :
                                                         'border-white/10 text-muted-foreground bg-secondary')
@@ -2658,6 +2689,35 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </div>
                     </div>
 
+                    {currentUser?.shop_name && (
+                        <div className="glass-card p-6 rounded-xl space-y-4">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-bold text-foreground flex items-center gap-2">
+                                    <Eye className="h-4 w-4 text-primary" />
+                                    Public View (รายชื่อผู้เล่น)
+                                </h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 p-3 bg-primary/5 rounded-lg text-xs font-mono text-muted-foreground break-all border border-primary/20">
+                                    <span>{origin ? `${origin.replace(/^https?:\/\//, '')}/${currentUser.shop_name}/${id.replace(/-/g, '').slice(-8)}` : `.../${currentUser.shop_name}/${id.replace(/-/g, '').slice(-8)}`}</span>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        const shortId = id.replace(/-/g, '').slice(-8);
+                                        const url = `${window.location.origin}/${currentUser?.shop_name}/${shortId}`;
+                                        navigator.clipboard.writeText(url);
+                                        toast.success("คัดลอกลิงก์หน้าดูรายชื่อสำเร็จ!");
+                                    }}
+                                    className="text-xs flex items-center gap-1.5 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all shrink-0"
+                                    title="Copy Public View Link"
+                                >
+                                    <Copy className="h-3 w-3" />
+                                    <span>คัดลอกลิงก์</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Bulk Registration (Only for Open/Standard or when explicitly enabled) */}
                     {/* Bulk Registration (Only for Open/Standard and when Status is OPEN) */}
                     {/* Bulk Registration (Only for Open/Standard and when Status is OPEN) */}
@@ -2762,7 +2822,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         setIsSwapMode(false);
                                     }}
                                     disabled={!isListShuffled || !!bracketUrl || (tournament?.Status && tournament.Status !== 'OPEN')}
-                                    className="text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors px-3 py-1.5 rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                                    className="text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 transition-colors px-3 py-1.5 rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                     title="Reset to Original Order"
                                 >
                                     Reset

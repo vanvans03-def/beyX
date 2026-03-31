@@ -17,8 +17,6 @@ export type Profile = {
     mode: RegistrationMode;
     mainBeys: string[];
     mainBeyAttachments: (string | null)[]; // CX attachments for main deck (Heavy, Wheel, or null)
-    reserveDecks: string[][];
-    reserveDeckAttachments: (string | null)[][]; // CX attachments for reserve decks
     status: 'draft' | 'submitted';
     errorMsg?: string;
     validationPoints?: number;
@@ -74,8 +72,6 @@ export function useRegistration({
             mode: getModeFromType(tournamentType),
             mainBeys: ["", "", ""],
             mainBeyAttachments: [null, null, null],
-            reserveDecks: [],
-            reserveDeckAttachments: [],
             status: 'draft'
         }
     ]);
@@ -84,8 +80,7 @@ export function useRegistration({
     // Selector State
     const [selectingState, setSelectingState] = useState<{
         profileIndex: number,
-        type: 'main' | 'reserve',
-        deckIndex: number,
+        type: 'main',
         slotIndex: number
     } | null>(null);
 
@@ -162,31 +157,6 @@ export function useRegistration({
                             while (mainBeys.length < 3) mainBeys.push("");
                             while (mainAttachments.length < 3) mainAttachments.push(null);
 
-                            // Parse Reserve Decks
-                            const reserveDecks: string[][] = [];
-                            const reserveAttachments: (string | null)[][] = [];
-
-                            (r.reserve_decks || []).forEach((deck: string[]) => {
-                                const dBeys: string[] = [];
-                                const dAtt: (string | null)[] = [];
-                                deck.forEach((item: string) => {
-                                    if (item && item.includes('|')) {
-                                        const parts = item.split('|');
-                                        dBeys.push(parts[0]);
-                                        dAtt.push(parts[1] || null);
-                                    } else {
-                                        dBeys.push(item || "");
-                                        dAtt.push(null);
-                                    }
-                                });
-                                // Ensure length 3
-                                while (dBeys.length < 3) dBeys.push("");
-                                while (dAtt.length < 3) dAtt.push(null);
-
-                                reserveDecks.push(dBeys);
-                                reserveAttachments.push(dAtt);
-                            });
-
                             return {
                                 internalId: idx + 1,
                                 id: r.id,
@@ -194,8 +164,6 @@ export function useRegistration({
                                 mode: r.mode,
                                 mainBeys: mainBeys,
                                 mainBeyAttachments: mainAttachments,
-                                reserveDecks: reserveDecks,
-                                reserveDeckAttachments: reserveAttachments,
                                 status: 'submitted'
                             };
                         });
@@ -269,10 +237,6 @@ export function useRegistration({
         const mainVal = validateDeck(p.mainBeys, p.mode, p.mainBeyAttachments);
         if (!mainVal.valid) return { valid: false, section: t('reg.deck.main'), message: mainVal.message, points: mainVal.points };
 
-        for (let i = 0; i < p.reserveDecks.length; i++) {
-            const resVal = validateDeck(p.reserveDecks[i], p.mode, p.reserveDeckAttachments[i]);
-            if (!resVal.valid) return { valid: false, section: t('reg.deck.reserve_item', { n: i + 1 }), message: resVal.message, points: resVal.points };
-        }
         return { valid: true, section: "", message: "", points: mainVal.points };
     };
 
@@ -283,11 +247,6 @@ export function useRegistration({
 
             const mainVal = validateDeck(p.mainBeys, p.mode, p.mainBeyAttachments);
             if (!mainVal.valid) return { ...p, errorMsg: mainVal.message, validationPoints: mainVal.points };
-
-            for (let i = 0; i < p.reserveDecks.length; i++) {
-                const resVal = validateDeck(p.reserveDecks[i], p.mode, p.reserveDeckAttachments[i]);
-                if (!resVal.valid) return { ...p, errorMsg: `${t('reg.deck.reserve')} ${i + 1}: ${resVal.message}`, validationPoints: resVal.points };
-            }
 
             return { ...p, errorMsg: undefined, validationPoints: mainVal.points };
         });
@@ -310,42 +269,21 @@ export function useRegistration({
             newAttachments[selectingState.slotIndex] = null;
 
             updateProfile(pIndex, { mainBeys: newBeys, mainBeyAttachments: newAttachments });
-        } else {
-            const newDecks = [...profile.reserveDecks];
-            newDecks[selectingState.deckIndex][selectingState.slotIndex] = val;
-
-            // Reset attachment for this slot
-            const newAttachments = [...profile.reserveDeckAttachments];
-            if (newAttachments[selectingState.deckIndex]) {
-                const deckAttachments = [...newAttachments[selectingState.deckIndex]];
-                deckAttachments[selectingState.slotIndex] = null;
-                newAttachments[selectingState.deckIndex] = deckAttachments;
-                updateProfile(pIndex, { reserveDecks: newDecks, reserveDeckAttachments: newAttachments });
-            } else {
-                updateProfile(pIndex, { reserveDecks: newDecks });
-            }
         }
         setSelectingState(null);
     };
 
-    const handleAttachmentSelect = (pIndex: number, type: 'main' | 'reserve', deckIndex: number, slotIndex: number, attachment: string | null) => {
+    const handleAttachmentSelect = (pIndex: number, type: 'main', deckIndex: number, slotIndex: number, attachment: string | null) => {
         const profile = profiles[pIndex];
 
         if (type === 'main') {
             const newAttachments = [...profile.mainBeyAttachments];
             newAttachments[slotIndex] = attachment;
             updateProfile(pIndex, { mainBeyAttachments: newAttachments });
-        } else {
-            const newAttachments = [...profile.reserveDeckAttachments];
-            if (!newAttachments[deckIndex]) {
-                newAttachments[deckIndex] = [null, null, null];
-            }
-            newAttachments[deckIndex][slotIndex] = attachment;
-            updateProfile(pIndex, { reserveDeckAttachments: newAttachments });
         }
     };
 
-    const handleReset = (pIndex: number, type: 'main' | 'reserve', deckIndex: number = 0) => {
+    const handleReset = (pIndex: number, type: 'main', deckIndex: number = 0) => {
         const profile = profiles[pIndex];
         if (!profile) return;
 
@@ -357,30 +295,6 @@ export function useRegistration({
         }
     };
 
-    const addReserveDeck = (pIndex: number) => {
-        const profile = profiles[pIndex];
-        if (profile.reserveDecks.length < 3) {
-            updateProfile(pIndex, {
-                reserveDecks: [...profile.reserveDecks, ["", "", ""]],
-                reserveDeckAttachments: [...profile.reserveDeckAttachments, [null, null, null]]
-            });
-        }
-    };
-
-    const removeReserveDeck = (pIndex: number, deckIndex: number) => {
-        const profile = profiles[pIndex];
-        const newDecks = [...profile.reserveDecks];
-        newDecks.splice(deckIndex, 1);
-
-        const newAttachments = [...profile.reserveDeckAttachments];
-        newAttachments.splice(deckIndex, 1);
-
-        updateProfile(pIndex, {
-            reserveDecks: newDecks,
-            reserveDeckAttachments: newAttachments
-        });
-    };
-
     const addProfile = () => {
         setProfiles(prev => [...prev, {
             internalId: Math.max(...prev.map(p => p.internalId), 0) + 1,
@@ -388,8 +302,6 @@ export function useRegistration({
             mode: getModeFromType(tournamentType),
             mainBeys: ["", "", ""],
             mainBeyAttachments: [null, null, null],
-            reserveDecks: [],
-            reserveDeckAttachments: [],
             status: 'draft'
         }]);
         setActiveTab(profiles.length);
@@ -407,8 +319,7 @@ export function useRegistration({
         if (index === 0) return;
         const source = profiles[0];
         updateProfile(index, {
-            mainBeys: [...source.mainBeys],
-            reserveDecks: JSON.parse(JSON.stringify(source.reserveDecks))
+            mainBeys: [...source.mainBeys]
         });
     };
 
@@ -435,13 +346,18 @@ export function useRegistration({
     };
 
     const handleSubmit = async () => {
-        const draftProfiles = profiles.map((p, index) => ({ ...p, originalIndex: index })).filter(p => p.status === 'draft');
-        if (draftProfiles.length === 0) return;
+        // Only allow submitting if tournament is OPEN or STARTED
+        if (tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED') {
+            return;
+        }
+
+        const activeProfiles = profiles.map((p, index) => ({ ...p, originalIndex: index }));
+        if (activeProfiles.length === 0) return;
 
         let allValid = true;
         const updates: { index: number, update: Partial<Profile> }[] = [];
 
-        draftProfiles.forEach(p => {
+        activeProfiles.forEach(p => {
             const validation = validateProfile(p);
             let errorMsg = "";
             if (!validation.valid) {
@@ -482,7 +398,7 @@ export function useRegistration({
 
         setLoading(true);
         try {
-            const results = await Promise.allSettled(draftProfiles.map(async (p) => {
+            const results = await Promise.allSettled(activeProfiles.map(async (p) => {
                 const validation = validateProfile(p);
                 const payload = {
                     deviceUUID,
@@ -490,12 +406,6 @@ export function useRegistration({
                     mode: p.mode,
                     mainBeys: p.mainBeys.map((bey, idx) => {
                         return (bey && p.mainBeyAttachments[idx]) ? `${bey}|${p.mainBeyAttachments[idx]}` : bey;
-                    }),
-                    reserveDecks: p.reserveDecks.map((deck, dIdx) => {
-                        return deck.map((bey, bIdx) => {
-                            const attachment = p.reserveDeckAttachments[dIdx]?.[bIdx];
-                            return (bey && attachment) ? `${bey}|${attachment}` : bey;
-                        });
                     }),
                     totalPoints: validation.points || 0,
                     tournamentId
@@ -523,7 +433,7 @@ export function useRegistration({
             let submissionCount = 0;
 
             results.forEach((result, idx) => {
-                const originalProfile = draftProfiles[idx];
+                const originalProfile = activeProfiles[idx];
                 if (result.status === 'fulfilled') {
                     updates.push({
                         index: originalProfile.originalIndex,
@@ -551,7 +461,7 @@ export function useRegistration({
                 return newProfiles;
             });
 
-            if (submissionCount > 0 && submissionCount === draftProfiles.length) {
+            if (submissionCount > 0 && submissionCount === activeProfiles.length) {
                 setSuccess(true);
             }
 
@@ -583,14 +493,12 @@ export function useRegistration({
         setShowPlayerList,
         handleSelect,
         handleAttachmentSelect,
-        addReserveDeck,
-        removeReserveDeck,
         handleReset,
         updateProfile,
         addProfile,
-        deleteProfile, // Assuming 'removeProfile' in instruction meant 'deleteProfile'
+        deleteProfile,
         handleSubmit,
-        fetchExistingPlayers, // Assuming this should be added as per the Code Edit
+        fetchExistingPlayers,
         validateProfile,
         validateDeck,
         triggerFetchExistingPlayers,

@@ -29,8 +29,7 @@ export async function GET(req: Request) {
             Main_Bey1: r.main_deck[0] || "",
             Main_Bey2: r.main_deck[1] || "",
             Main_Bey3: r.main_deck[2] || "",
-            TotalPoints: "0",
-            Reserve_Data: JSON.stringify(r.reserve_decks)
+            TotalPoints: r.total_points
         }));
 
         return NextResponse.json({ success: true, data: mapped }, {
@@ -109,17 +108,15 @@ export async function POST(req: Request) {
         }
 
         // 4. Proceed to Bulk Insert (We know they are unique now)
-        const deviceUuid = `admin-manual-${uuidv4().substring(0, 8)}`;
-
         const promises = trimmedPlayers.map(async (playerName: string) => {
+            const deviceUuid = `admin-manual-${uuidv4().substring(0, 8)}`;
             // Basic create without re-checking since we just checked
             await createRegistration({
                 tournament_id: tournamentId,
                 player_name: playerName,
                 device_uuid: deviceUuid,
                 mode: mode || "Open",
-                main_deck: [],
-                reserve_decks: []
+                main_deck: []
             });
         });
 

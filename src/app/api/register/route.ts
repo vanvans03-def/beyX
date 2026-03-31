@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRegistration } from "@/lib/repository";
+import { createRegistration, upsertRegistration } from "@/lib/repository";
 import gameData from "@/data/game-data.json";
 import gameDataStandard from "@/data/game-data-standard.json";
 import gameDataSouth from "@/data/game-data-south.json";
@@ -104,7 +104,6 @@ export async function POST(request: Request) {
             playerName,
             mode,
             mainBeys,
-            reserveDecks, // Changed from reserveBeys
             totalPoints,
             tournamentId
         } = body;
@@ -123,21 +122,35 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, message: "Tournament not found" }, { status: 404 });
         }
 
-        if (tournament.status === 'STARTED' || tournament.status === 'COMPLETED' || tournament.status === 'CLOSED' || !!tournament.challonge_url) {
-            return NextResponse.json({ success: false, message: "ไม่สามารถลงทะเบียนได้ การแข่งเริ่มไปแล้ว" }, { status: 400 });
+        if (tournament.status === 'COMPLETED' || tournament.status === 'CLOSED') {
+            return NextResponse.json({ success: false, message: "ทัวร์นาเมนต์จบแล้ว ไม่สามารถแก้ไขได้" }, { status: 400 });
+        }
+
+        if (tournament.status === 'STARTED') {
+            // Check if this player already exists for THIS device
+            const { data: existing } = await supabaseAdmin
+                .from('registrations')
+                .select('id')
+                .eq('tournament_id', tournamentId)
+                .eq('device_uuid', deviceUUID)
+                .ilike('player_name', playerName.trim())
+                .maybeSingle();
+
+            if (!existing) {
+                return NextResponse.json({ success: false, message: "ไม่สามารถเพิ่มผู้เล่นใหม่ได้ เนื่องจากเริ่มการแข่งแล้ว" }, { status: 400 });
+            }
         }
 
         const registrationData = {
             tournament_id: tournamentId,
-            player_name: playerName.trim(), // Trim name
+            player_name: playerName.trim(),
             device_uuid: deviceUUID,
             mode: mode,
-            main_deck: [mainBeys[0], mainBeys[1], mainBeys[2]],
-            reserve_decks: reserveDecks || []
+            main_deck: [mainBeys[0], mainBeys[1], mainBeys[2]]
         };
 
-        // repository.createRegistration handles dual write (Postgres + Sheets)
-        await withRetry(() => createRegistration(registrationData));
+        // repository.upsertRegistration handles update vs insert
+        await withRetry(() => upsertRegistration(registrationData));
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

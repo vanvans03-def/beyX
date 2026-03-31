@@ -22,9 +22,9 @@ export type Registration = {
     device_uuid: string;
     mode: string;
     main_deck: string[];
-    reserve_decks: string[][];
     timestamp: Date;
     round_id: string;
+    total_points?: number;
 };
 
 // --- Settings ---
@@ -79,24 +79,27 @@ export async function getTournaments(userId: string): Promise<Tournament[]> {
 export async function getTournament(id: string): Promise<Tournament | null> {
     const { data, error } = await supabaseAdmin
         .from('tournaments')
-        .select(`
-            *,
-            users (
-                shop_name,
-                username
-            )
-        `)
+        .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
-    if (error) {
-        if (error.code === 'PGRST116') return null; // Not found
-        throw new Error(error.message);
+    if (error || !data) {
+        if (error) console.error("getTournament Error:", error);
+        return null;
     }
 
-    // @ts-ignore
-    const user = data.users;
-    const organizerName = user?.shop_name || user?.username || "Unknown Organizer";
+    // Fetch user separately for reliability (avoid join issues)
+    let organizerName = "Unknown Organizer";
+    if (data.user_id) {
+        const { data: user } = await supabaseAdmin
+            .from('users')
+            .select('shop_name, username')
+            .eq('id', data.user_id)
+            .maybeSingle();
+        if (user) {
+            organizerName = user.shop_name || user.username || organizerName;
+        }
+    }
 
     return {
         id: data.id,
@@ -108,6 +111,65 @@ export async function getTournament(id: string): Promise<Tournament | null> {
         challonge_url: data.challonge_url,
         arena_count: data.arena_count,
         user_id: data.user_id,
+        organizer_name: organizerName
+    };
+}
+
+export async function getTournamentByShortId(shopName: string, shortId: string): Promise<Tournament | null> {
+    const cleanShopName = decodeURIComponent(shopName).trim();
+
+    // 1. Find user by shop name OR username (Case-Insensitive)
+    const { data: users, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('id, shop_name, username')
+        .or(`shop_name.ilike."${cleanShopName}",username.ilike."${cleanShopName}"`);
+
+    if (userError || !users || users.length === 0) {
+        return null;
+    }
+
+    const user = users[0];
+
+    // 2. Fetch all tournaments for this user to match short ID
+    const { data: tournaments, error: tourError } = await supabaseAdmin
+        .from('tournaments')
+        .select('*')
+        .eq('user_id', user.id);
+
+    if (tourError || !tournaments) {
+        console.log(`[Repo] Tournaments error:`, tourError);
+        return null;
+    }
+
+    console.log(`[Repo] Found ${tournaments.length} tournaments for user`);
+
+    // 3. Find match (Full UUID or End of UUID)
+    // Supports 8-character short ID or full UUID
+    const cleanShortId = shortId.trim().toLowerCase();
+    const match = tournaments.find(t => {
+        const fullId = t.id.toLowerCase();
+        const strippedId = fullId.replace(/-/g, '');
+        return fullId === cleanShortId || 
+               fullId.endsWith(cleanShortId) || 
+               strippedId.endsWith(cleanShortId);
+    });
+
+    if (!match) {
+        return null;
+    }
+
+    const organizerName = user.shop_name || user.username || "Unknown Organizer";
+
+    return {
+        id: match.id,
+        name: match.name,
+        status: match.status,
+        created_at: new Date(match.created_at),
+        type: match.type || 'U10',
+        ban_list: match.ban_list || [],
+        challonge_url: match.challonge_url,
+        arena_count: match.arena_count,
+        user_id: match.user_id,
         organizer_name: organizerName
     };
 }
@@ -286,11 +348,62 @@ export async function getRegistrations(tournamentId: string): Promise<Registrati
         player_name: r.player_name,
         device_uuid: r.device_uuid,
         mode: r.mode,
-        main_deck: r.main_deck, // JSONB comes back as object/array automatically
-        reserve_decks: r.reserve_decks,
+        main_deck: r.main_deck,
         timestamp: new Date(r.timestamp),
-        round_id: r.id
+        round_id: r.id,
+        total_points: r.total_points
     }));
+}
+
+export async function upsertRegistration(data: Omit<Registration, 'id' | 'timestamp' | 'round_id'>) {
+    const timestamp = new Date();
+
+    // 1. Check for existing registration (same tournament + same name + same device)
+    // This allows updates to own registrations even if started
+    const { data: existing } = await supabaseAdmin
+        .from('registrations')
+        .select('id, device_uuid')
+        .eq('tournament_id', data.tournament_id)
+        .ilike('player_name', data.player_name.trim())
+        .maybeSingle();
+
+    if (existing) {
+        // UPDATE case
+        // Verify device matches to prevent hijacking
+        if (existing.device_uuid !== data.device_uuid) {
+            throw new Error(`Player "${data.player_name}" is already registered by another device.`);
+        }
+
+        const { error } = await supabaseAdmin
+            .from('registrations')
+            .update({
+                mode: data.mode,
+                main_deck: data.main_deck,
+                // We keep the original timestamp or update it? User said "update combo only"
+                // Usually good to keep original timestamp for seed/order.
+            })
+            .eq('id', existing.id);
+
+        if (error) throw new Error(`Update Failed: ${error.message}`);
+        return { id: existing.id, status: 'updated' };
+    }
+
+    // 2. INSERT Case
+    const id = uuidv4();
+    const { error } = await supabaseAdmin
+        .from('registrations')
+        .insert([{
+            id,
+            tournament_id: data.tournament_id,
+            player_name: data.player_name.trim(),
+            device_uuid: data.device_uuid,
+            mode: data.mode,
+            main_deck: data.main_deck,
+            timestamp: timestamp.toISOString()
+        }]);
+
+    if (error) throw new Error(`Insert Failed: ${error.message}`);
+    return { id, status: 'created' };
 }
 
 export async function createRegistration(data: Omit<Registration, 'id' | 'timestamp' | 'round_id'>) {
@@ -320,7 +433,6 @@ export async function createRegistration(data: Omit<Registration, 'id' | 'timest
             device_uuid: data.device_uuid,
             mode: data.mode,
             main_deck: data.main_deck, // Supabase client handles JSON stringifying usually, but depends. JS Object is fine for JSONB col.
-            reserve_decks: data.reserve_decks,
             timestamp: timestamp.toISOString()
         }]);
 
