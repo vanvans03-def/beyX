@@ -29,8 +29,11 @@ ENV SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
 ENV SUPABASE_JWT_SECRET=$SUPABASE_JWT_SECRET
 ENV NEXT_PUBLIC_BUILD_ID=$NEXT_PUBLIC_BUILD_ID
 
-# Build the app with standalone output
-RUN npm run build
+# Build the app with standalone output using Webpack (avoid Turbopack standalone issues)
+RUN npx next build --webpack
+# Prepare the standalone folder to be fully self-contained
+RUN cp -r public .next/standalone/public
+RUN cp -r .next/static .next/standalone/.next/static
 
 # ===== Stage 3: Runner =====
 FROM node:20-alpine AS runner
@@ -45,12 +48,9 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy only the necessary output
-# Automatically leverage output traces to reduce image size
+# Copy the self-contained standalone folder
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 
