@@ -16,8 +16,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: 'No file body' }, { status: 400 });
     }
 
-    // Use the token provided by USER in prompt
-    const BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_fVvMw9TDy563YstH_T2yOSfDwd4FOzSw5TSXDGCNsiGZwXf";
+    // Use the token from environment variables
+    const BLOB_READ_WRITE_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 
     try {
         const blob = await put(filename, request.body, {

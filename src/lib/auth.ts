@@ -1,7 +1,11 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const SECRET_KEY = new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key-change-me');
+const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
+if (!SUPABASE_JWT_SECRET) {
+    throw new Error('SUPABASE_JWT_SECRET is not defined in environment variables');
+}
+const SECRET_KEY = new TextEncoder().encode(SUPABASE_JWT_SECRET);
 const ALG = 'HS256';
 
 export type SessionPayload = {
