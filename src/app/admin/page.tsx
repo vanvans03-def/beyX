@@ -52,7 +52,7 @@ export default function AdminPage() {
     const [newTournamentName, setNewTournamentName] = useState("");
 
     // New Creation State
-    const [newType, setNewType] = useState<"U10" | "U10South" | "NoMoreMeta" | "Open" | "Standard">("U10");
+    const [newType, setNewType] = useState<"U10" | "U10South" | "NoMoreMeta" | "Open" | "Standard">("Standard");
     const [isCustomBanList, setIsCustomBanList] = useState(false);
 
     // Default ban list checks
@@ -684,11 +684,10 @@ export default function AdminPage() {
                                             onChange={(e) => setNewType(e.target.value as any)}
                                             className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border appearance-none"
                                         >
-                                            <option value="U10">{t('type.U10')}</option>
+                                            <option value="Standard">{t('type.Standard')}</option>
                                             <option value="U10South">3 Bey 10 Point (สายใต้)</option>
                                             <option value="NoMoreMeta">{t('type.NoMoreMeta')}</option>
-                                            {/* <option value="Open">{t('type.Open')}</option> REMOVED as per request */}
-                                            <option value="Standard">{t('type.Standard')}</option>
+                                            <option value="U10">{t('type.U10')}</option>
                                         </select>
                                     </div>
 

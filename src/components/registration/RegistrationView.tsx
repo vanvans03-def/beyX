@@ -319,6 +319,10 @@ export function RegistrationView({
                                     }}
                                     t={t}
                                     attachment={activeProfile.mainBeyAttachments[i]}
+                                    isModified={activeProfile.status === 'submitted' && (
+                                        activeProfile.mainBeys[i] !== activeProfile.originalMainBeys?.[i] ||
+                                        activeProfile.mainBeyAttachments[i] !== activeProfile.originalMainBeyAttachments?.[i]
+                                    )}
                                     onAttachmentPress={() => {
                                         if (tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || (!!challongeUrl && tournamentStatus !== 'STARTED')) return;
                                         setSelectingAttachment({
@@ -378,9 +382,28 @@ export function RegistrationView({
                             type="button"
                             onClick={() => setShowUpdateConfirm(true)}
                             disabled={loading}
-                            className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-green-600 px-6 py-4 text-sm font-bold text-white shadow-lg shadow-green-900/20 transition-all hover:bg-green-500 disabled:opacity-50 disabled:shadow-none"
+                            className={cn(
+                                "w-full relative flex items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold transition-all disabled:opacity-50 disabled:shadow-none",
+                                profiles[activeTab].mainBeys.some((bey, i) => 
+                                    profiles[activeTab].status === 'submitted' && (
+                                        bey !== profiles[activeTab].originalMainBeys?.[i] || 
+                                        profiles[activeTab].mainBeyAttachments[i] !== profiles[activeTab].originalMainBeyAttachments?.[i]
+                                    )
+                                ) 
+                                    ? "bg-primary text-black shadow-lg shadow-primary/25 hover:bg-primary/90" 
+                                    : "bg-green-600 text-white shadow-lg shadow-green-900/20 hover:bg-green-500"
+                            )}
                         >
-                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update Registration (อัปเดตคอมโบ)"}
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                                profiles[activeTab].mainBeys.some((bey, i) => 
+                                    profiles[activeTab].status === 'submitted' && (
+                                        bey !== profiles[activeTab].originalMainBeys?.[i] || 
+                                        profiles[activeTab].mainBeyAttachments[i] !== profiles[activeTab].originalMainBeyAttachments?.[i]
+                                    )
+                                ) 
+                                    ? "Save Changes (บันทึกการแก้ไข)" 
+                                    : "Update Registration (อัปเดตคอมโบ)"
+                            )}
                         </button>
                     ) : (
                         <div className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-4 text-sm font-bold text-muted-foreground cursor-not-allowed">

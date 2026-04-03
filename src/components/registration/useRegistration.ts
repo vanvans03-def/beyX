@@ -20,6 +20,8 @@ export type Profile = {
     status: 'draft' | 'submitted';
     errorMsg?: string;
     validationPoints?: number;
+    originalMainBeys?: string[];
+    originalMainBeyAttachments?: (string | null)[];
 };
 
 const allBeys = Object.entries(gameData.points).flatMap(([point, names]) =>
@@ -164,6 +166,8 @@ export function useRegistration({
                                 mode: r.mode,
                                 mainBeys: mainBeys,
                                 mainBeyAttachments: mainAttachments,
+                                originalMainBeys: [...mainBeys], // Store original values
+                                originalMainBeyAttachments: [...mainAttachments], // Store original values
                                 status: 'submitted'
                             };
                         });
@@ -437,7 +441,12 @@ export function useRegistration({
                 if (result.status === 'fulfilled') {
                     updates.push({
                         index: originalProfile.originalIndex,
-                        update: { status: 'submitted', errorMsg: "" }
+                        update: { 
+                            status: 'submitted', 
+                            errorMsg: "",
+                            originalMainBeys: [...originalProfile.mainBeys], // Refresh original values on success
+                            originalMainBeyAttachments: [...originalProfile.mainBeyAttachments] // Refresh original values on success
+                        }
                     });
                     submissionCount++;
                 } else {

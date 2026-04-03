@@ -26,6 +26,7 @@ type BladeSlotProps = {
     t: any;
     attachment?: string | null;
     onAttachmentPress?: () => void;
+    isModified?: boolean;
 };
 
 export const BladeSlot = ({
@@ -37,7 +38,8 @@ export const BladeSlot = ({
     banList,
     t,
     attachment,
-    onAttachmentPress
+    onAttachmentPress,
+    isModified
 }: BladeSlotProps) => {
     // Get point value based on mode
     let pt: number | undefined = undefined;
@@ -72,9 +74,15 @@ export const BladeSlot = ({
                     "relative flex items-center gap-3 p-3 rounded-xl border border-input transition-all w-full text-left group",
                     name ? "bg-card/80" : "bg-secondary/30 dashed-border",
                     !name && "border-dashed border-2",
-                    isBanned && "border-destructive bg-destructive/10"
+                    isBanned && "border-destructive bg-destructive/10",
+                    isModified && "border-primary/50 bg-primary/5 shadow-[0_0_15px_rgba(var(--primary-rgb),0.1)]"
                 )}
             >
+                {isModified && (
+                    <div className="absolute -top-2 -right-2 z-10 px-2 py-0.5 rounded-full bg-primary text-black text-[10px] font-bold shadow-lg animate-bounce">
+                        MODIFIED
+                    </div>
+                )}
                 <div className="relative w-12 h-12 shrink-0 bg-black/20 rounded-lg overflow-hidden flex items-center justify-center">
                     {name && imgPath ? (
                         <ImageWithLoading src={imgPath} alt={name} fill className="object-cover" />
