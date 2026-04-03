@@ -59,6 +59,7 @@ export function useRegistration({
     const [deviceUUID, setDeviceUUID] = useState("");
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [editToken, setEditToken] = useState<string | null>(null);
 
     // View Players Modal State
     const [showPlayerList, setShowPlayerList] = useState(false);
@@ -112,6 +113,11 @@ export function useRegistration({
 
     // Device UUID and Load Existing
     useEffect(() => {
+        // Check for editToken (Transfer Session)
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('editToken');
+        if (token) setEditToken(token);
+
         let uuid = localStorage.getItem("device_uuid");
         if (!uuid) {
             if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -126,8 +132,10 @@ export function useRegistration({
         }
         setDeviceUUID(uuid);
 
+        const fetchUUID = token || uuid;
+
         if (tournamentId) {
-            fetch(`/api/register?tournamentId=${tournamentId}&deviceUUID=${uuid}`)
+            fetch(`/api/register?tournamentId=${tournamentId}&deviceUUID=${fetchUUID}`)
                 .then(res => {
                     if (!res.ok) throw new Error("Failed to load");
                     return res.text();
@@ -412,7 +420,8 @@ export function useRegistration({
                         return (bey && p.mainBeyAttachments[idx]) ? `${bey}|${p.mainBeyAttachments[idx]}` : bey;
                     }),
                     totalPoints: validation.points || 0,
-                    tournamentId
+                    tournamentId,
+                    transferFrom: editToken || undefined
                 };
 
                 const res = await fetch("/api/register", {
@@ -472,6 +481,17 @@ export function useRegistration({
 
             if (submissionCount > 0 && submissionCount === activeProfiles.length) {
                 setSuccess(true);
+                if (editToken) {
+                    setEditToken(null);
+                    // Clean URL
+                    try {
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('editToken');
+                        window.history.replaceState({}, '', url.pathname + url.search);
+                    } catch (e) {
+                        console.error("Failed to clean URL", e);
+                    }
+                }
             }
 
         } catch (err: any) {

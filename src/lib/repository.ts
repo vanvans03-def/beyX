@@ -355,10 +355,10 @@ export async function getRegistrations(tournamentId: string): Promise<Registrati
     }));
 }
 
-export async function upsertRegistration(data: Omit<Registration, 'id' | 'timestamp' | 'round_id'>) {
+export async function upsertRegistration(data: Omit<Registration, 'id' | 'timestamp' | 'round_id'> & { transferFrom?: string }) {
     const timestamp = new Date();
 
-    // 1. Check for existing registration (same tournament + same name + same device)
+    // 1. Check for existing registration (same tournament + same name)
     // This allows updates to own registrations even if started
     const { data: existing } = await supabaseAdmin
         .from('registrations')
@@ -370,8 +370,20 @@ export async function upsertRegistration(data: Omit<Registration, 'id' | 'timest
     if (existing) {
         // UPDATE case
         // Verify device matches to prevent hijacking
-        if (existing.device_uuid !== data.device_uuid) {
+        const isAuthorized = existing.device_uuid === data.device_uuid || 
+                           (data.transferFrom && existing.device_uuid === data.transferFrom);
+
+        if (!isAuthorized) {
             throw new Error(`Player "${data.player_name}" is already registered by another device.`);
+        }
+
+        // If transferring, update ALL registrations for this device in this tournament to the NEW device_uuid
+        if (data.transferFrom && existing.device_uuid === data.transferFrom) {
+            await supabaseAdmin
+                .from('registrations')
+                .update({ device_uuid: data.device_uuid })
+                .eq('tournament_id', data.tournament_id)
+                .eq('device_uuid', data.transferFrom);
         }
 
         const { error } = await supabaseAdmin
@@ -379,8 +391,7 @@ export async function upsertRegistration(data: Omit<Registration, 'id' | 'timest
             .update({
                 mode: data.mode,
                 main_deck: data.main_deck,
-                // We keep the original timestamp or update it? User said "update combo only"
-                // Usually good to keep original timestamp for seed/order.
+                device_uuid: data.device_uuid // Ensure current record also gets the new UUID
             })
             .eq('id', existing.id);
 

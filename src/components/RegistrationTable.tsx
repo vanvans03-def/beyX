@@ -25,6 +25,7 @@ type Props = {
     loading: boolean;
     searchQuery: string;
     onDelete: (row: Registration) => void;
+    onEditSession?: (row: Registration) => void;
     tournamentType?: string;
     sameDeviceConflicts?: number[];
     swapSelection?: number[];
@@ -89,7 +90,7 @@ const validateRow = (row: Registration, tournamentType?: string) => {
 // Wrap in memo to prevent re-renders when parent state changes (like modals)
 import { useTranslation } from "@/hooks/useTranslation";
 
-const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, tournamentType, sameDeviceConflicts = [], swapSelection = [], onSwapSelect }: Props) {
+const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, onEditSession, tournamentType, sameDeviceConflicts = [], swapSelection = [], onSwapSelect }: Props) {
     const { t } = useTranslation();
 
     // Memoize the processed data to avoid re-parsing JSON and re-validating on every render
@@ -101,81 +102,59 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
             deviceCounts[r.DeviceUUID] = (deviceCounts[r.DeviceUUID] || 0) + 1;
         });
 
-        // Filter first
-        const filtered = data.filter(r =>
-            r.PlayerName.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-
-        return filtered.map((row, filteredIdx) => {
-            const validation = validateRow(row, tournamentType);
-            const isMulti = (deviceCounts[row.DeviceUUID] || 0) > 1;
-
-            // Generate color for multi-device
-            let deviceColor = undefined;
-            if (isMulti) {
-                let hash = 0;
-                for (let i = 0; i < row.DeviceUUID.length; i++) hash = row.DeviceUUID.charCodeAt(i) + ((hash << 5) - hash);
-                const hue = Math.abs(hash % 360);
-                deviceColor = `hsl(${hue}, 70%, 60%)`;
-            }
-
-            // Find original index in data (before search filter) for conflict matching
-            const originalIdx = data.indexOf(row);
-            const isConflict = sameDeviceConflicts.includes(originalIdx);
-            const isSwapSelected = swapSelection.includes(originalIdx);
-
-            return {
-                ...row,
-                validation,
-                isMulti,
-                deviceColor,
-                isConflict,
-                isSwapSelected,
-                originalIdx
-            };
+        // Pre-calculate some color hashes for devices
+        const deviceColors: Record<string, string> = {};
+        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+        Object.keys(deviceCounts).forEach((uuid, i) => {
+            deviceColors[uuid] = colors[i % colors.length];
         });
+
+        return data
+            .map((r, i) => ({
+                ...r,
+                originalIdx: i,
+                validation: validateRow(r, tournamentType),
+                isMulti: deviceCounts[r.DeviceUUID] > 1,
+                deviceColor: deviceColors[r.DeviceUUID],
+                isConflict: sameDeviceConflicts.includes(i),
+                isSwapping: swapSelection.includes(i)
+            }))
+            .filter(r => {
+                if (!searchQuery) return true;
+                const query = searchQuery.toLowerCase();
+                return (
+                    r.PlayerName.toLowerCase().includes(query) ||
+                    r.Main_Bey1.toLowerCase().includes(query) ||
+                    r.Main_Bey2.toLowerCase().includes(query) ||
+                    r.Main_Bey3.toLowerCase().includes(query)
+                );
+            });
     }, [data, searchQuery, tournamentType, sameDeviceConflicts, swapSelection]);
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[400px] glass-card rounded-xl">
-                <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-                <h3 className="text-xl font-bold italic tracking-tighter text-white animate-pulse">
-                    <span className="text-primary">{t('table.loading')}</span>
-                </h3>
-            </div>
-        );
-    }
-
     return (
-        <div
-            className="glass-card rounded-xl overflow-hidden overflow-x-auto"
-            style={{ contentVisibility: 'auto', containIntrinsicSize: '0 500px' }} // Rendering Optimization
-        >
-            <table className="w-full text-sm text-left">
-                <thead className="bg-secondary/50 text-muted-foreground uppercase text-xs font-bold tracking-wider">
+        <div className="overflow-x-auto rounded-lg border border-white/10 glass-card">
+            <table className="w-full text-sm text-left border-collapse">
+                <thead className="text-xs uppercase bg-secondary/50 text-muted-foreground border-b border-white/10">
                     <tr>
-                        <th className="p-4 whitespace-nowrap w-8">#</th>
-                        <th className="p-4 whitespace-nowrap">{t('table.header.time')}</th>
-                        <th className="p-4 whitespace-nowrap">{t('table.header.player')}</th>
-                        <th className="p-4 whitespace-nowrap">{t('table.header.mode')}</th>
-                        <th className="p-4 whitespace-nowrap">{t('table.header.deck')}</th>
-                        <th className="p-4 whitespace-nowrap">{t('table.header.status')}</th>
+                        <th className="p-4 font-bold">{t('table.header.no')}</th>
+                        <th className="p-4 font-bold">{t('table.header.time')}</th>
+                        <th className="p-4 font-bold">{t('table.header.player')}</th>
+                        <th className="p-4 font-bold">{t('table.header.mode')}</th>
+                        <th className="p-4 font-bold">{t('table.header.deck')}</th>
+                        <th className="p-4 font-bold text-right">{t('table.header.status')}</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
-                    {processedData.map((row, i) => (
+                <tbody className="divide-y divide-white/5 bg-black/40">
+                    {processedData.map((row) => (
                         <tr
-                            key={`${row.RoundID}-${i}`}
-                            className={`hover:bg-accent/5 transition-colors group ${row.isConflict ? 'bg-amber-500/10 border-l-2 border-l-amber-500' : ''} ${row.isSwapSelected ? 'bg-blue-500/15 ring-1 ring-blue-500/50' : ''} ${onSwapSelect ? 'cursor-pointer select-none' : ''}`}
-                            onClick={() => {
-                                if (onSwapSelect) onSwapSelect(row.originalIdx);
-                            }}
+                            key={row.RoundID}
+                            onClick={() => onSwapSelect?.(row.originalIdx)}
+                            className={`hover:bg-white/5 transition-all group ${row.isConflict ? 'bg-amber-500/5' : ''} ${row.isSwapping ? 'bg-blue-500/20 ring-1 ring-blue-500/50' : ''} ${onSwapSelect ? 'cursor-pointer' : ''}`}
                         >
-                            <td className="p-4 whitespace-nowrap text-muted-foreground text-xs">
-                                <div className="flex items-center gap-1">
-                                    {row.isSwapSelected ? (
-                                        <ArrowLeftRight className="h-3.5 w-3.5 text-blue-400" />
+                            <td className="p-4 whitespace-nowrap">
+                                <div className={`h-8 w-8 rounded-lg flex items-center justify-center font-bold text-xs border ${row.isSwapping ? 'bg-blue-500 border-blue-400 text-white animate-pulse' : 'bg-secondary border-white/5 text-muted-foreground'}`}>
+                                    {row.isSwapping ? (
+                                        <ArrowLeftRight className="h-3.5 w-3.5" />
                                     ) : (
                                         <span>{row.originalIdx + 1}</span>
                                     )}
@@ -246,13 +225,30 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                                         row.validation.msg}
                                         </span>
                                     </div>
-                                    <button
-                                        onClick={() => onDelete(row)}
-                                        className="p-2 text-muted-foreground hover:text-red-500 transition-all"
-                                        title={t('gen.delete')}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                        {onEditSession && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onEditSession(row);
+                                                }}
+                                                className="p-2 text-muted-foreground hover:text-blue-500 transition-all"
+                                                title="Edit Session (QR)"
+                                            >
+                                                <Share2 className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDelete(row);
+                                            }}
+                                            className="p-2 text-muted-foreground hover:text-red-500 transition-all"
+                                            title={t('gen.delete')}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
                                 </div>
                             </td>
                         </tr>
