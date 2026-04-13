@@ -23,28 +23,32 @@ export async function GET(req: Request) {
             }
 
             const mapped = {
-                TournamentID: data.id,
-                Name: data.name,
-                Status: data.status,
-                CreatedAt: data.created_at.toISOString(),
-                Type: data.type,
-                BanList: data.ban_list,
-                ChallongeUrl: data.challonge_url,
-                ArenaCount: data.arena_count || 0
+                id: data.id,
+                name: data.name,
+                status: data.status,
+                created_at: data.created_at.toISOString(),
+                type: data.type,
+                ban_list: data.ban_list,
+                challonge_url: data.challonge_url,
+                arena_count: data.arena_count || 0,
+                provider: data.provider || 'CHALLONGE',
+                bracket_type: data.bracket_type || 'SINGLE'
             };
             return NextResponse.json({ success: true, data: mapped });
         } else {
             // Fetch all for current user
             const data = await getTournaments(userId);
             const mapped = data.map(d => ({
-                TournamentID: d.id,
-                Name: d.name,
-                Status: d.status,
-                CreatedAt: d.created_at.toISOString(),
-                Type: d.type,
-                BanList: d.ban_list,
-                ChallongeUrl: d.challonge_url,
-                ArenaCount: d.arena_count || 0
+                id: d.id,
+                name: d.name,
+                status: d.status,
+                created_at: d.created_at.toISOString(),
+                type: d.type,
+                ban_list: d.ban_list,
+                challonge_url: d.challonge_url,
+                arena_count: d.arena_count || 0,
+                provider: d.provider || 'CHALLONGE',
+                bracket_type: d.bracket_type || 'SINGLE'
             }));
             return NextResponse.json({ success: true, data: mapped });
         }
@@ -62,16 +66,25 @@ export async function POST(req: Request) {
         if (!body.name) throw new Error("Name is required");
 
         console.log('[DEBUG] Creating tournament with type:', body.type);
-        const newT = await createTournament(body.name, userId, body.type, body.ban_list);
+        const newT = await createTournament(
+            body.name, 
+            userId, 
+            body.type, 
+            body.ban_list,
+            body.provider || 'CHALLONGE',
+            body.bracket_type || 'SINGLE'
+        );
         // Map back to PascalCase
         const mapped = {
-            TournamentID: newT.id,
-            Name: newT.name,
-            Status: newT.status,
-            CreatedAt: newT.created_at.toISOString(),
-            Type: newT.type,
-            BanList: newT.ban_list,
-            ChallongeUrl: newT.challonge_url
+            id: newT.id,
+            name: newT.name,
+            status: newT.status,
+            created_at: newT.created_at.toISOString(),
+            type: newT.type,
+            ban_list: newT.ban_list,
+            challonge_url: newT.challonge_url,
+            provider: newT.provider,
+            bracket_type: newT.bracket_type
         };
         return NextResponse.json({ success: true, data: mapped });
     } catch (e: any) {
@@ -86,7 +99,18 @@ export async function PATCH(req: Request) {
         if (!userId) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
 
         const body = await req.json();
-        if (!body.tournamentId || !body.status) throw new Error("ID and Status required");
+        if (!body.tournamentId) throw new Error("Tournament ID required");
+
+        // Handle bracket_type update standalone
+        if (body.bracket_type && !body.status) {
+            const { createClient } = await import('@supabase/supabase-js');
+            const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+            const { error } = await sb.from('tournaments').update({ bracket_type: body.bracket_type }).eq('id', body.tournamentId);
+            if (error) throw new Error(error.message);
+            return NextResponse.json({ success: true, data: { bracket_type: body.bracket_type } });
+        }
+
+        if (!body.status) throw new Error("Status required");
 
         // Verify Ownership
         const tournament = await getTournament(body.tournamentId);

@@ -13,6 +13,9 @@ export type Tournament = {
     user_id?: string; // Added for ownership check
     organizer_name?: string;
     arena_count?: number;
+    provider?: 'CHALLONGE' | 'INTERNAL';
+    bracket_type?: 'SINGLE' | 'DOUBLE';
+    settings?: any;
 };
 
 export type Registration = {
@@ -68,26 +71,46 @@ export async function getTournaments(userId: string): Promise<Tournament[]> {
         name: r.name,
         status: r.status,
         created_at: new Date(r.created_at),
-        type: r.type || 'U10', // Default for legacy data
+        type: r.type || 'U10',
         ban_list: r.ban_list || [],
         challonge_url: r.challonge_url,
         arena_count: r.arena_count,
-        user_id: r.user_id
+        user_id: r.user_id,
+        provider: r.provider || 'CHALLONGE',
+        bracket_type: r.bracket_type || 'SINGLE',
+        settings: r.settings || {}
     }));
 }
 
 export async function getTournament(id: string): Promise<Tournament | null> {
-    const { data, error } = await supabaseAdmin
-        .from('tournaments')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+    // Try UUID first
+    let query = supabaseAdmin.from('tournaments').select('*');
+    
+    // Simple check if it's a UUID
+    const looksLikeUUID = id.includes('-') || (id.length === 36 || id.length === 32);
+    
+    if (looksLikeUUID) {
+        query = query.eq('id', id);
+    } else {
+        query = query.ilike('name', id);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error || !data) {
         if (error) console.error("getTournament Error:", error);
+        if (looksLikeUUID) {
+            const { data: nameData } = await supabaseAdmin.from('tournaments').select('*').ilike('name', id).maybeSingle();
+            if (nameData) return await enrichTournament(nameData);
+        }
         return null;
     }
 
+    return await enrichTournament(data);
+}
+
+// Helper for enrichment
+async function enrichTournament(data: any): Promise<Tournament | null> {
     // Fetch user separately for reliability (avoid join issues)
     let organizerName = "Unknown Organizer";
     if (data.user_id) {
@@ -111,7 +134,10 @@ export async function getTournament(id: string): Promise<Tournament | null> {
         challonge_url: data.challonge_url,
         arena_count: data.arena_count,
         user_id: data.user_id,
-        organizer_name: organizerName
+        organizer_name: organizerName,
+        provider: data.provider || 'CHALLONGE',
+        bracket_type: data.bracket_type || 'SINGLE',
+        settings: data.settings || {}
     };
 }
 
@@ -170,11 +196,21 @@ export async function getTournamentByShortId(shopName: string, shortId: string):
         challonge_url: match.challonge_url,
         arena_count: match.arena_count,
         user_id: match.user_id,
-        organizer_name: organizerName
+        organizer_name: organizerName,
+        provider: match.provider || 'CHALLONGE',
+        bracket_type: match.bracket_type || 'SINGLE',
+        settings: match.settings || {}
     };
 }
 
-export async function createTournament(name: string, userId: string, type: 'U10' | 'U10South' | 'NoMoreMeta' | 'Open' = 'U10', ban_list: string[] = []): Promise<Tournament> {
+export async function createTournament(
+    name: string, 
+    userId: string, 
+    type: 'U10' | 'U10South' | 'NoMoreMeta' | 'Open' = 'U10', 
+    ban_list: string[] = [],
+    provider: 'CHALLONGE' | 'INTERNAL' = 'CHALLONGE',
+    bracket_type: 'SINGLE' | 'DOUBLE' = 'SINGLE'
+): Promise<Tournament> {
     if (!userId) throw new Error("Unauthorized: Cannot create tournament without userId");
 
     const id = uuidv4();
@@ -191,7 +227,9 @@ export async function createTournament(name: string, userId: string, type: 'U10'
             created_at,
             type,
             ban_list,
-            user_id: userId
+            user_id: userId,
+            provider,
+            bracket_type
         });
 
 
@@ -206,35 +244,45 @@ export async function createTournament(name: string, userId: string, type: 'U10'
     //     console.error("Sheets Error (createTournament):", e);
     // }
 
-    return { id, name, status, created_at, type, ban_list };
+    return { id, name, status, created_at, type, ban_list, provider, bracket_type };
 }
 
 export async function updateTournamentStatus(id: string, status: 'OPEN' | 'CLOSED') {
-    // 1. Supabase
+    // Resolve name to ID if needed
+    const tour = await getTournament(id);
+    const actualId = tour?.id || id;
+
     const { error } = await supabaseAdmin
         .from('tournaments')
         .update({ status })
-        .eq('id', id);
+        .eq('id', actualId);
 
     if (error) {
         throw new Error(error.message);
     }
-
-    // 2. Sheets - REMOVED per user request
-    // try {
-    //     await sheets.updateTournamentStatus(id, status);
-    // } catch (e) {
-    //     console.error("Sheets Error (updateTournamentStatus):", e);
-    // }
 }
 
 export async function resetTournamentBracket(id: string) {
-    const { error } = await supabaseAdmin
+    // Resolve name to ID if needed
+    const tour = await getTournament(id);
+    const actualId = tour?.id || id;
+
+    const { error: tError } = await supabaseAdmin
         .from('tournaments')
         .update({ status: 'OPEN', challonge_url: null })
-        .eq('id', id);
+        .eq('id', actualId);
 
-    if (error) throw new Error(error.message);
+    if (tError) throw new Error(tError.message);
+
+    // Delete internal matches to allow restart
+    const { error: mError } = await supabaseAdmin
+        .from('internal_matches')
+        .delete()
+        .eq('tournament_id', actualId);
+
+    if (mError) {
+        console.warn("Could not delete internal matches during reset:", mError);
+    }
 }
 
 export async function getMatchesFromDB(tournamentIdentifier: string) {
@@ -339,6 +387,7 @@ export async function getRegistrations(tournamentId: string): Promise<Registrati
         .order('timestamp', { ascending: false });
 
     if (error) {
+        console.error(`[Repo] getRegistrations error for ${tournamentId}:`, error);
         throw new Error(error.message);
     }
 
@@ -348,10 +397,10 @@ export async function getRegistrations(tournamentId: string): Promise<Registrati
         player_name: r.player_name,
         device_uuid: r.device_uuid,
         mode: r.mode,
-        main_deck: r.main_deck,
-        timestamp: new Date(r.timestamp),
-        round_id: r.id,
-        total_points: r.total_points
+        main_deck: r.main_deck || [],
+        timestamp: r.timestamp ? new Date(r.timestamp) : new Date(),
+        round_id: r.round_id || r.id,
+        total_points: r.total_points || 0
     }));
 }
 

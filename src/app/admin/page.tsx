@@ -14,12 +14,14 @@ import { MultiVisualSelector } from "@/components/ui/MultiVisualSelector";
 import { locales } from "@/data/locales";
 
 type Tournament = {
-    TournamentID: string;
-    Name: string;
-    Status: string;
-    CreatedAt: string;
-    Type?: string;
-    BanList?: string[];
+    id: string;
+    name: string;
+    status: string;
+    created_at: string;
+    type?: string;
+    ban_list?: string[];
+    provider?: 'CHALLONGE' | 'INTERNAL';
+    bracket_type?: 'SINGLE' | 'DOUBLE';
 };
 
 export default function AdminPage() {
@@ -54,6 +56,8 @@ export default function AdminPage() {
     // New Creation State
     const [newType, setNewType] = useState<"U10" | "U10South" | "NoMoreMeta" | "Open" | "Standard">("Standard");
     const [isCustomBanList, setIsCustomBanList] = useState(false);
+    const [newProvider, setNewProvider] = useState<'CHALLONGE' | 'INTERNAL'>("CHALLONGE");
+    const [newBracketType, setNewBracketType] = useState<'SINGLE' | 'DOUBLE'>("SINGLE");
 
     // Default ban list checks
     const defaultBanList = gameData.banList;
@@ -238,7 +242,9 @@ export default function AdminPage() {
                 body: JSON.stringify({
                     name: newTournamentName,
                     type: newType,
-                    ban_list: banListToSend
+                    ban_list: banListToSend,
+                    provider: newProvider,
+                    bracket_type: newBracketType
                 })
             });
             const json = await res.json();
@@ -430,7 +436,7 @@ export default function AdminPage() {
         setModalConfig({
             isOpen: true,
             title: "End Tournament?",
-            desc: `Are you sure you want to end "${t.Name}"? This will disable new registrations immediately.`,
+            desc: `Are you sure you want to end "${t.name}"? This will disable new registrations immediately.`,
             type: "confirm",
             variant: "destructive",
             confirmText: "End Tournament",
@@ -440,7 +446,7 @@ export default function AdminPage() {
                     const res = await fetch("/api/admin/tournaments", {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ tournamentId: t.TournamentID, status: "CLOSED" })
+                        body: JSON.stringify({ tournamentId: t.id, status: "CLOSED" })
                     });
                     if (res.ok) fetchTournaments();
                 } catch (e) {
@@ -454,7 +460,7 @@ export default function AdminPage() {
         setModalConfig({
             isOpen: true,
             title: "Re-open Tournament?",
-            desc: `Are you sure you want to re-open "${t.Name}"? This will move it back to Active and allow registrations.`,
+            desc: `Are you sure you want to re-open "${t.name}"? This will move it back to Active and allow registrations.`,
             type: "confirm",
             confirmText: "Re-open",
             onConfirm: async () => {
@@ -463,7 +469,7 @@ export default function AdminPage() {
                     const res = await fetch("/api/admin/tournaments", {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ tournamentId: t.TournamentID, status: "OPEN" })
+                        body: JSON.stringify({ tournamentId: t.id, status: "OPEN" })
                     });
                     if (res.ok) fetchTournaments();
                 } catch (e) {
@@ -480,14 +486,14 @@ export default function AdminPage() {
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
     // Helper to check if started (includes legacy tournaments with URL)
-    const isStarted = (t: Tournament) => t.Status === 'STARTED' || (t.Status === 'OPEN' && !!(t as any).ChallongeUrl);
+    const isStarted = (t: Tournament) => t.status === 'STARTED' || (t.status === 'OPEN' && !!(t as any).ChallongeUrl);
 
     const filteredTournaments = tournaments.filter(t =>
-        t.Name.toLowerCase().includes(searchQuery.toLowerCase())
+        t.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const activeTournamentsAll = filteredTournaments.filter(t => (t.Status === 'OPEN' || isStarted(t)) && t.Status !== 'CLOSED' && t.Status !== 'COMPLETED');
-    const pastTournamentsAll = filteredTournaments.filter(t => t.Status === 'CLOSED' || t.Status === 'COMPLETED');
+    const activeTournamentsAll = filteredTournaments.filter(t => (t.status === 'OPEN' || isStarted(t)) && t.status !== 'CLOSED' && t.status !== 'COMPLETED');
+    const pastTournamentsAll = filteredTournaments.filter(t => t.status === 'CLOSED' || t.status === 'COMPLETED');
 
     // Active Pagination
     const totalActivePages = Math.ceil(activeTournamentsAll.length / itemsPerPage);
@@ -678,17 +684,46 @@ export default function AdminPage() {
                                             )}
                                         />
 
-                                        {/* Type Selection */}
-                                        <select
-                                            value={newType}
-                                            onChange={(e) => setNewType(e.target.value as any)}
-                                            className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border appearance-none"
-                                        >
-                                            <option value="Standard">{t('type.Standard')}</option>
-                                            <option value="U10South">3 Bey 10 Point (สายใต้)</option>
-                                            <option value="NoMoreMeta">{t('type.NoMoreMeta')}</option>
-                                            <option value="U10">{t('type.U10')}</option>
-                                        </select>
+                                        {/* Rules & Points */}
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Rules & Points</label>
+                                            <select
+                                                value={newType}
+                                                onChange={(e) => setNewType(e.target.value as any)}
+                                                className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border appearance-none"
+                                            >
+                                                <option value="Standard">{t('type.Standard')}</option>
+                                                <option value="U10South">3 Bey 10 Point (สายใต้)</option>
+                                                <option value="NoMoreMeta">{t('type.NoMoreMeta')}</option>
+                                                <option value="U10">{t('type.U10')}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Provider & Bracket Type */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Tournament System</label>
+                                            <select
+                                                value={newProvider}
+                                                onChange={(e) => setNewProvider(e.target.value as any)}
+                                                className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border appearance-none"
+                                            >
+                                                <option value="CHALLONGE">Challonge (External)</option>
+                                                <option value="INTERNAL">BeyX Bracket (Internal)</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Elimination Format</label>
+                                            <select
+                                                value={newBracketType}
+                                                onChange={(e) => setNewBracketType(e.target.value as any)}
+                                                className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border appearance-none"
+                                            >
+                                                <option value="SINGLE">Single Elimination (แพ้ครั้งเดียวออก)</option>
+                                                <option value="DOUBLE">Double Elimination (มีสายล่าง/แก้ตัว)</option>
+                                            </select>
+                                        </div>
                                     </div>
 
                                     {/* Custom Ban List Toggle */}
@@ -765,27 +800,27 @@ export default function AdminPage() {
                                             </h2>
                                             <div className="grid gap-4">
                                                 {activeTournaments.map((t) => (
-                                                    <div key={t.TournamentID} className={`glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors ${isStarted(t) ? 'bg-amber-500/10 border-amber-500/30' : 'bg-gradient-to-r from-transparent to-primary/5'}`}>
+                                                    <div key={t.id} className={`glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors ${isStarted(t) ? 'bg-amber-500/10 border-amber-500/30' : 'bg-gradient-to-r from-transparent to-primary/5'}`}>
                                                         <div>
-                                                            <h3 className="font-bold text-lg text-white">{t.Name}</h3>
+                                                            <h3 className="font-bold text-lg text-white">{t.name}</h3>
                                                             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
                                                                 <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${isStarted(t) ? 'bg-amber-500/20 text-amber-500' : 'bg-green-500/20 text-green-500'}`}>
-                                                                    {t.Status === 'OPEN' && isStarted(t) ? 'STARTED' : t.Status}
+                                                                    {t.status === 'OPEN' && isStarted(t) ? 'STARTED' : t.status}
                                                                 </span>
-                                                                {t.Type && (
+                                                                {t.type && (
                                                                     <span className="px-1.5 py-0.5 rounded font-bold uppercase border border-white/10 whitespace-normal break-words max-w-full">
                                                                         {/* @ts-ignore */}
-                                                                        {(locales[lang] as any)[`type.${t.Type}`] || t.Type}
+                                                                        {(locales[lang] as any)[`type.${t.type}`] || t.type}
                                                                     </span>
                                                                 )}
-                                                                <span className="shrink-0">• Created {new Date(t.CreatedAt).toLocaleDateString()}</span>
+                                                                <span className="shrink-0">• Created {new Date(t.created_at).toLocaleDateString()}</span>
                                                             </div>
                                                         </div>
 
                                                         <div className="flex items-center gap-3 w-full md:w-auto justify-end">
                                                             <div className="flex items-center gap-1">
                                                                 <Link
-                                                                    href={`/register/${t.TournamentID}`}
+                                                                    href={`/register/${t.id}`}
                                                                     target="_blank"
                                                                     className="p-2 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground transition-colors"
                                                                     title="Open Registration Link"
@@ -802,7 +837,7 @@ export default function AdminPage() {
                                                                 </button>
                                                             </div>
                                                             <Link
-                                                                href={`/admin/tournament/${t.TournamentID}`}
+                                                                href={`/admin/tournament/${t.id}`}
                                                                 className="bg-secondary hover:bg-primary hover:text-black text-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
                                                             >
                                                                 Manage <ArrowRight className="h-4 w-4" />
@@ -881,19 +916,19 @@ export default function AdminPage() {
                                                     <div className="animate-in slide-in-from-top-2 duration-300">
                                                         <div className="grid gap-4">
                                                             {pastTournaments.map((t) => (
-                                                                <div key={t.TournamentID} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 opacity-80 hover:opacity-100 transition-opacity grayscale hover:grayscale-0">
+                                                                <div key={t.id} className="glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 opacity-80 hover:opacity-100 transition-opacity grayscale hover:grayscale-0">
                                                                     <div>
-                                                                        <h3 className="font-bold text-lg">{t.Name}</h3>
+                                                                        <h3 className="font-bold text-lg">{t.name}</h3>
                                                                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                                                                             <span className="px-1.5 py-0.5 rounded font-bold uppercase bg-secondary text-muted-foreground">
-                                                                                {t.Status}
+                                                                                {t.status}
                                                                             </span>
-                                                                            <span>• Ended {new Date(t.CreatedAt).toLocaleDateString()}</span>
+                                                                            <span>• Ended {new Date(t.created_at).toLocaleDateString()}</span>
                                                                         </div>
                                                                     </div>
 
                                                                     <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                                                                        {t.Status === 'CLOSED' && (
+                                                                        {t.status === 'CLOSED' && (
                                                                             <button
                                                                                 onClick={() => handleReopenTournament(t)}
                                                                                 className="bg-secondary/50 hover:bg-green-500/20 hover:text-green-500 text-muted-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
@@ -904,7 +939,7 @@ export default function AdminPage() {
                                                                             </button>
                                                                         )}
                                                                         <Link
-                                                                            href={`/admin/tournament/${t.TournamentID}`}
+                                                                            href={`/admin/tournament/${t.id}`}
                                                                             className="bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
                                                                         >
                                                                             View History <ArrowRight className="h-4 w-4" />

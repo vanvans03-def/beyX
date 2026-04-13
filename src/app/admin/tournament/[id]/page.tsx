@@ -22,24 +22,24 @@ import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
 
 type Registration = {
-    TournamentID: string;
-    RoundID: string;
-    Timestamp: string;
-    DeviceUUID: string;
-    PlayerName: string;
-    Mode: string;
-    Main_Bey1: string;
-    Main_Bey2: string;
-    Main_Bey3: string;
-    TotalPoints: string;
+    tournament_id: string;
+    id: string;
+    timestamp: string;
+    device_uuid: string;
+    player_name: string;
+    mode: string;
+    main_bey1: string;
+    main_bey2: string;
+    main_bey3: string;
+    total_points: string;
 };
 
 type Match = {
-    id: number;
+    id: number | string;
     state: string; // "open", "pending", "complete"
-    player1_id: number;
-    player2_id: number;
-    winner_id: number | null;
+    player1_id: number | string | null;
+    player2_id: number | string | null;
+    winner_id: number | string | null;
     scores_csv: string;
     round: number;
     identifier: string; // "A", "B", etc.
@@ -109,12 +109,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
 
     // Config for Scoring
-    const [scoreInputs, setScoreInputs] = useState<Record<number, { p1: string, p2: string }>>({});
-    const [updatingMatchIds, setUpdatingMatchIds] = useState<number[]>([]); // Track updating matches for smooth UI
+    const [scoreInputs, setScoreInputs] = useState<Record<string | number, { p1: string, p2: string }>>({});
+    const [updatingMatchIds, setUpdatingMatchIds] = useState<(number | string)[]>([]); // Track updating matches for smooth UI
+    const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
     // Arena State
     const [arenaCount, setArenaCount] = useState(0);
-    const [selectedArenaMatchId, setSelectedArenaMatchId] = useState<number | null>(null);
+    const [selectedArenaMatchId, setSelectedArenaMatchId] = useState<number | string | null>(null);
 
     // Bulk Register State
     const [bulkPlayers, setBulkPlayers] = useState("");
@@ -181,7 +182,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         e.stopPropagation();
 
         // If clicking the same button, close it
-        if (hoveredCombo?.data.PlayerName === reg.PlayerName) {
+        if (hoveredCombo?.data.player_name === reg.player_name) {
             setHoveredCombo(null);
             return;
         }
@@ -384,11 +385,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
             // Try modern Web Share API first (works in LINE, iOS Safari, etc.)
             if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'invite.jpg', { type: 'image/jpeg' })] })) {
-                const file = new File([blob], `invite-${tournament?.Name || 'tournament'}.jpg`, { type: 'image/jpeg' });
+                const file = new File([blob], `invite-${tournament?.name || 'tournament'}.jpg`, { type: 'image/jpeg' });
                 await navigator.share({
                     files: [file],
                     title: t('admin.share.invite_title'),
-                    text: t('admin.share.invite_text', { name: tournament?.Name || 'our tournament' })
+                    text: t('admin.share.invite_text', { name: tournament?.name || 'our tournament' })
                 });
                 return;
             }
@@ -399,7 +400,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         // Fallback: Traditional download link
         try {
             const link = document.createElement('a');
-            link.download = `invite-${tournament?.Name || 'tournament'}.jpg`;
+            link.download = `invite-${tournament?.name || 'tournament'}.jpg`;
             link.href = previewImage;
             link.style.display = 'none';
             document.body.appendChild(link);
@@ -424,11 +425,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             const blob = await response.blob();
 
             if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'banlist.jpg', { type: 'image/jpeg' })] })) {
-                const file = new File([blob], `banlist-${tournament?.Name || 'tournament'}.jpg`, { type: 'image/jpeg' });
+                const file = new File([blob], `banlist-${tournament?.name || 'tournament'}.jpg`, { type: 'image/jpeg' });
                 await navigator.share({
                     files: [file],
                     title: t('admin.share.ban_list_title'),
-                    text: t('admin.share.ban_list_text', { name: tournament?.Name || 'our tournament' })
+                    text: t('admin.share.ban_list_text', { name: tournament?.name || 'our tournament' })
                 });
                 return;
             }
@@ -438,7 +439,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
         try {
             const link = document.createElement('a');
-            link.download = `banlist-${tournament?.Name || 'tournament'}.jpg`;
+            link.download = `banlist-${tournament?.name || 'tournament'}.jpg`;
             link.href = banListImage;
             link.style.display = 'none';
             document.body.appendChild(link);
@@ -472,15 +473,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             if (!res.ok) return;
             const json = await res.json();
             if (json.success && json.data) {
-                const remoteStatus = json.data.Status;
+                const remoteStatus = json.data.status;
 
                 // Check if status changed from open to completed/closed
-                if (tournament?.Status !== remoteStatus) {
+                if (tournament?.status !== remoteStatus) {
                     setTournament((prev: any) => ({ ...prev, ...json.data }));
 
                     if (remoteStatus === 'COMPLETED' || remoteStatus === 'CLOSED') {
                         // If tournament just finished remotely, fetch standings immediately
-                        fetchStandings();
+                        if (json.data.provider !== 'INTERNAL') fetchStandings();
                     }
                 }
             }
@@ -492,7 +493,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const fetchMatches = async (url: string, silent = false) => {
         if (!silent) setLoadingMatches(true);
         try {
-            const res = await fetch(`/api/admin/matches?tournamentUrl=${encodeURIComponent(url)}`);
+            const res = await fetch(`/api/admin/matches?tournamentUrl=${encodeURIComponent(url)}&tournamentId=${id}`);
             if (!res.ok) {
                 const errText = await res.text();
                 console.error("Failed to fetch matches:", res.status, res.statusText, errText);
@@ -500,8 +501,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             }
             const json = await res.json();
             if (json.matches) {
-                // Check if we need to update to avoid re-renders if data is same (NextJS state update optimization might handle it, but good to be safe)
-                // For now, simple set
                 setMatches(prev => {
                     const isSame = JSON.stringify(prev) === JSON.stringify(json.matches);
                     return isSame ? prev : json.matches;
@@ -514,8 +513,35 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         }
     };
 
-    const confirmUpdateMatch = async (matchId: number, scores: string, winnerId: number) => {
-        if (!bracketUrl) return;
+    // For INTERNAL tournaments: re-fetch matches directly by tournamentId (no bracketUrl needed)
+    const fetchInternalMatches = async (silent = false) => {
+        if (!silent) setLoadingMatches(true);
+        try {
+            const res = await fetch(`/api/admin/matches?tournamentId=${id}`, {
+                headers: { 'x-user-id': 'internal' }
+            });
+            if (!res.ok) {
+                console.error("Failed to fetch internal matches:", res.status);
+                return;
+            }
+            const json = await res.json();
+            if (json.matches) {
+                setMatches(prev => {
+                    const isSame = JSON.stringify(prev) === JSON.stringify(json.matches);
+                    return isSame ? prev : json.matches;
+                });
+            }
+        } catch (e) {
+            console.error("Failed to fetch internal matches", e);
+        } finally {
+            if (!silent) setLoadingMatches(false);
+        }
+    };
+
+    const confirmUpdateMatch = async (matchId: number | string, scores: string, winnerId: number | string) => {
+        if (!bracketUrl && tournament?.provider !== 'INTERNAL') return;
+
+        const isInternal = tournament?.provider === 'INTERNAL';
 
         // Start loading state for this match
         setUpdatingMatchIds(prev => [...prev, matchId]);
@@ -528,9 +554,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 payload: { matchId, isUpdating: true }
             });
         }
-
-        // Optimistic update removed to prevent flickering colors as per user request
-        // We rely on the loading spinner and final fetch to update UI state
 
         try {
             const res = await fetch('/api/admin/matches', {
@@ -550,8 +573,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 throw new Error(detailStr);
             }
 
-            // Await the fetch to ensure UI stays in loading state until data is fresh
-            await fetchMatches(bracketUrl, true);
+            // For INTERNAL: re-fetch by tournamentId (no bracketUrl). For Challonge: use bracketUrl.
+            if (isInternal) {
+                await fetchInternalMatches(true);
+            } else {
+                await fetchMatches(bracketUrl, true);
+            }
 
             // Clear input state for this match to prevent stale data on next edit
             setScoreInputs(prev => {
@@ -564,7 +591,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         } catch (e: any) {
             console.error(e);
             // Revert or just refresh to get true state
-            fetchMatches(bracketUrl, true);
+            if (isInternal) fetchInternalMatches(true);
+            else fetchMatches(bracketUrl, true);
             setModalConfig({
                 isOpen: true,
                 title: "Error Updating Match",
@@ -587,10 +615,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         }
     };
 
-    const handleUpdateMatch = (matchId: number, scores: string, winnerId: number, playerName: string) => {
+    const handleUpdateMatch = (matchId: number | string, scores: string, winnerId: number | string | null, playerName: string) => {
         // No hiding scores logic anymore
+        if (!winnerId) {
+            toast.error("Invalid winner selected");
+            return;
+        }
+
         if (isQuickMode) {
-            // Skip confirmation in Quick Mode
+            // Skip confirmation in Quick mode
             confirmUpdateMatch(matchId, scores, winnerId);
         } else {
             setModalConfig({
@@ -615,7 +648,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     // Initial fetch handled by other useEffect, but ensures we are live 
 
     const handleGenerateBracket = async () => {
-        if (!tournament?.Name) return;
+        if (!tournament?.name) return;
 
         const executeBracketGeneration = async () => {
             setSettingsModalOpen(false); // Close modal
@@ -640,15 +673,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 const orderedData = isListShuffled && shuffledData ? shuffledData : data;
                 // Prepare players list (in shuffled order)
                 const players = orderedData.map(r => ({
-                    username: r.PlayerName,
-                    beyblade_combo: `${r.Main_Bey1} / ${r.Main_Bey2} / ${r.Main_Bey3}`
+                    username: r.player_name,
+                    beyblade_combo: `${r.main_bey1} / ${r.main_bey2} / ${r.main_bey3}`
                 }));
 
                 const res = await fetch('/api/generate-bracket', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        roomName: tournament.Name,
+                        roomName: tournament.name,
                         players,
                         type: tournamentType,
                         shuffle: false, // Always false — we handle order client-side
@@ -664,8 +697,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 // Re-implement basic check aligned with RegistrationTable
                 const invalidPlayers = data.filter(r => {
                     let isMatch = false;
-                    const type = tournament?.Type;
-                    const mode = r.Mode;
+                    const type = tournament?.type;
+                    const mode = r.mode;
                     if (type === 'U10' && mode === 'Under10') isMatch = true;
                     else if (type === 'U10South' && mode === 'Under10South') isMatch = true;
                     else if (type === 'NoMoreMeta' && mode === 'NoMoreMeta') isMatch = true;
@@ -685,18 +718,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     throw new Error(json.error || 'Failed to generate bracket');
                 }
 
-                setBracketUrl(json.url);
-
-                // Update Status to STARTED
-                await fetch('/api/admin/tournaments', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tournamentId: id, status: 'STARTED' })
-                });
-                // Update local state
                 setTournament((prev: any) => ({ ...prev, Status: 'STARTED' }));
 
-                fetchMatches(json.url); // Load matches immediately
+                if (tournament?.provider === 'INTERNAL') {
+                    setBracketUrl(""); // keep empty for internal
+                    fetchInternalMatches(true);
+                } else {
+                    fetchMatches(json.url); 
+                }
 
                 toast.success("Tournament bracket created successfully!");
 
@@ -743,7 +772,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         setModalConfig({
             isOpen: true,
             title: t('admin.end_confirm_title'),
-            desc: t('admin.end_confirm_desc', { name: tournament?.Name || '' }),
+            desc: t('admin.end_confirm_desc', { name: tournament?.name || '' }),
             type: "confirm",
             onConfirm: async () => {
                 setModalConfig(prev => ({ ...prev, isOpen: false }));
@@ -761,7 +790,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     }
 
                     // Force refresh full dataset to get status update
-                    setTournament((prev: any) => ({ ...prev, Status: 'CLOSED' }));
+                    setTournament((prev: any) => ({ ...prev, status: 'CLOSED' }));
                     fetchStandings();
                     toast.success("Tournament ended successfully.");
                 } catch (e: any) {
@@ -834,7 +863,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 body: JSON.stringify({
                     tournamentId: id,
                     players,
-                    mode: tournament?.Type || 'Open'
+                    mode: tournament?.type || 'Open'
                 })
             });
             const json = await res.json();
@@ -928,12 +957,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
         const deviceCounts = new Map<string, number>();
         arr.forEach(p => {
-            deviceCounts.set(p.DeviceUUID, (deviceCounts.get(p.DeviceUUID) || 0) + 1);
+            deviceCounts.set(p.device_uuid, (deviceCounts.get(p.device_uuid) || 0) + 1);
         });
 
         // 1. Adjacency conflicts
         for (let i = 0; i < n - 1; i++) {
-            if (arr[i].DeviceUUID === arr[i + 1].DeviceUUID && (deviceCounts.get(arr[i].DeviceUUID) || 0) > 1) {
+            if (arr[i].device_uuid === arr[i + 1].device_uuid && (deviceCounts.get(arr[i].device_uuid) || 0) > 1) {
                 if (!conflicts.includes(i)) conflicts.push(i);
                 if (!conflicts.includes(i + 1)) conflicts.push(i + 1);
             }
@@ -941,7 +970,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
         // 2. Matchup conflicts (Direct Round 1 opponents)
         matchups.forEach(([idx1, idx2]) => {
-            if (idx1 !== null && idx2 !== null && arr[idx1].DeviceUUID === arr[idx2].DeviceUUID && (deviceCounts.get(arr[idx1].DeviceUUID) || 0) > 1) {
+            if (idx1 !== null && idx2 !== null && arr[idx1].device_uuid === arr[idx2].device_uuid && (deviceCounts.get(arr[idx1].device_uuid) || 0) > 1) {
                 if (!conflicts.includes(idx1)) conflicts.push(idx1);
                 if (!conflicts.includes(idx2)) conflicts.push(idx2);
             }
@@ -969,7 +998,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             // Find first conflict (matchup or adjacency)
             for (let i = 0; i < n; i++) {
                 // Check adjacency
-                if (i < n - 1 && arr[i].DeviceUUID === arr[i + 1].DeviceUUID) {
+                if (i < n - 1 && arr[i].device_uuid === arr[i + 1].device_uuid) {
                     conflictIdx = i + 1;
                     break;
                 }
@@ -977,7 +1006,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 const m = matchups.find(pair => pair.includes(i));
                 if (m) {
                     const other = m[0] === i ? m[1] : m[0];
-                    if (other !== null && other < n && arr[i].DeviceUUID === arr[other].DeviceUUID) {
+                    if (other !== null && other < n && arr[i].device_uuid === arr[other].device_uuid) {
                         conflictIdx = i;
                         break;
                     }
@@ -996,13 +1025,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 // Check if this swap was good (no conflicts at both swapped positions)
                 const hasNewConflict = (idx: number) => {
                     // Adjacency
-                    if (idx > 0 && arr[idx].DeviceUUID === arr[idx - 1].DeviceUUID) return true;
-                    if (idx < n - 1 && arr[idx].DeviceUUID === arr[idx + 1].DeviceUUID) return true;
+                    if (idx > 0 && arr[idx].device_uuid === arr[idx - 1].device_uuid) return true;
+                    if (idx < n - 1 && arr[idx].device_uuid === arr[idx + 1].device_uuid) return true;
                     // Matchups
                     const mm = matchups.filter(pair => pair.includes(idx));
                     for (const pair of mm) {
                         const other = pair[0] === idx ? pair[1] : pair[0];
-                        if (other !== null && other < n && other !== idx && arr[idx].DeviceUUID === arr[other].DeviceUUID) return true;
+                        if (other !== null && other < n && other !== idx && arr[idx].device_uuid === arr[other].device_uuid) return true;
                     }
                     return false;
                 };
@@ -1111,7 +1140,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             .eq('tournament_id', id);
 
         if (data) {
-            const newLocks: Record<number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }> = {};
+            const newLocks: Record<string | number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }> = {};
             data.forEach((l: any) => {
                 newLocks[l.match_id] = {
                     judgeName: l.judge_name,
@@ -1151,23 +1180,30 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
             if (regJson.success) {
                 const sorted = regJson.data.sort((a: any, b: any) =>
-                    new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
+                    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
                 );
                 setData(sorted);
             }
 
             if (tourJson.success) {
-                setTournament(tourJson.data);
-                // Check both cases just to be safe, but API returns ChallongeUrl
-                const url = tourJson.data.ChallongeUrl || tourJson.data.challonge_url;
-                if (url) {
-                    console.log("Restoring bracket URL:", url);
+                const tourData = tourJson.data;
+                setTournament(tourData);
+
+                // Determine if we should load matches
+                const url = tourData.challonge_url;
+                const isInternal = tourData.provider === 'INTERNAL';
+
+                if (isInternal) {
+                    // For INTERNAL: always try to load matches (they are stored in DB, no bracketUrl required)
+                    // bracketUrl stays empty so Challonge embed is not shown
+                    setBracketUrl('');
+                    await fetchInternalMatches(silent);
+                } else if (url) {
                     setBracketUrl(url);
-                    // Load matches if URL exists
                     fetchMatches(url, silent);
                     fetchStandings();
                 } else {
-                    setBracketUrl(""); // Reset if no URL
+                    setBracketUrl('');
                 }
             }
 
@@ -1196,7 +1232,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }, [id]);
 
     const copyToClipboard = () => {
-        const text = data.map(r => `${r.PlayerName} (${r.Mode})`).join("\n");
+        const text = data.map(r => `${r.player_name} (${r.mode})`).join("\n");
         navigator.clipboard.writeText(text);
         setModalConfig({
             isOpen: true,
@@ -1221,7 +1257,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         setModalConfig({
             isOpen: true,
             title: "Delete Registration?",
-            desc: `Are you sure you want to delete ${row.PlayerName}? This action cannot be undone.`,
+            desc: `Are you sure you want to delete ${row.player_name}? This action cannot be undone.`,
             type: "confirm",
             variant: "destructive",
             onConfirm: async () => {
@@ -1230,7 +1266,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     await fetch("/api/admin/registrations", {
                         method: "DELETE",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ roundId: row.RoundID })
+                        body: JSON.stringify({ id: row.id })
                     });
                     fetchData();
                 } catch (e) {
@@ -1247,7 +1283,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }, [fetchData, bracketUrl, t]);
 
     // Locked Matches State (Realtime Presence)
-    const [lockedMatches, setLockedMatches] = useState<Record<number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }>>({});
+    const [lockedMatches, setLockedMatches] = useState<Record<string | number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }>>({});
     const channelRef = useRef<ReturnType<typeof supabaseClient.channel> | null>(null);
 
 
@@ -1256,7 +1292,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         if (id) fetchLocks();
     }, [id, fetchLocks]);
 
-    const toggleMatchLock = async (matchId: number, arenaId?: number) => {
+    const toggleMatchLock = async (matchId: number | string, arenaId?: number) => {
         if (!currentUser) return;
 
         const currentLock = lockedMatches[matchId];
@@ -1373,9 +1409,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 { event: 'match-update' },
                 (payload) => {
                     console.log('Realtime match update received:', payload);
-                    if (bracketUrl) {
-                        fetchMatches(bracketUrl, true);
-                    }
+                    fetchMatches(bracketUrl, true);
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'internal_matches',
+                    filter: `tournament_id=eq.${id}`
+                },
+                () => {
+                    fetchMatches(bracketUrl, true);
                 }
             )
             .on(
@@ -1410,7 +1456,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     // validateRow moved to RegistrationTable component
 
     const filteredData = data.filter(r =>
-        r.PlayerName.toLowerCase().includes(searchQuery.toLowerCase())
+        r.player_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     // Dynamic Sizing Logic for Ban List
@@ -1424,7 +1470,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     // Filter active matches: Only show matches that are 'open' (ready to play)
     // Pending matches (waiting for opponents) are hidden as per user request
     const activeMatches = matches
-        .filter(m => m.state === 'open')
+        .filter(m => (m.state || '').toUpperCase() === 'OPEN')
         .filter(m => {
             if (!matchSearchQuery) return true;
             const q = matchSearchQuery.toLowerCase();
@@ -1438,7 +1484,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         })
         .sort((a, b) => (a.suggested_play_order || 0) - (b.suggested_play_order || 0));
     const historyMatches = matches
-        .filter(m => m.state === 'complete')
+        .filter(m => (m.state || '').toUpperCase() === 'COMPLETE')
         .sort((a, b) => new Date(b.completed_at || b.updated_at || "").getTime() - new Date(a.completed_at || a.updated_at || "").getTime());
 
     // Computed properties for the active matches
@@ -1449,7 +1495,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     useEffect(() => {
         const interval = setInterval(() => {
             // Poll matches if we have a bracket and it's not closed
-            // if (bracketUrl && tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') {
+            // if (bracketUrl && tournament?.status !== 'COMPLETED' && tournament?.status !== 'CLOSED') {
             //     fetchMatches(bracketUrl, true);
             // }
 
@@ -1460,7 +1506,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [bracketUrl, tournament?.Status, fetchData]);
+    }, [bracketUrl, tournament?.status, fetchData, pollTournamentStatus]);
 
     if (banListCount > 20) {
         gridCols = "grid-cols-6";
@@ -1498,7 +1544,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         <>
             {isScoreboardOpen && (
                 <div className="fixed inset-0 z-50 bg-background animate-in fade-in slide-in-from-bottom-10 duration-300">
-                    <Scoreboard onBack={() => window.history.back()} />
+                    <Scoreboard
+                        onBack={() => setIsScoreboardOpen(false)}
+                        player1Name={selectedMatch?.player1?.name}
+                        player2Name={selectedMatch?.player2?.name}
+                        onReport={tournament?.provider === 'INTERNAL' && selectedMatch ? (scores, winnerIdx) => {
+                            const winnerId = winnerIdx === 1 ? selectedMatch.player1_id : selectedMatch.player2_id;
+                            handleUpdateMatch(selectedMatch.id, scores, winnerId, (winnerIdx === 1 ? selectedMatch.player1?.name : selectedMatch.player2?.name) || "");
+                            setIsScoreboardOpen(false);
+                            setSelectedMatch(null);
+                        } : undefined}
+                    />
                 </div>
             )}
             <div className="min-h-screen bg-background p-4 md:p-6" data-aos="fade-in" suppressHydrationWarning>
@@ -1510,11 +1566,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             </Link>
                             <div>
                                 <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
-                                    {tournament?.Name || "Tournament Details"}
+                                    {tournament?.name || "Tournament Details"}
                                 </h1>
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground break-all">
                                     <span>ID: {id}</span>
-                                    {tournament?.Status && (
+                                    {tournament?.status && (
                                         <>
                                             <span>•</span>
                                             <span className={cn(
@@ -1525,6 +1581,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             )}>
                                                 {tournament.Status}
                                             </span>
+                                            {tournament?.provider && (
+                                                <>
+                                                    <span>•</span>
+                                                    <span className="px-1.5 py-0.5 rounded-md bg-secondary text-[10px] font-black uppercase tracking-widest text-muted-foreground border border-white/10">
+                                                        {tournament.provider}
+                                                    </span>
+                                                </>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -1556,8 +1620,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                     {/* Sharing & Info Section */}
                     {/* Bracket Section - If URL exists */}
-                    {bracketUrl && (
-                        <TournamentBracket url={bracketUrl} />
+                    {(bracketUrl || (tournament?.provider === 'INTERNAL' && matches.length > 0)) && (
+                        <TournamentBracket
+                            url={bracketUrl}
+                            provider={tournament?.provider}
+                            matches={matches}
+                            onReportWin={(match, winnerId, winnerName, scores) => {
+                                handleUpdateMatch(match.id, scores, winnerId, winnerName);
+                            }}
+                        />
                     )}
 
                     {/* Standings Section */}
@@ -1567,12 +1638,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <Trophy className="h-5 w-5 text-yellow-500" />
                                 Final Standings
                             </h3>
-                            <StandingsTable standings={standings} mode={tournament?.Type} />
+                            <StandingsTable standings={standings} mode={tournament?.type} />
                         </div>
                     )}
 
                     {/* Match Management Section */}
-                    {bracketUrl && (
+                    {(bracketUrl || (tournament?.provider === 'INTERNAL' && matches.length > 0)) && (
                         <div className="bg-secondary/20 border border-white/10 rounded-xl p-4 mt-6">
                             <div className="sticky top-0 z-20 flex flex-col items-stretch gap-2 md:gap-3 bg-black/80 backdrop-blur-xl p-3 md:p-4 -mx-4 -mt-4 mb-4 border-b border-white/10 rounded-t-xl transition-all">
                                 <div className="flex items-center justify-between">
@@ -1686,7 +1757,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <div className="text-center py-8 text-muted-foreground">{t('admin.matches.loading')}</div>
                             ) : activeMatches.length === 0 ? (
                                 <div className="text-center py-8 text-muted-foreground">
-                                    {matches.length > 0 && !matches.some(m => m.state === 'open' || m.state === 'pending') ? (
+                                    {(matches.length > 0 && !matches.some(m => {
+                                        const s = (m.state || '').toUpperCase();
+                                        return s === 'OPEN' || s === 'PENDING';
+                                    })) ? (
                                         <div className="flex flex-col items-center gap-2 animate-in fade-in zoom-in duration-300">
                                             <Trophy className="w-12 h-12 text-yellow-500 mb-2 opacity-80" />
                                             <span className="text-lg font-bold text-foreground">ไม่พบการแข่งขันแล้ว</span>
@@ -1713,6 +1787,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 key={match.id}
                                                 className={cn(
                                                     "relative p-4 rounded-xl flex flex-col gap-3 transition-all duration-300 border",
+                                                    tournament?.provider === 'INTERNAL' && "cursor-pointer hover:shadow-md",
                                                     isLockedByMe
                                                         ? "bg-primary/5 border-primary shadow-[0_0_15px_rgba(34,197,94,0.15)] ring-1 ring-primary/20"
                                                         : isLockedByOther
@@ -1814,10 +1889,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                                                                 : 'bg-secondary/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 border border-transparent hover:border-blue-500/30 cursor-pointer'
                                                             }`}
-                                                        onClick={() => !isLockedByOther && handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || t('admin.default.player1'))}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (isLockedByOther) return;
+                                                            handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || t('admin.default.player1'));
+                                                        }}
                                                         onKeyDown={(e) => {
                                                             if (e.key === 'Enter' || e.key === ' ') {
-                                                                !isLockedByOther && handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || t('admin.default.player1'));
+                                                                if (isLockedByOther) return;
+                                                                handleUpdateMatch(match.id, "1-0", match.player1_id, match.player1?.name || t('admin.default.player1'));
                                                             }
                                                         }}
                                                     >
@@ -1827,22 +1907,22 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         {showPlayerCombo && (
                                                             <div className="text-[10px] text-muted-foreground w-full truncate mt-auto pt-2">
                                                                 {(() => {
-                                                                    const p1Reg = data.find(r => r.PlayerName === match.player1?.name);
+                                                                    const p1Reg = data.find(r => r.player_name === match.player1?.name);
                                                                     if (!p1Reg) return null;
                                                                     return (
                                                                         <div className="flex flex-col items-center gap-1">
-                                                                            {p1Reg.Main_Bey1 && (
+                                                                            {p1Reg.main_bey1 && (
                                                                                 <button
                                                                                     onClick={(e) => {
                                                                                         e.stopPropagation();
                                                                                         handleShowCombo(e, p1Reg);
                                                                                     }}
-                                                                                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p1Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
+                                                                                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.player_name === p1Reg.player_name ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
                                                                                 >
                                                                                     <Eye className="w-3 h-3" />
                                                                                     {t('admin.matches.view_all') || "View All"}
-                                                                                    {tournament?.Type === 'U10' && (() => {
-                                                                                        const decks = [p1Reg.Main_Bey1, p1Reg.Main_Bey2, p1Reg.Main_Bey3].filter(Boolean);
+                                                                                    {tournament?.type === 'U10' && (() => {
+                                                                                        const decks = [p1Reg.main_bey1, p1Reg.main_bey2, p1Reg.main_bey3].filter(Boolean);
                                                                                         let total = 0;
                                                                                         decks.forEach(d => {
                                                                                             const parts = d.split('|');
@@ -1881,10 +1961,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                                                                 : 'bg-secondary/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-transparent hover:border-red-500/30 cursor-pointer'
                                                             }`}
-                                                        onClick={() => !isLockedByOther && handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || t('admin.default.player2'))}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (isLockedByOther) return;
+                                                            handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || t('admin.default.player2'));
+                                                        }}
                                                         onKeyDown={(e) => {
                                                             if (e.key === 'Enter' || e.key === ' ') {
-                                                                !isLockedByOther && handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || t('admin.default.player2'));
+                                                                if (isLockedByOther) return;
+                                                                handleUpdateMatch(match.id, "0-1", match.player2_id, match.player2?.name || t('admin.default.player2'));
                                                             }
                                                         }}
                                                     >
@@ -1894,22 +1979,22 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         {showPlayerCombo && (
                                                             <div className="text-[10px] text-muted-foreground w-full truncate mt-auto pt-2">
                                                                 {(() => {
-                                                                    const p2Reg = data.find(r => r.PlayerName === match.player2?.name);
+                                                                    const p2Reg = data.find(r => r.player_name === match.player2?.name);
                                                                     if (!p2Reg) return null;
                                                                     return (
                                                                         <div className="flex flex-col items-center gap-1">
-                                                                            {p2Reg.Main_Bey1 && (
+                                                                            {p2Reg.main_bey1 && (
                                                                                 <button
                                                                                     onClick={(e) => {
                                                                                         e.stopPropagation();
                                                                                         handleShowCombo(e, p2Reg);
                                                                                     }}
-                                                                                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.PlayerName === p2Reg.PlayerName ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
+                                                                                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold transition-colors border ${hoveredCombo?.data.player_name === p2Reg.player_name ? "bg-primary text-black border-primary" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}
                                                                                 >
                                                                                     <Eye className="w-3 h-3" />
                                                                                     {t('admin.matches.view_all') || "View All"}
-                                                                                    {tournament?.Type === 'U10' && (() => {
-                                                                                        const decks = [p2Reg.Main_Bey1, p2Reg.Main_Bey2, p2Reg.Main_Bey3].filter(Boolean);
+                                                                                    {tournament?.type === 'U10' && (() => {
+                                                                                        const decks = [p2Reg.main_bey1, p2Reg.main_bey2, p2Reg.main_bey3].filter(Boolean);
                                                                                         let total = 0;
                                                                                         decks.forEach(d => {
                                                                                             for (const [pt, names] of Object.entries((gameData as any).points)) {
@@ -1950,24 +2035,24 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                            {bracketUrl ? (
-                                <>
-                                    <button
-                                        onClick={handleEndTournament}
-                                        disabled={tournament?.Status === 'CLOSED' || activeMatches.length > 0}
-                                        className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-green-500/20 text-white hover:text-green-400 px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <CheckCircle className="h-4 w-4" />
-                                        {tournament?.Status === 'COMPLETED' ? t('admin.btn.completed') : t('admin.btn.end')}
-                                    </button>
-                                    <button
-                                        onClick={handleResetTournament}
-                                        className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-4 py-2.5 rounded-lg font-bold transition-all border border-red-500/20"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                        {t('admin.btn.reset')}
-                                    </button>
-                                </>
+                        {(bracketUrl || (tournament?.provider === 'INTERNAL' && matches.length > 0)) ? (
+                            <>
+                                <button
+                                    onClick={handleEndTournament}
+                                    disabled={tournament?.status === 'CLOSED' || activeMatches.length > 0}
+                                    className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-green-500/20 text-white hover:text-green-400 px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <CheckCircle className="h-4 w-4" />
+                                    {tournament?.status === 'COMPLETED' ? t('admin.btn.completed') : t('admin.btn.end')}
+                                </button>
+                                <button
+                                    onClick={handleResetTournament}
+                                    className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-4 py-2.5 rounded-lg font-bold transition-all border border-red-500/20"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    {t('admin.btn.reset')}
+                                </button>
+                            </>
                             ) : (
                                 <button
                                     onClick={() => {
@@ -2010,18 +2095,46 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </h2>
 
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">{t('admin.settings.format')}</label>
-                                        <select
-                                            value={tournamentType}
-                                            onChange={(e) => setTournamentType(e.target.value)}
-                                            className="w-full bg-secondary border border-transparent rounded-lg p-2 text-sm"
-                                        >
-                                            <option value="single elimination">Single Elimination</option>
-                                            <option value="double elimination">Double Elimination</option>
-                                            <option value="swiss">Swiss</option>
-                                        </select>
-                                    </div>
+                                    {tournament?.provider !== 'INTERNAL' && (
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">{t('admin.settings.format')}</label>
+                                            <select
+                                                value={tournamentType}
+                                                onChange={(e) => setTournamentType(e.target.value)}
+                                                className="w-full bg-secondary border border-transparent rounded-lg p-2 text-sm"
+                                            >
+                                                <option value="single elimination">Single Elimination</option>
+                                                <option value="double elimination">Double Elimination</option>
+                                                <option value="swiss">Swiss</option>
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Bracket Style — only for INTERNAL tournaments */}
+                                    {tournament?.provider === 'INTERNAL' && (
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Bracket Style</label>
+                                            <select
+                                                value={tournament?.bracket_type ?? 'SINGLE'}
+                                                onChange={async (e) => {
+                                                    const newType = e.target.value as 'SINGLE' | 'DOUBLE';
+                                                    // Optimistically update local state
+                                                    setTournament((prev: any) => ({ ...prev, bracket_type: newType }));
+                                                    // Persist to DB
+                                                    await fetch('/api/admin/tournaments', {
+                                                        method: 'PATCH',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ tournamentId: id, bracket_type: newType })
+                                                    });
+                                                }}
+                                                className="w-full bg-secondary border border-transparent rounded-lg p-2 text-sm"
+                                            >
+                                                <option value="SINGLE">Single Elimination</option>
+                                                <option value="DOUBLE">Double Elimination</option>
+                                            </select>
+                                            <p className="text-[10px] text-muted-foreground mt-1">เลือกรูปแบบสายการแข่งขัน ก่อนกดเริ่ม</p>
+                                        </div>
+                                    )}
 
                                     {/* Shuffle checkbox removed — shuffle is now mandatory via the Shuffle button */}
 
@@ -2029,12 +2142,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         <input
                                             type="checkbox"
                                             id="showCombo"
-                                            checked={showPlayerCombo && (tournament?.Type !== 'Open' && tournament?.Type !== 'Standard' && tournamentType !== 'Standard')}
+                                            checked={showPlayerCombo && (tournament?.type !== 'Open' && tournament?.type !== 'Standard' && tournamentType !== 'Standard')}
                                             onChange={(e) => setShowPlayerCombo(e.target.checked)}
-                                            disabled={tournament?.Type === 'Open' || tournament?.Type === 'Standard' || tournamentType === 'Standard'}
+                                            disabled={tournament?.type === 'Open' || tournament?.type === 'Standard' || tournamentType === 'Standard'}
                                             className="w-4 h-4 rounded border-gray-600 disabled:opacity-50"
                                         />
-                                        <label htmlFor="showCombo" className={`text-sm ${(tournament?.Type === 'Open' || tournament?.Type === 'Standard' || tournamentType === 'Standard') ? 'text-muted-foreground line-through' : ''}`}>{t('admin.settings.show_combo')}</label>
+                                        <label htmlFor="showCombo" className={`text-sm ${(tournament?.type === 'Open' || tournament?.type === 'Standard' || tournamentType === 'Standard') ? 'text-muted-foreground line-through' : ''}`}>{t('admin.settings.show_combo')}</label>
                                     </div>
 
                                     <div>
@@ -2124,7 +2237,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 <span className="text-[10px] text-muted-foreground">{t('admin.matches.updating')}</span>
                                                             </div>
                                                         </div>
-                                                    ) : (tournament?.Status !== 'COMPLETED' && tournament?.Status !== 'CLOSED') && (
+                                                    ) : (tournament?.status !== 'COMPLETED' && tournament?.status !== 'CLOSED') && (
                                                         <button
                                                             onClick={() => {
                                                                 setModalConfig({
@@ -2134,7 +2247,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                         <div className="flex flex-col gap-3 mt-2">
                                                                             <button
                                                                                 onClick={() => {
-                                                                                    confirmUpdateMatch(match.id, "1-0", match.player1_id);
+                                                                                    if (match.player1_id) {
+                                                                                        confirmUpdateMatch(match.id, "1-0", match.player1_id);
+                                                                                    }
                                                                                     setModalConfig(prev => ({ ...prev, isOpen: false }));
                                                                                 }}
                                                                                 className={cn(
@@ -2158,7 +2273,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                                                                             <button
                                                                                 onClick={() => {
-                                                                                    confirmUpdateMatch(match.id, "0-1", match.player2_id);
+                                                                                    if (match.player2_id) {
+                                                                                        confirmUpdateMatch(match.id, "0-1", match.player2_id);
+                                                                                    }
                                                                                     setModalConfig(prev => ({ ...prev, isOpen: false }));
                                                                                 }}
                                                                                 className={cn(
@@ -2206,7 +2323,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         >
                             <div className="bg-popover/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 w-[280px] text-popover-foreground">
                                 {(() => {
-                                    const mainDeck = [hoveredCombo.data.Main_Bey1, hoveredCombo.data.Main_Bey2, hoveredCombo.data.Main_Bey3].filter(Boolean);
+                                    const mainDeck = [hoveredCombo.data.main_bey1, hoveredCombo.data.main_bey2, hoveredCombo.data.main_bey3].filter(Boolean);
 
                                     return (
                                         <>
@@ -2214,7 +2331,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 <h4 className="font-bold text-sm flex items-center gap-2">
                                                     <Users className="h-4 w-4 text-primary" />
                                                     <div className="flex flex-col">
-                                                        <span>{hoveredCombo.data.PlayerName}</span>
+                                                        <span>{hoveredCombo.data.player_name}</span>
                                                         <span className="text-[10px] text-muted-foreground font-normal">
                                                             Main Deck
                                                         </span>
@@ -2235,9 +2352,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 const bey = parts[0];
                                                                 const attachment = parts[1];
 
-                                                                const point = tournament?.Type === 'U10' ? (() => {
+                                                                const point = tournament?.type === 'U10' ? (() => {
                                                                     const pointData = tournament.Type === 'U10' ? (
-                                                                        hoveredCombo.data.Mode === "Under10South" ? gameDataSouth : gameDataStandard
+                                                                        hoveredCombo.data.mode === "Under10South" ? gameDataSouth : gameDataStandard
                                                                     ) : null;
 
                                                                     if (pointData) {
@@ -2246,7 +2363,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                             (names as string[]).forEach(name => ptsMap[name] = parseInt(pt));
                                                                         });
                                                                         const p = ptsMap[bey] || 0;
-                                                                        if (hoveredCombo.data.Mode === "Under10South") {
+                                                                        if (hoveredCombo.data.mode === "Under10South") {
                                                                             if (attachment === "Heavy" || attachment === "Wheel") return p + 1;
                                                                         }
                                                                         return p;
@@ -2282,7 +2399,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                     </div>
                                                                 );
                                                             })}
-                                                            {tournament?.Type === 'U10' && (
+                                                            {tournament?.type === 'U10' && (
                                                                 <div className="flex justify-between items-center pt-2 mt-1 border-t border-white/10">
                                                                     <span className="text-xs text-muted-foreground font-bold">Total</span>
                                                                     <span className={`text-sm font-black ${totalScore > 10 ? 'text-destructive' : 'text-green-400'}`}>
@@ -2310,7 +2427,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     <AlertCircle className="h-4 w-4 text-primary" />
                                     {t('detail.rules_title') === 'detail.rules_title' ? "Tournament Rules" : t('detail.rules_title')}
                                 </h3>
-                                {tournament?.Type && (
+                                {tournament?.type && (
                                     <span className={
                                         `px-3 py-1 rounded-lg text-xs font-bold uppercase border ` +
                                         (tournament.Type === 'U10' ? 'border-blue-500/30 text-blue-400 bg-blue-500/10' :
@@ -2436,7 +2553,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
 
                                     <div className="flex gap-2">
-                                        {tournament?.Type && (
+                                        {tournament?.type && (
                                             <span className={
                                                 `px-2 py-1 rounded-lg text-[10px] font-bold uppercase border ` +
                                                 (tournament.Type === 'U10' ? 'border-blue-500/30 text-blue-400 bg-blue-500/10' :
@@ -2476,9 +2593,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             {t('admin.invite.title')}
                                                         </p>
                                                         <h1 style={{ fontSize: '3rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                            {tournament?.Name || "BEYBLADE X"}
+                                                            {tournament?.name || "BEYBLADE X"}
                                                         </h1>
-                                                        {tournament?.Type && (
+                                                        {tournament?.type && (
                                                             <span style={{
                                                                 display: 'inline-block',
                                                                 fontSize: '0.8rem',
@@ -2577,9 +2694,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         Tournament Invite
                                                     </p>
                                                     <h1 style={{ fontSize: '4rem', fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1.1, background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: 16 }}>
-                                                        {tournament?.Name || "BEYBLADE X"}
+                                                        {tournament?.name || "BEYBLADE X"}
                                                     </h1>
-                                                    {tournament?.Type && (
+                                                    {tournament?.type && (
                                                         <span style={{
                                                             display: 'inline-block',
                                                             fontSize: '1.2rem',
@@ -2676,7 +2793,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                                             <div style={{ marginTop: 32, paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                 <div style={{ opacity: 0.7 }}>
-                                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 900, fontStyle: 'italic' }}>{tournament?.Name || "BEYBLADE X"}</h3>
+                                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 900, fontStyle: 'italic' }}>{tournament?.name || "BEYBLADE X"}</h3>
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
                                                     <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
@@ -2699,12 +2816,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="flex-1 p-3 bg-primary/5 rounded-lg text-xs font-mono text-muted-foreground break-all border border-primary/20">
-                                    <span>{origin ? `${origin.replace(/^https?:\/\//, '')}/${currentUser.shop_name}/${id.replace(/-/g, '').slice(-8)}` : `.../${currentUser.shop_name}/${id.replace(/-/g, '').slice(-8)}`}</span>
+                                    <span>{origin ? `${origin.replace(/^https?:\/\//, '')}/${encodeURIComponent(currentUser.shop_name)}/${id.replace(/-/g, '').slice(-8)}` : `.../${encodeURIComponent(currentUser.shop_name)}/${id.replace(/-/g, '').slice(-8)}`}</span>
                                 </div>
                                 <button
                                     onClick={() => {
                                         const shortId = id.replace(/-/g, '').slice(-8);
-                                        const url = `${window.location.origin}/${currentUser?.shop_name}/${shortId}`;
+                                        const url = `${window.location.origin}/${encodeURIComponent(currentUser?.shop_name || "")}/${shortId}`;
                                         navigator.clipboard.writeText(url);
                                         toast.success("คัดลอกลิงก์หน้าดูรายชื่อสำเร็จ!");
                                     }}
@@ -2721,7 +2838,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     {/* Bulk Registration (Only for Open/Standard or when explicitly enabled) */}
                     {/* Bulk Registration (Only for Open/Standard and when Status is OPEN) */}
                     {/* Bulk Registration (Only for Open/Standard and when Status is OPEN) */}
-                    {(!bracketUrl && tournament?.Status === 'OPEN' && (tournament?.Type === 'Open' || tournament?.Type === 'Standard')) && (
+                    {(!bracketUrl && tournament?.status === 'OPEN' && (tournament?.type === 'Open' || tournament?.type === 'Standard')) && (
                         <div className="glass-card p-6 rounded-xl space-y-4">
                             <div className="flex items-center gap-2">
                                 <Users className="h-5 w-5 text-primary" />
@@ -2821,7 +2938,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         setSwapSelection([]);
                                         setIsSwapMode(false);
                                     }}
-                                    disabled={!isListShuffled || !!bracketUrl || (tournament?.Status && tournament.Status !== 'OPEN')}
+                                    disabled={!isListShuffled || !!bracketUrl || (tournament?.status && tournament.Status !== 'OPEN')}
                                     className="text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 transition-colors px-3 py-1.5 rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                     title="Reset to Original Order"
                                 >
@@ -2830,7 +2947,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                                 <button
                                     onClick={handleShufflePlayers}
-                                    disabled={!!bracketUrl || (tournament?.Status && tournament.Status !== 'OPEN')}
+                                    disabled={!!bracketUrl || (tournament?.status && tournament.Status !== 'OPEN')}
                                     className="flex items-center gap-2 px-3 py-1.5 hover:bg-secondary rounded-md text-xs font-bold transition-colors text-foreground disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/10 first:border-0"
                                 >
                                     <Shuffle className="h-3.5 w-3.5" />
@@ -2838,7 +2955,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </button>
                             </div>
 
-                            {/* Swap Mode Toggle / Actions (Moved next to Copy) */}
+                            {/* Swap mode Toggle / Actions (Moved next to Copy) */}
                             {isSwapMode ? (
                                 <div className="flex items-center gap-1 bg-blue-500/10 border border-blue-500/30 p-1 rounded-lg">
                                     <button
@@ -2859,7 +2976,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             ) : (
                                 <button
                                     onClick={() => setIsSwapMode(true)}
-                                    disabled={!!bracketUrl || (tournament?.Status && tournament.Status !== 'OPEN')}
+                                    disabled={!!bracketUrl || (tournament?.status && tournament.Status !== 'OPEN')}
                                     className="flex items-center justify-center p-2 bg-secondary/80 text-foreground rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-white/5"
                                     title="สลับผู้เล่น"
                                 >
@@ -2896,7 +3013,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         loading={loading}
                         searchQuery={searchQuery}
                         onDelete={handleDelete}
-                        tournamentType={tournament?.Type}
+                        tournamentType={tournament?.type}
                         sameDeviceConflicts={isListShuffled ? sameDeviceConflicts : []}
                         swapSelection={isSwapMode ? swapSelection : []}
                         onSwapSelect={isSwapMode ? handleSwapSelect : undefined}

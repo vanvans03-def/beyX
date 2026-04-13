@@ -1,35 +1,40 @@
 import { NextResponse } from "next/server";
-import { getRegistrations, deleteRegistration, createRegistration } from "@/lib/repository";
+import { getRegistrations, deleteRegistration, createRegistration, getTournament } from "@/lib/repository";
 import { v4 as uuidv4 } from 'uuid';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const tournamentId = searchParams.get("tournamentId") || undefined;
+
     try {
-        const { searchParams } = new URL(req.url);
-        const tournamentId = searchParams.get("tournamentId") || undefined;
 
         if (!tournamentId) {
             return NextResponse.json({ success: true, data: [] });
         }
 
+        // Resolve ID to actual UUID if it's a name
+        const tournament = await getTournament(tournamentId);
+        const actualId = tournament?.id || tournamentId;
+
         // Disable cache
-        const data = await getRegistrations(tournamentId);
+        const data = await getRegistrations(actualId);
 
         // Map to Frontend expected format (PascalCase from Sheets)
         // Repo: id, tournament_id, player_name, device_uuid, mode, main_deck, reserve_decks, timestamp
         // Sheets: TournamentID, RoundID, Timestamp, DeviceUUID, PlayerName, Mode, Main_Bey1...
         const mapped = data.map(r => ({
-            TournamentID: r.tournament_id,
-            RoundID: r.id, // Using Postgres ID as RoundID
-            Timestamp: r.timestamp.toISOString(),
-            DeviceUUID: r.device_uuid,
-            PlayerName: r.player_name,
-            Mode: r.mode,
-            Main_Bey1: r.main_deck[0] || "",
-            Main_Bey2: r.main_deck[1] || "",
-            Main_Bey3: r.main_deck[2] || "",
-            TotalPoints: r.total_points
+            tournament_id: r.tournament_id,
+            id: r.id, 
+            timestamp: (r.timestamp && !isNaN(r.timestamp.getTime())) ? r.timestamp.toISOString() : new Date().toISOString(),
+            device_uuid: r.device_uuid,
+            player_name: r.player_name,
+            mode: r.mode,
+            main_bey1: r.main_deck[0] || "",
+            main_bey2: r.main_deck[1] || "",
+            main_bey3: r.main_deck[2] || "",
+            total_points: r.total_points
         }));
 
         return NextResponse.json({ success: true, data: mapped }, {
@@ -38,7 +43,11 @@ export async function GET(req: Request) {
             }
         });
     } catch (error: any) {
-        console.error("Admin Fetch Error:", error);
+        console.error("Admin Registrations GET Error:", {
+            message: error.message,
+            stack: error.stack,
+            tournamentId
+        });
         return NextResponse.json({ success: false, message: error.message }, { status: 500 });
     }
 }
@@ -132,9 +141,9 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
     try {
         const body = await req.json();
-        if (!body.roundId) throw new Error("RoundID is required");
+        if (!body.id) throw new Error("ID is required");
 
-        await deleteRegistration(body.roundId);
+        await deleteRegistration(body.id);
         return NextResponse.json({ success: true });
     } catch (error: any) {
         return NextResponse.json({ success: false, message: error.message }, { status: 500 });
