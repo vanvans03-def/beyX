@@ -116,6 +116,7 @@ export const locales = {
         "admin.matches.loser_bracket": "สายล่าง",
         "admin.matches.view_all": "ดูทั้งหมด",
 
+        "table.header.no": "ลำดับ",
         "table.header.time": "เวลา",
         "table.header.player": "ผู้เล่น",
         "table.header.mode": "รุ่น",
@@ -323,6 +324,7 @@ export const locales = {
         "admin.matches.loser_bracket": "Loser Bracket",
         "admin.matches.view_all": "View All",
 
+        "table.header.no": "No.",
         "table.header.time": "Time",
         "table.header.player": "Player",
         "table.header.mode": "Mode",
