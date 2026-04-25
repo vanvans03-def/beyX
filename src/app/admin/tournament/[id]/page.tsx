@@ -1031,6 +1031,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         setSwapSelection([]);
         setIsSwapMode(false);
 
+        // Save shuffle to DB
+        fetch('/api/admin/tournaments/order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tournamentId: id, order: arr.map(r => r.PlayerName) })
+        });
+
         if (conflicts.length > 0) {
             toast.warning(t('admin.warning.same_device'));
         }
@@ -1077,6 +1084,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         } else {
             toast.success(`สลับตำแหน่งผู้เล่นสำเร็จ`);
         }
+
+        // Save swap to DB
+        fetch('/api/admin/tournaments/order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tournamentId: id, order: currentData.map(r => r.PlayerName) })
+        });
 
         setSwapSelection([]);
         setIsSwapMode(false);
@@ -1154,6 +1168,30 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
                 );
                 setData(sorted);
+
+                // Fetch and apply saved order
+                try {
+                    const orderRes = await fetch(`/api/admin/tournaments/order?tournamentId=${id}`);
+                    const orderJson = await orderRes.json();
+                    if (orderJson.success && orderJson.order && orderJson.order.length > 0) {
+                        const savedOrder = orderJson.order as string[];
+                        // Reconstruct shuffled data
+                        const reordered = savedOrder
+                            .map(name => sorted.find((r: any) => r.PlayerName === name))
+                            .filter(Boolean) as Registration[];
+
+                        // Catch any players not in the saved order (new registrations)
+                        const savedNamesSet = new Set(savedOrder);
+                        const newPlayers = sorted.filter((r: any) => !savedNamesSet.has(r.PlayerName)) as Registration[];
+
+                        const finalShuffled = [...reordered, ...newPlayers];
+                        setShuffledData(finalShuffled);
+                        setIsListShuffled(true);
+                        setSameDeviceConflicts(checkConflicts(finalShuffled));
+                    }
+                } catch (orderErr) {
+                    console.error("Failed to fetch saved order:", orderErr);
+                }
             }
 
             if (tourJson.success) {

@@ -27,6 +27,8 @@ export type Registration = {
     total_points?: number;
 };
 
+export type ParticipantOrder = string[];
+
 // --- Settings ---
 
 export async function getSystemSetting<T>(key: string, defaultValue: T): Promise<T> {
@@ -235,6 +237,14 @@ export async function resetTournamentBracket(id: string) {
         .eq('id', id);
 
     if (error) throw new Error(error.message);
+}
+
+export async function getParticipantOrder(tournamentId: string): Promise<string[] | null> {
+    return await getSystemSetting<string[] | null>(`participant_order_${tournamentId}`, null);
+}
+
+export async function setParticipantOrder(tournamentId: string, order: string[]) {
+    await setSystemSetting(`participant_order_${tournamentId}`, order);
 }
 
 export async function getMatchesFromDB(tournamentIdentifier: string) {
