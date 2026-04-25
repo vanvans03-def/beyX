@@ -105,6 +105,7 @@ export const locales = {
         "admin.settings.player_count": "กำลังสร้างสายสำหรับ {count} ผู้เล่น",
         "admin.settings.start": "เริ่มการแข่งขัน",
         "admin.settings.creating_challonge": "กำลังเชื่อมต่อ Challonge...",
+        "admin.menu.bracket": "สายการแข่งขัน",
 
         "admin.matches.title": "การแข่งขันที่กำลังแข่ง",
         "admin.matches.refresh": "รีเฟรชผล",
@@ -199,6 +200,14 @@ export const locales = {
         "type.NoMoreMeta": "No More Meta",
         "type.Open": "Open",
         "type.Standard": "Open",
+
+        "bracket.grand_finals": "รอบชิงชนะเลิศ",
+        "bracket.qualify": "รอบคัดเลือก",
+        "bracket.no_matches": "ยังไม่มีการแข่งขันสร้างขึ้น",
+        "bracket.zoom_in": "ซูมเข้า",
+        "bracket.zoom_out": "ซูมออก",
+        "bracket.zoom_reset": "รีเซ็ต",
+        "bracket.loser_of": "ผู้แพ้จากแมตช์ #{n}",
 
         // General
         "gen.select": "เลือก...",
@@ -312,6 +321,7 @@ export const locales = {
         "admin.settings.player_count": "Creating bracket for {count} players.",
         "admin.settings.start": "Start Tournament",
         "admin.settings.creating_challonge": "Creating on Challonge...",
+        "admin.menu.bracket": "Live Bracket",
 
         "admin.matches.title": "Active Matches",
         "admin.matches.refresh": "Refresh Matches",
@@ -407,6 +417,14 @@ export const locales = {
         "type.NoMoreMeta": "No More Meta",
         "type.Open": "Open",
         "type.Standard": "Open",
+
+        "bracket.grand_finals": "Grand Finals",
+        "bracket.qualify": "Qualify",
+        "bracket.no_matches": "No matches generated yet.",
+        "bracket.zoom_in": "Zoom In",
+        "bracket.zoom_out": "Zoom Out",
+        "bracket.zoom_reset": "Reset",
+        "bracket.loser_of": "Loser of Match #{n}",
 
         // General
         "gen.select": "Select...",

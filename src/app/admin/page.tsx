@@ -713,17 +713,6 @@ export default function AdminPage() {
                                                 <option value="INTERNAL">BeyX Bracket (Internal)</option>
                                             </select>
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Elimination Format</label>
-                                            <select
-                                                value={newBracketType}
-                                                onChange={(e) => setNewBracketType(e.target.value as any)}
-                                                className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border appearance-none"
-                                            >
-                                                <option value="SINGLE">Single Elimination (แพ้ครั้งเดียวออก)</option>
-                                                <option value="DOUBLE">Double Elimination (มีสายล่าง/แก้ตัว)</option>
-                                            </select>
-                                        </div>
                                     </div>
 
                                     {/* Custom Ban List Toggle */}
@@ -813,6 +802,9 @@ export default function AdminPage() {
                                                                         {(locales[lang] as any)[`type.${t.type}`] || t.type}
                                                                     </span>
                                                                 )}
+                                                                <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${t.provider === 'INTERNAL' ? 'bg-purple-500/20 text-purple-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                                                                    {t.provider === 'INTERNAL' ? 'Internal' : 'Challonge'}
+                                                                </span>
                                                                 <span className="shrink-0">• Created {new Date(t.created_at).toLocaleDateString()}</span>
                                                             </div>
                                                         </div>
@@ -922,6 +914,9 @@ export default function AdminPage() {
                                                                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                                                                             <span className="px-1.5 py-0.5 rounded font-bold uppercase bg-secondary text-muted-foreground">
                                                                                 {t.status}
+                                                                            </span>
+                                                                            <span className={`px-1.5 py-0.5 rounded font-bold uppercase border border-white/5 ${t.provider === 'INTERNAL' ? 'bg-purple-500/10 text-purple-400/80' : 'bg-orange-500/10 text-orange-400/80'}`}>
+                                                                                {t.provider === 'INTERNAL' ? 'Internal' : 'Challonge'}
                                                                             </span>
                                                                             <span>• Ended {new Date(t.created_at).toLocaleDateString()}</span>
                                                                         </div>

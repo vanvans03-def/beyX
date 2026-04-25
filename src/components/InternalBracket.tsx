@@ -1,6 +1,6 @@
-"use client";
-
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
+import { ZoomIn, ZoomOut, RefreshCw, Maximize2 } from 'lucide-react';
 
 interface InternalMatch {
     id: string;
@@ -43,12 +43,13 @@ function cardTopY(slotIdx: number, roundIdx: number, UNIT: number): number {
 }
 
 // ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums }: {
+function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, t }: {
     match: InternalMatch;
     onMatchClick?: (m: InternalMatch) => void;
     onReportWin?: (m: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
     matchNum?: number;
     loserOfNums?: [number | undefined, number | undefined];
+    t: any;
 }) {
     const isOpen = match.state?.toUpperCase() === 'OPEN';
     const isComplete = match.state?.toUpperCase() === 'COMPLETE';
@@ -99,7 +100,7 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums }: 
                     }}
                 >
                     <span style={{ fontSize: 13, color: p1Won ? '#10b981' : p2Won ? '#71717a' : '#e4e4e7', fontWeight: p1Won ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 144 }}>
-                        {p1 ? p1 : <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>{loserOfNums?.[0] !== undefined ? `Loser of #${loserOfNums[0]} round` : (match.player1_prereq_match_id ? '' : 'TBD')}</em>}
+                        {p1 ? p1 : <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>{loserOfNums?.[0] !== undefined ? t('bracket.loser_of' as any, { n: loserOfNums[0] }) : (match.player1_prereq_match_id ? '' : 'TBD')}</em>}
                     </span>
                     {isComplete && <span style={{ fontSize: 13, fontWeight: 700, color: p1Won ? '#10b981' : '#71717a', minWidth: 18, textAlign: 'right' }}>{scores[0] ?? 0}</span>}
                 </div>
@@ -119,7 +120,7 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums }: 
                     }}
                 >
                     <span style={{ fontSize: 13, color: p2Won ? '#10b981' : p1Won ? '#71717a' : '#e4e4e7', fontWeight: p2Won ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 144 }}>
-                        {p2 ? p2 : <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>{loserOfNums?.[1] !== undefined ? `Loser of #${loserOfNums[1]} round` : (match.player2_prereq_match_id ? '' : 'TBD')}</em>}
+                        {p2 ? p2 : <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>{loserOfNums?.[1] !== undefined ? t('bracket.loser_of' as any, { n: loserOfNums[1] }) : (match.player2_prereq_match_id ? '' : 'TBD')}</em>}
                     </span>
                     {isComplete && <span style={{ fontSize: 13, fontWeight: 700, color: p2Won ? '#10b981' : '#71717a', minWidth: 18, textAlign: 'right' }}>{scores[1] ?? 0}</span>}
                 </div>
@@ -137,7 +138,8 @@ function BracketSection({
     UNIT,
     numMap,
     allMatches,
-    yMap
+    yMap,
+    t
 }: {
     rounds: { label: string; matches: InternalMatch[]; isQualify: boolean }[];
     onMatchClick?: (m: InternalMatch) => void;
@@ -147,6 +149,7 @@ function BracketSection({
     numMap: Map<string, number>;
     allMatches: InternalMatch[];
     yMap: Map<string, number>;
+    t: any;
 }) {
     const r1Count = rounds[0]?.matches.length ?? 0;
     const totalH = r1Count * UNIT + 40;
@@ -244,6 +247,7 @@ function BracketSection({
                                                 onReportWin={onReportWin}
                                                 matchNum={num}
                                                 loserOfNums={loserOfNums}
+                                                t={t}
                                             />
                                         </div>
                                     );
@@ -259,6 +263,9 @@ function BracketSection({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }) => {
+    const { t } = useTranslation();
+    const [scale, setScale] = useState(1.0);
+
     const { winnersRounds = [], losersRounds = [], slotMap = new Map(), UNIT = UNIT_BASE, numMap = new Map(), yMap = new Map() } = useMemo(() => {
 
         if (!matches || !matches.length) return { winnersRounds: [], losersRounds: [], slotMap: new Map<string, number>(), UNIT: UNIT_BASE, numMap: new Map<string, number>(), yMap: new Map<string, number>() };
@@ -437,7 +444,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
         const winnersRounds = wGroups.map((group, gi) => {
             const isQualify = gi === 0 && r1HasByes;
             const isGF = group.some(m => m.is_grand_final);
-            const label = isGF ? 'Grand Finals' : (isQualify ? 'Qualify' : `Round ${r1HasByes ? gi : gi + 1}`);
+            const label = isGF ? t('bracket.grand_finals' as any) : (isQualify ? t('bracket.qualify' as any) : t('admin.matches.round' as any, { n: r1HasByes ? gi : gi + 1 }));
             return { label, matches: group, isQualify };
         });
 
@@ -455,7 +462,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
             if (!hasVisible) return null;
 
             return {
-                label: `Losers R${currentLabelNum++}`,
+                label: `${t('admin.matches.loser_bracket' as any)} R${currentLabelNum++}`,
                 matches: group,
                 isQualify: false,
             };
@@ -508,7 +515,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
                 } else {
                     const slot = slotMap.get(m.id) ?? 0;
                     // Orphans (e.g. bypassed nodes receiving from WB) are stacked sequentially
-                    yMap.set(m.id, cardCenterY(slot, 0, UNIT_BASE)); 
+                    yMap.set(m.id, cardCenterY(slot, 0, UNIT_BASE));
                 }
             });
         });
@@ -521,31 +528,102 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
     if (!matches.length) {
         return (
             <div style={{ padding: 40, textAlign: 'center', color: '#52525b', fontSize: 14, backgroundColor: '#111113', borderRadius: 12, border: '1px solid #27272a' }}>
-                No matches generated yet.
+                {t('bracket.no_matches' as any)}
             </div>
         );
     }
 
     return (
         <div style={{
-            width: '100%', overflowX: 'auto', overflowY: 'auto',
+            width: '100%',
             backgroundColor: '#111113', borderRadius: 12, border: '1px solid #27272a',
-            padding: '20px 24px',
             fontFamily: 'Inter, -apple-system, sans-serif',
+            position: 'relative',
+            height: '100%',
+            minHeight: '600px',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
         }}>
-            {winnersRounds.length > 0 && (
-                <div style={{ marginBottom: isDoubleElim ? 48 : 0 }}>
-                    {isDoubleElim && <SectionDivider>Winners Bracket</SectionDivider>}
-                    <BracketSection rounds={winnersRounds} onMatchClick={onMatchClick} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} />
-                </div>
-            )}
+            {/* Sticky Zoom Controls */}
+            <div style={{
+                position: 'absolute',
+                bottom: 20,
+                right: 20,
+                zIndex: 100,
+                display: 'flex',
+                gap: 8,
+                backgroundColor: 'rgba(28, 28, 30, 0.8)',
+                backdropFilter: 'blur(10px)',
+                padding: '8px',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)'
+            }}>
+                <button
+                    onClick={() => setScale(prev => Math.max(0.2, prev - 0.05))}
+                    style={{ p: 8, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#e4e4e7', cursor: 'pointer', display: 'flex' }}
+                    title={t('bracket.zoom_out' as any)}
+                >
+                    <ZoomOut size={18} />
+                </button>
+                <div style={{ width: 1, height: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', alignSelf: 'center' }} />
+                <button
+                    onClick={() => setScale(1.0)}
+                    style={{ fontSize: 11, fontWeight: 700, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#a1a1aa', cursor: 'pointer', padding: '0 4px' }}
+                >
+                    {Math.round(scale * 100)}%
+                </button>
+                <div style={{ width: 1, height: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', alignSelf: 'center' }} />
+                <button
+                    onClick={() => setScale(prev => Math.min(2.0, prev + 0.05))}
+                    style={{ p: 8, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#e4e4e7', cursor: 'pointer', display: 'flex' }}
+                    title={t('bracket.zoom_in' as any)}
+                >
+                    <ZoomIn size={18} />
+                </button>
+                <button
+                    onClick={() => setScale(1.0)}
+                    style={{ p: 8, borderRadius: 8, border: 'none', backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#e4e4e7', cursor: 'pointer', display: 'flex', marginLeft: 4 }}
+                    title={t('bracket.zoom_reset' as any)}
+                >
+                    <RefreshCw size={14} />
+                </button>
+            </div>
 
-            {losersRounds.length > 0 && (
-                <div>
-                    <SectionDivider>Losers Bracket</SectionDivider>
-                    <BracketSection rounds={losersRounds} onMatchClick={onMatchClick} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} />
+            {/* Scrollable Container */}
+            <div style={{
+                flex: 1,
+                overflow: 'auto',
+                padding: '60px 40px',
+                textAlign: 'center',
+                scrollBehavior: 'smooth'
+            }}>
+                {/* Scalable Content wrapper that centers while allowing scroll to edges */}
+                <div style={{
+                    display: 'inline-block',
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'top center',
+                    transition: 'transform 0.1s ease-out',
+                    textAlign: 'left', // Content inside stays left-aligned
+                    margin: '0 auto',
+                    minWidth: 'max-content'
+                }}>
+                    {winnersRounds.length > 0 && (
+                        <div style={{ marginBottom: isDoubleElim ? 80 : 0 }}>
+                            {isDoubleElim && <SectionDivider>{t('admin.matches.winner_bracket' as any)}</SectionDivider>}
+                            <BracketSection rounds={winnersRounds} onMatchClick={onMatchClick} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} />
+                        </div>
+                    )}
+
+                    {losersRounds.length > 0 && (
+                        <div>
+                            <SectionDivider>{t('admin.matches.loser_bracket' as any)}</SectionDivider>
+                            <BracketSection rounds={losersRounds} onMatchClick={onMatchClick} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} />
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
         </div>
     );
 }

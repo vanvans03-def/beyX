@@ -724,7 +724,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     setBracketUrl(""); // keep empty for internal
                     fetchInternalMatches(true);
                 } else {
-                    fetchMatches(json.url); 
+                    fetchMatches(json.url);
                 }
 
                 toast.success("Tournament bracket created successfully!");
@@ -2035,24 +2035,24 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                        {(bracketUrl || (tournament?.provider === 'INTERNAL' && matches.length > 0)) ? (
-                            <>
-                                <button
-                                    onClick={handleEndTournament}
-                                    disabled={tournament?.status === 'CLOSED' || activeMatches.length > 0}
-                                    className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-green-500/20 text-white hover:text-green-400 px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <CheckCircle className="h-4 w-4" />
-                                    {tournament?.status === 'COMPLETED' ? t('admin.btn.completed') : t('admin.btn.end')}
-                                </button>
-                                <button
-                                    onClick={handleResetTournament}
-                                    className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-4 py-2.5 rounded-lg font-bold transition-all border border-red-500/20"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                    {t('admin.btn.reset')}
-                                </button>
-                            </>
+                            {(bracketUrl || (tournament?.provider === 'INTERNAL' && matches.length > 0)) ? (
+                                <>
+                                    <button
+                                        onClick={handleEndTournament}
+                                        disabled={tournament?.status === 'CLOSED' || activeMatches.length > 0}
+                                        className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-secondary hover:bg-green-500/20 text-white hover:text-green-400 px-4 py-2.5 rounded-lg font-bold transition-all border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <CheckCircle className="h-4 w-4" />
+                                        {tournament?.status === 'COMPLETED' ? t('admin.btn.completed') : t('admin.btn.end')}
+                                    </button>
+                                    <button
+                                        onClick={handleResetTournament}
+                                        className="flex-1 md:flex-none text-xs flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-4 py-2.5 rounded-lg font-bold transition-all border border-red-500/20"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                        {t('admin.btn.reset')}
+                                    </button>
+                                </>
                             ) : (
                                 <button
                                     onClick={() => {
@@ -2430,11 +2430,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 {tournament?.type && (
                                     <span className={
                                         `px-3 py-1 rounded-lg text-xs font-bold uppercase border ` +
-                                        (tournament.Type === 'U10' ? 'border-blue-500/30 text-blue-400 bg-blue-500/10' :
-                                            tournament.Type === 'NoMoreMeta' ? 'border-purple-500/30 text-purple-400 bg-purple-500/10' :
+                                        (tournament.type === 'U10' ? 'border-blue-500/30 text-blue-400 bg-blue-500/10' :
+                                            tournament.type === 'NoMoreMeta' ? 'border-purple-500/30 text-purple-400 bg-purple-500/10' :
                                                 'border-white/10 text-muted-foreground bg-secondary')
                                     }>
-                                        {t(`type.${tournament.Type}` as any)} Format
+                                        {t(`type.${tournament.type}` as any)} Format
                                     </span>
                                 )}
                             </div>
@@ -2541,26 +2541,23 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             onClick={() => {
                                                 const url = `${origin}/register/${id}`;
                                                 navigator.clipboard.writeText(url);
-                                                toast.success(t('admin.toast.link_copied'));
+                                                toast.success(t('admin.toast.link_copied') || 'Registration Link Copied!');
                                             }}
                                             className="p-2 bg-secondary hover:bg-secondary/80 rounded transition-colors text-primary"
-                                            title="Copy Link"
+                                            title="Copy Registration Link"
                                         >
                                             <Copy className="h-4 w-4" />
                                         </button>
                                     </div>
-
-
-
                                     <div className="flex gap-2">
                                         {tournament?.type && (
                                             <span className={
                                                 `px-2 py-1 rounded-lg text-[10px] font-bold uppercase border ` +
-                                                (tournament.Type === 'U10' ? 'border-blue-500/30 text-blue-400 bg-blue-500/10' :
-                                                    tournament.Type === 'NoMoreMeta' ? 'border-purple-500/30 text-purple-400 bg-purple-500/10' :
+                                                (tournament.type === 'U10' ? 'border-blue-500/30 text-blue-400 bg-blue-500/10' :
+                                                    tournament.type === 'NoMoreMeta' ? 'border-purple-500/30 text-purple-400 bg-purple-500/10' :
                                                         'border-white/10 text-muted-foreground bg-secondary')
                                             }>
-                                                {t(`type.${tournament.Type}` as any)}
+                                                {t(`type.${tournament.type}` as any)}
                                             </span>
                                         )}
                                     </div>
@@ -2600,7 +2597,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 display: 'inline-block',
                                                                 fontSize: '0.8rem',
                                                                 fontWeight: 800,
-                                                                color: tournament.Type === 'U10' ? '#60a5fa' : tournament.Type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
+                                                                color: tournament.type === 'U10' ? '#60a5fa' : tournament.type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
                                                                 textTransform: 'uppercase',
                                                                 letterSpacing: '0.1em',
                                                                 padding: '4px 8px',
@@ -2608,7 +2605,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 backgroundColor: 'rgba(255,255,255,0.05)',
                                                                 border: '1px solid rgba(255,255,255,0.1)'
                                                             }}>
-                                                                {tournament.Type} FORMAT
+                                                                {tournament.type} FORMAT
                                                             </span>
                                                         )}
                                                     </div>
@@ -2701,7 +2698,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             display: 'inline-block',
                                                             fontSize: '1.2rem',
                                                             fontWeight: 800,
-                                                            color: tournament.Type === 'U10' ? '#60a5fa' : tournament.Type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
+                                                            color: tournament.type === 'U10' ? '#60a5fa' : tournament.type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
                                                             textTransform: 'uppercase',
                                                             letterSpacing: '0.1em',
                                                             padding: '6px 16px',
@@ -2709,7 +2706,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             backgroundColor: 'rgba(255,255,255,0.05)',
                                                             border: '1px solid rgba(255,255,255,0.1)'
                                                         }}>
-                                                            {tournament.Type} FORMAT
+                                                            {tournament.type} FORMAT
                                                         </span>
                                                     )}
                                                 </div>
@@ -2811,11 +2808,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             <div className="flex items-center justify-between">
                                 <h3 className="font-bold text-foreground flex items-center gap-2">
                                     <Eye className="h-4 w-4 text-primary" />
-                                    Public View (รายชื่อผู้เล่น)
+                                    Public View (รายชื่อผู้เล่น & สายการแข่ง)
                                 </h3>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="flex-1 p-3 bg-primary/5 rounded-lg text-xs font-mono text-muted-foreground break-all border border-primary/20">
+                                <div className="flex-1 p-3 bg-primary/5 rounded-lg text-xs font-mono text-muted-foreground break-all border border-primary/20 flex items-center justify-between">
                                     <span>{origin ? `${origin.replace(/^https?:\/\//, '')}/${encodeURIComponent(currentUser.shop_name)}/${id.replace(/-/g, '').slice(-8)}` : `.../${encodeURIComponent(currentUser.shop_name)}/${id.replace(/-/g, '').slice(-8)}`}</span>
                                 </div>
                                 <button
@@ -2823,7 +2820,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         const shortId = id.replace(/-/g, '').slice(-8);
                                         const url = `${window.location.origin}/${encodeURIComponent(currentUser?.shop_name || "")}/${shortId}`;
                                         navigator.clipboard.writeText(url);
-                                        toast.success("คัดลอกลิงก์หน้าดูรายชื่อสำเร็จ!");
+                                        toast.success("คัดลอกลิงก์หน้าดูรายชื่อและสายการแข่งสำเร็จ!");
                                     }}
                                     className="text-xs flex items-center gap-1.5 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all shrink-0"
                                     title="Copy Public View Link"
@@ -2831,8 +2828,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     <Copy className="h-3 w-3" />
                                     <span>คัดลอกลิงก์</span>
                                 </button>
+                                <Link
+                                    href={`/${encodeURIComponent(currentUser?.shop_name || "")}/${id.replace(/-/g, '').slice(-8)}`}
+                                    target="_blank"
+                                    className="text-xs flex items-center gap-1.5 bg-secondary hover:bg-secondary/80 text-primary px-3 py-1.5 rounded-lg font-bold transition-all shrink-0"
+                                    title="Open Public View"
+                                >
+                                    <Share2 className="h-3 w-3" />
+                                    <span>เปิดดูหน้านี้</span>
+                                </Link>
                             </div>
                         </div>
+
+
                     )}
 
                     {/* Bulk Registration (Only for Open/Standard or when explicitly enabled) */}

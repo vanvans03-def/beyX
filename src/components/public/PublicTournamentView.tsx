@@ -1,12 +1,12 @@
 "use client";
 
-import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe } from "lucide-react";
+import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe, Loader2, MonitorPlay } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import InternalBracket from "@/components/InternalBracket";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/utils/supabase/client";
 
 type PublicTournamentViewProps = {
     tournament: any;
@@ -16,29 +16,51 @@ type PublicTournamentViewProps = {
 export default function PublicTournamentView({ tournament, registrations }: PublicTournamentViewProps) {
     const { t, lang, toggleLang } = useTranslation();
     const [activeTab, setActiveTab] = useState<'players' | 'bracket'>('players');
-    const [internalMatches, setInternalMatches] = useState<any[]>([]);
+    
+    // Bracket State
+    const [matches, setMatches] = useState<any[]>([]);
+    const [loadingBracket, setLoadingBracket] = useState(true);
+    const channelRef = useRef<any>(null);
+    const supabaseClient = createClient();
+
+    // Initial fetch for Internal Tournaments
+    const fetchInternalMatches = async (silent = false) => {
+        if (!silent) setLoadingBracket(true);
+        try {
+            const res = await fetch(`/api/public/tournaments/${tournament.id}/matches`);
+            if (!res.ok) return;
+            const json = await res.json();
+            if (json.matches) {
+                setMatches(prev => JSON.stringify(prev) === JSON.stringify(json.matches) ? prev : json.matches);
+            }
+        } catch (e) {
+            console.error("Failed to fetch matches", e);
+        } finally {
+            if (!silent) setLoadingBracket(false);
+        }
+    };
 
     useEffect(() => {
-        if (tournament.provider === 'INTERNAL' && activeTab === 'bracket') {
-            const fetchMatches = async () => {
-                const { data } = await supabase
-                    .from('internal_matches')
-                    .select('*, player1:player1_id(player_name), player2:player2_id(player_name)')
-                    .eq('tournament_id', tournament.id);
-                if (data) setInternalMatches(data);
-            };
-            fetchMatches();
+        if (activeTab === 'bracket') {
+            if (tournament.provider === 'INTERNAL') {
+                fetchInternalMatches();
 
-            // Real-time subscription
-            const channel = supabase.channel(`public-matches-${tournament.id}`)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_matches', filter: `tournament_id=eq.${tournament.id}` }, () => {
-                    fetchMatches();
-                })
-                .subscribe();
-            
-            return () => { supabase.removeChannel(channel); };
+                const channel = supabaseClient.channel(`public_bracket_${tournament.id}`)
+                    .on('broadcast', { event: 'match-update' }, () => fetchInternalMatches(true))
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_matches', filter: `tournament_id=eq.${tournament.id}` }, () => fetchInternalMatches(true))
+                    .subscribe();
+
+                channelRef.current = channel;
+
+                return () => {
+                    supabaseClient.removeChannel(channel);
+                    channelRef.current = null;
+                };
+            } else {
+                setLoadingBracket(false); // Challonge uses iframe
+            }
         }
-    }, [tournament.id, tournament.provider, activeTab]);
+    }, [activeTab, tournament.id, tournament.provider]);
 
     const getStatusText = (status: string) => {
         switch (status) {
@@ -92,22 +114,28 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                     <button 
                         onClick={() => setActiveTab('players')}
                         className={cn(
-                            "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative",
+                            "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
                             activeTab === 'players' ? "text-primary" : "text-muted-foreground hover:text-white"
                         )}
                     >
                         {t('public.players')}
                         {activeTab === 'players' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />}
                     </button>
-                    {(tournament.status === 'STARTED' || tournament.status === 'COMPLETED') && tournament.provider === 'INTERNAL' && (
+                    {(tournament.status === 'STARTED' || tournament.status === 'COMPLETED') && (
                         <button 
                             onClick={() => setActiveTab('bracket')}
                             className={cn(
-                                "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative",
-                                activeTab === 'bracket' ? "text-primary" : "text-muted-foreground hover:text-white"
+                                "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
+                                activeTab === 'bracket' ? "text-primary" : tournament.status === 'STARTED' ? "text-white drop-shadow-[0_0_5px_rgba(var(--primary-rgb),0.8)]" : "text-muted-foreground hover:text-white"
                             )}
                         >
-                            Bracket
+                            {tournament.status === 'STARTED' && activeTab !== 'bracket' && (
+                                <span className="relative flex h-2 w-2 mr-0.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                </span>
+                            )}
+                            {t('admin.menu.bracket' as any) || 'Live Bracket'}
                             {activeTab === 'bracket' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />}
                         </button>
                     )}
@@ -212,14 +240,41 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         </div>
                     </>
                 ) : (
-                    <div className="space-y-6">
-                        <div className="flex items-center justify-between px-2">
-                             <h2 className="font-black text-sm uppercase italic tracking-[0.2em] text-muted-foreground/80 flex items-center gap-2">
-                                <div className="h-1 w-8 bg-primary/50" />
-                                Tournament Bracket
-                            </h2>
-                        </div>
-                        <InternalBracket matches={internalMatches} />
+                    <div className="flex-1 min-h-[60vh] bg-secondary/30 rounded-3xl border border-white/5 overflow-hidden shadow-2xl relative">
+                        {loadingBracket ? (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                <p className="font-medium animate-pulse text-muted-foreground">{t('public.status.started') || 'Loading...'}</p>
+                            </div>
+                        ) : tournament.provider === 'INTERNAL' ? (
+                            <div className="absolute inset-0 overflow-auto p-6 custom-scrollbar">
+                                {matches.length > 0 ? (
+                                    <InternalBracket matches={matches} provider={tournament.provider} />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                                        <MonitorPlay className="w-12 h-12 mb-4 opacity-50" />
+                                        <p>{t('admin.bracket.not_generated' as any) || 'Bracket has not been generated yet.'}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="absolute inset-0 bg-white">
+                                {tournament.challonge_url ? (
+                                    <iframe
+                                        src={`https://challonge.com/${tournament.challonge_url.split('/').pop()}/module`}
+                                        width="100%"
+                                        height="100%"
+                                        frameBorder="0"
+                                        scrolling="auto"
+                                    />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-black">
+                                        <Trophy className="w-12 h-12 mb-4 opacity-50" />
+                                        <p>Challonge URL is unavailable.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
