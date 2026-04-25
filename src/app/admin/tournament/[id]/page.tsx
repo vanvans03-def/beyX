@@ -175,6 +175,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [showPlayerCombo, setShowPlayerCombo] = useState(true);
     // Replace modal state with tooltip state
     const [hoveredCombo, setHoveredCombo] = useState<{ x: number, y: number, data: Registration, deckIndex: number } | null>(null);
+    const [sharingSession, setSharingSession] = useState<Registration | null>(null);
 
     // Toggle tooltip logic
     const handleShowCombo = (e: React.MouseEvent, reg: Registration) => {
@@ -2934,6 +2935,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         loading={loading}
                         searchQuery={searchQuery}
                         onDelete={handleDelete}
+                        onEditSession={setSharingSession}
                         tournamentType={tournament?.Type}
                         sameDeviceConflicts={isListShuffled ? sameDeviceConflicts : []}
                         swapSelection={isSwapMode ? swapSelection : []}
@@ -2952,6 +2954,41 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         onConfirm={modalConfig.onConfirm}
                         confirmText={modalConfig.confirmText || (modalConfig.variant === 'destructive' ? t('gen.delete') : 'OK')}
                     />
+
+                    {/* SESSION TRANSFER MODAL */}
+                    <Modal
+                        isOpen={!!sharingSession}
+                        onClose={() => setSharingSession(null)}
+                        title="Edit Session (QR Code)"
+                        description={`Scan to transfer ${sharingSession?.PlayerName}'s session to a new device.`}
+                        type="custom"
+                    >
+                        <div className="flex flex-col items-center gap-6 p-4">
+                            <div className="bg-white p-6 rounded-2xl shadow-xl">
+                                {sharingSession && (
+                                    <QRCodeSVG
+                                        value={`${origin || ''}/register/${id}?editToken=${sharingSession.DeviceUUID}`}
+                                        size={256}
+                                        level="H"
+                                    />
+                                )}
+                            </div>
+                            <div className="text-center space-y-2">
+                                <p className="text-sm font-medium text-foreground">
+                                    {sharingSession?.PlayerName}
+                                </p>
+                                <p className="text-xs text-muted-foreground break-all max-w-[250px] font-mono">
+                                    {sharingSession?.DeviceUUID}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setSharingSession(null)}
+                                className="w-full py-2 bg-secondary hover:bg-secondary/80 rounded-lg font-bold transition-all text-foreground"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </Modal>
 
                     {/* IMAGE PREVIEW MODAL */}
                     <Modal

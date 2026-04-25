@@ -105,7 +105,8 @@ export async function POST(request: Request) {
             mode,
             mainBeys,
             totalPoints,
-            tournamentId
+            tournamentId,
+            transferFrom
         } = body;
 
         if (!tournamentId) throw new Error("Missing Tournament ID");
@@ -127,17 +128,24 @@ export async function POST(request: Request) {
         }
 
         if (tournament.status === 'STARTED') {
-            // Check if this player already exists for THIS device
+            // Check if this player already exists for THIS device OR transferFrom
             const { data: existing } = await supabaseAdmin
                 .from('registrations')
-                .select('id')
+                .select('id, device_uuid')
                 .eq('tournament_id', tournamentId)
-                .eq('device_uuid', deviceUUID)
                 .ilike('player_name', playerName.trim())
                 .maybeSingle();
 
             if (!existing) {
                 return NextResponse.json({ success: false, message: "ไม่สามารถเพิ่มผู้เล่นใหม่ได้ เนื่องจากเริ่มการแข่งแล้ว" }, { status: 400 });
+            }
+
+            // Verify authorization
+            const isAuthorized = existing.device_uuid === deviceUUID || 
+                               (transferFrom && existing.device_uuid === transferFrom);
+            
+            if (!isAuthorized) {
+                return NextResponse.json({ success: false, message: "Player already registered by another device." }, { status: 403 });
             }
         }
 
@@ -146,7 +154,8 @@ export async function POST(request: Request) {
             player_name: playerName.trim(),
             device_uuid: deviceUUID,
             mode: mode,
-            main_deck: [mainBeys[0], mainBeys[1], mainBeys[2]]
+            main_deck: [mainBeys[0], mainBeys[1], mainBeys[2]],
+            transferFrom
         };
 
         // repository.upsertRegistration handles update vs insert
