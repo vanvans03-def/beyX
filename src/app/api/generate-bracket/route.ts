@@ -43,7 +43,22 @@ export async function POST(request: Request) {
             if (matches.length > 0) {
                 const { error } = await supabase
                     .from('internal_matches')
-                    .insert(matches.map(m => ({ ...m })));
+                    .insert(matches.map(m => ({
+                        id: m.id,
+                        tournament_id: m.tournament_id,
+                        player1_id: m.player1_id,
+                        player2_id: m.player2_id,
+                        winner_id: m.winner_id,
+                        state: m.state,
+                        scores_csv: m.scores_csv,
+                        round: m.round,
+                        player1_prereq_match_id: m.player1_prereq_match_id,
+                        player2_prereq_match_id: m.player2_prereq_match_id,
+                        loser_to_match_id: m.loser_to_match_id,
+                        is_grand_final: m.is_grand_final,
+                        is_reset_match: m.is_reset_match,
+                        suggested_play_order: m.suggested_play_order,
+                    })));
 
                 if (error) {
                     console.error("Failed to save internal matches:", error);

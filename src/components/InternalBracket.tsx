@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { ZoomIn, ZoomOut, RefreshCw, Maximize2 } from 'lucide-react';
 
@@ -43,12 +43,13 @@ function cardTopY(slotIdx: number, roundIdx: number, UNIT: number): number {
 }
 
 // ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, t }: {
+function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, numMap, t }: {
     match: InternalMatch;
     onMatchClick?: (m: InternalMatch) => void;
     onReportWin?: (m: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
     matchNum?: number;
     loserOfNums?: [number | undefined, number | undefined];
+    numMap?: Map<string, number>;
     t: any;
 }) {
     const isOpen = match.state?.toUpperCase() === 'OPEN';
@@ -63,7 +64,7 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, t 
     if (isBye) return null;
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none', userSelect: 'none' }}>
             {matchNum !== undefined && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', minWidth: 18, textAlign: 'right', flexShrink: 0 }}>
                     {matchNum}
@@ -100,7 +101,15 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, t 
                     }}
                 >
                     <span style={{ fontSize: 13, color: p1Won ? '#10b981' : p2Won ? '#71717a' : '#e4e4e7', fontWeight: p1Won ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 144 }}>
-                        {p1 ? p1 : <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>{loserOfNums?.[0] !== undefined ? t('bracket.loser_of' as any, { n: loserOfNums[0] }) : (match.player1_prereq_match_id ? '' : 'TBD')}</em>}
+                        {p1 ? p1 : (
+                            <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>
+                                {loserOfNums?.[0] !== undefined 
+                                    ? t('bracket.loser_of' as any, { n: loserOfNums[0] }) 
+                                    : (match.player1_prereq_match_id && numMap?.get(match.player1_prereq_match_id) !== undefined
+                                        ? t('bracket.winner_of' as any, { n: numMap.get(match.player1_prereq_match_id) })
+                                        : 'TBD')}
+                            </em>
+                        )}
                     </span>
                     {isComplete && <span style={{ fontSize: 13, fontWeight: 700, color: p1Won ? '#10b981' : '#71717a', minWidth: 18, textAlign: 'right' }}>{scores[0] ?? 0}</span>}
                 </div>
@@ -120,7 +129,15 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, t 
                     }}
                 >
                     <span style={{ fontSize: 13, color: p2Won ? '#10b981' : p1Won ? '#71717a' : '#e4e4e7', fontWeight: p2Won ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 144 }}>
-                        {p2 ? p2 : <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>{loserOfNums?.[1] !== undefined ? t('bracket.loser_of' as any, { n: loserOfNums[1] }) : (match.player2_prereq_match_id ? '' : 'TBD')}</em>}
+                        {p2 ? p2 : (
+                            <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>
+                                {loserOfNums?.[1] !== undefined 
+                                    ? t('bracket.loser_of' as any, { n: loserOfNums[1] }) 
+                                    : (match.player2_prereq_match_id && numMap?.get(match.player2_prereq_match_id) !== undefined
+                                        ? t('bracket.winner_of' as any, { n: numMap.get(match.player2_prereq_match_id) })
+                                        : 'TBD')}
+                            </em>
+                        )}
                     </span>
                     {isComplete && <span style={{ fontSize: 13, fontWeight: 700, color: p2Won ? '#10b981' : '#71717a', minWidth: 18, textAlign: 'right' }}>{scores[1] ?? 0}</span>}
                 </div>
@@ -184,11 +201,11 @@ function BracketSection({
                                         !(pm.state?.toUpperCase() === 'COMPLETE' && (!pm.player1_id || !pm.player2_id))
                                     );
 
-                                    const f1Hidden = f1 && prevRound.isQualify && f1.scores_csv?.includes('BYE');
-                                    const f2Hidden = f2 && prevRound.isQualify && f2.scores_csv?.includes('BYE');
+                                    const f1Hidden = f1 && (f1.scores_csv?.includes('BYE') || !yMap.has(f1.id));
+                                    const f2Hidden = f2 && (f2.scores_csv?.includes('BYE') || !yMap.has(f2.id));
 
-                                    const f1Y = f1 && !f1Hidden ? (yMap.get(f1.id) ?? 0) : null;
-                                    const f2Y = f2 && !f2Hidden ? (yMap.get(f2.id) ?? 0) : null;
+                                    const f1Y = f1 && !f1Hidden ? (yMap.get(f1.id) ?? null) : null;
+                                    const f2Y = f2 && !f2Hidden ? (yMap.get(f2.id) ?? null) : null;
 
                                     // loser feeders Y positions
                                     const loserFeederYs = loserFeeders
@@ -247,6 +264,7 @@ function BracketSection({
                                                 onReportWin={onReportWin}
                                                 matchNum={num}
                                                 loserOfNums={loserOfNums}
+                                                numMap={numMap}
                                                 t={t}
                                             />
                                         </div>
@@ -264,7 +282,188 @@ function BracketSection({
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }) => {
     const { t } = useTranslation();
-    const [scale, setScale] = useState(1.0);
+    
+    const containerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
+
+    const [scale, setScale] = useState(0.85);
+    const [isDragging, setIsDragging] = useState(false);
+
+    const currentPosition = useRef({ x: 40, y: 40 });
+    const dragStart = useRef({ x: 0, y: 0 });
+    const isPointerDown = useRef(false);
+
+    const initialTouchDistance = useRef<number | null>(null);
+    const initialScale = useRef<number>(1.0);
+
+    const updateTransform = (x: number, y: number, currentScale: number) => {
+        if (contentRef.current) {
+            contentRef.current.style.transform = `translate(${x}px, ${y}px) scale(${currentScale})`;
+        }
+    };
+
+    const clampPosition = (x: number, y: number, currentScale: number) => {
+        if (!containerRef.current || !contentRef.current) return { x, y };
+
+        const viewportW = containerRef.current.clientWidth;
+        const viewportH = containerRef.current.clientHeight;
+
+        const contentW = contentRef.current.scrollWidth * currentScale;
+        const contentH = contentRef.current.scrollHeight * currentScale;
+
+        const padX = 80;
+        const padY = 80;
+
+        const minX = viewportW - contentW - padX;
+        const maxX = padX;
+        const minY = viewportH - contentH - padY;
+        const maxY = padY;
+
+        const clampedX = Math.max(minX, Math.min(maxX, x));
+        const clampedY = Math.max(minY, Math.min(maxY, y));
+
+        return { x: clampedX, y: clampedY };
+    };
+
+    const resetToLeftFocus = () => {
+        const defaultScale = 0.85;
+        setScale(defaultScale);
+
+        if (containerRef.current && contentRef.current) {
+            const viewportH = containerRef.current.clientHeight;
+            const contentH = contentRef.current.scrollHeight * defaultScale;
+
+            const y = contentH < viewportH ? (viewportH - contentH) / 2 : 40;
+            const x = 40;
+
+            currentPosition.current = { x, y };
+            updateTransform(x, y, defaultScale);
+        } else {
+            currentPosition.current = { x: 40, y: 40 };
+            updateTransform(40, 40, defaultScale);
+        }
+    };
+
+    const prevMatchIdsKeyRef = useRef('');
+
+    useEffect(() => {
+        if (matches && matches.length > 0) {
+            const currentKey = matches.map(m => m.id).join(',');
+            if (currentKey !== prevMatchIdsKeyRef.current) {
+                prevMatchIdsKeyRef.current = currentKey;
+                const timer = setTimeout(() => {
+                    resetToLeftFocus();
+                }, 100);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [matches]);
+
+    useEffect(() => {
+        const handleResize = () => {
+            const clamped = clampPosition(currentPosition.current.x, currentPosition.current.y, scale);
+            currentPosition.current = clamped;
+            updateTransform(clamped.x, clamped.y, scale);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [scale]);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (e.button !== 0) return;
+        isPointerDown.current = true;
+        setIsDragging(true);
+        dragStart.current = {
+            x: e.clientX - currentPosition.current.x,
+            y: e.clientY - currentPosition.current.y
+        };
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (!isPointerDown.current) return;
+        
+        const rawX = e.clientX - dragStart.current.x;
+        const rawY = e.clientY - dragStart.current.y;
+        
+        const clamped = clampPosition(rawX, rawY, scale);
+        currentPosition.current = clamped;
+        updateTransform(clamped.x, clamped.y, scale);
+    };
+
+    const handleMouseUp = () => {
+        isPointerDown.current = false;
+        setIsDragging(false);
+    };
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 1) {
+            isPointerDown.current = true;
+            setIsDragging(true);
+            const touch = e.touches[0];
+            dragStart.current = {
+                x: touch.clientX - currentPosition.current.x,
+                y: touch.clientY - currentPosition.current.y
+            };
+            initialTouchDistance.current = null;
+        } else if (e.touches.length === 2) {
+            isPointerDown.current = false;
+            setIsDragging(false);
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const dx = t1.clientX - t2.clientX;
+            const dy = t1.clientY - t2.clientY;
+            initialTouchDistance.current = Math.sqrt(dx * dx + dy * dy);
+            initialScale.current = scale;
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 1 && isPointerDown.current) {
+            const touch = e.touches[0];
+            const rawX = touch.clientX - dragStart.current.x;
+            const rawY = touch.clientY - dragStart.current.y;
+            
+            const clamped = clampPosition(rawX, rawY, scale);
+            currentPosition.current = clamped;
+            updateTransform(clamped.x, clamped.y, scale);
+        } else if (e.touches.length === 2 && initialTouchDistance.current !== null) {
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const dx = t1.clientX - t2.clientX;
+            const dy = t1.clientY - t2.clientY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            const factor = distance / initialTouchDistance.current;
+            const newScale = Math.max(0.15, Math.min(2.0, initialScale.current * factor));
+            
+            const pX = (t1.clientX + t2.clientX) / 2;
+            const pY = (t1.clientY + t2.clientY) / 2;
+
+            if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const localCenterX = pX - rect.left;
+                const localCenterY = pY - rect.top;
+
+                const dxZoom = localCenterX - currentPosition.current.x;
+                const dyZoom = localCenterY - currentPosition.current.y;
+                const ratio = newScale / scale;
+
+                const rawX = localCenterX - dxZoom * ratio;
+                const rawY = localCenterY - dyZoom * ratio;
+
+                const clamped = clampPosition(rawX, rawY, newScale);
+                currentPosition.current = clamped;
+                setScale(newScale);
+                updateTransform(clamped.x, clamped.y, newScale);
+            }
+        }
+    };
+
+    const handleTouchEnd = () => {
+        isPointerDown.current = false;
+        setIsDragging(false);
+        initialTouchDistance.current = null;
+    };
 
     const { winnersRounds = [], losersRounds = [], slotMap = new Map(), UNIT = UNIT_BASE, numMap = new Map(), yMap = new Map() } = useMemo(() => {
 
@@ -444,8 +643,17 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
         const winnersRounds = wGroups.map((group, gi) => {
             const isQualify = gi === 0 && r1HasByes;
             const isGF = group.some(m => m.is_grand_final);
-            const label = isGF ? t('bracket.grand_finals' as any) : (isQualify ? t('bracket.qualify' as any) : t('admin.matches.round' as any, { n: r1HasByes ? gi : gi + 1 }));
+            const isReset = group.some(m => m.is_reset_match);
+            const label = isGF ? t('bracket.grand_finals' as any) :
+                (isReset ? `${t('bracket.grand_finals' as any)} (Reset)` :
+                (isQualify ? t('bracket.qualify' as any) : t('admin.matches.round' as any, { n: r1HasByes ? gi : gi + 1 })));
             return { label, matches: group, isQualify };
+        }).filter(round => {
+            // Filter out rounds with no visible matches
+            return round.matches.some(m => {
+                const isBye = m.scores_csv?.includes('BYE');
+                return !isBye;
+            });
         });
 
         let currentLabelNum = 1;
@@ -489,6 +697,16 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
             group.forEach(m => {
                 const isBye = m.scores_csv?.includes('BYE');
                 if (isBye) return;
+
+                if (m.is_reset_match) {
+                    // Reset match always aligns vertically with the Grand Final match!
+                    const gfMatch = matches.find(xm => xm.is_grand_final);
+                    const gfY = gfMatch ? yMap.get(gfMatch.id) : undefined;
+                    if (gfY !== undefined) {
+                        yMap.set(m.id, gfY);
+                        return;
+                    }
+                }
 
                 const slot = slotMap.get(m.id) ?? 0;
                 yMap.set(m.id, cardCenterY(slot, ri, UNIT_BASE));
@@ -545,70 +763,127 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
             flexDirection: 'column',
             overflow: 'hidden'
         }}>
-            {/* Sticky Zoom Controls */}
+            {/* Sticky Zoom Controls Container */}
             <div style={{
                 position: 'absolute',
                 bottom: 20,
                 right: 20,
                 zIndex: 100,
                 display: 'flex',
+                flexDirection: 'column',
                 gap: 8,
-                backgroundColor: 'rgba(28, 28, 30, 0.8)',
+                backgroundColor: 'rgba(28, 28, 30, 0.85)',
                 backdropFilter: 'blur(10px)',
                 padding: '8px',
-                borderRadius: '12px',
+                borderRadius: '16px',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)'
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
             }}>
-                <button
-                    onClick={() => setScale(prev => Math.max(0.2, prev - 0.05))}
-                    style={{ p: 8, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#e4e4e7', cursor: 'pointer', display: 'flex' }}
-                    title={t('bracket.zoom_out' as any)}
+                {/* Highlighted Mobile Scroll Escape Hatch */}
+                <div 
+                    style={{
+                        height: '28px',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                        border: '1px dashed rgba(59, 130, 246, 0.4)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        padding: '0 10px',
+                        cursor: 'ns-resize',
+                        touchAction: 'pan-y',
+                        userSelect: 'none'
+                    }}
+                    onTouchStart={(e) => {
+                        e.stopPropagation();
+                    }}
+                    onTouchMove={(e) => {
+                        e.stopPropagation();
+                    }}
                 >
-                    <ZoomOut size={18} />
-                </button>
-                <div style={{ width: 1, height: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', alignSelf: 'center' }} />
-                <button
-                    onClick={() => setScale(1.0)}
-                    style={{ fontSize: 11, fontWeight: 700, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#a1a1aa', cursor: 'pointer', padding: '0 4px' }}
-                >
-                    {Math.round(scale * 100)}%
-                </button>
-                <div style={{ width: 1, height: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', alignSelf: 'center' }} />
-                <button
-                    onClick={() => setScale(prev => Math.min(2.0, prev + 0.05))}
-                    style={{ p: 8, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#e4e4e7', cursor: 'pointer', display: 'flex' }}
-                    title={t('bracket.zoom_in' as any)}
-                >
-                    <ZoomIn size={18} />
-                </button>
-                <button
-                    onClick={() => setScale(1.0)}
-                    style={{ p: 8, borderRadius: 8, border: 'none', backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#e4e4e7', cursor: 'pointer', display: 'flex', marginLeft: 4 }}
-                    title={t('bracket.zoom_reset' as any)}
-                >
-                    <RefreshCw size={14} />
-                </button>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#60a5fa', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        ↕ เลื่อนหน้าจอ / SWIPE TO SCROLL PAGE
+                    </span>
+                </div>
+
+                {/* Zoom Controls Row */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                        onClick={() => {
+                            const newScale = Math.max(0.15, scale - 0.05);
+                            setScale(newScale);
+                            const clamped = clampPosition(currentPosition.current.x, currentPosition.current.y, newScale);
+                            updateTransform(clamped.x, clamped.y, newScale);
+                        }}
+                        style={{ padding: 8, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#e4e4e7', cursor: 'pointer', display: 'flex' }}
+                        title={t('bracket.zoom_out' as any)}
+                    >
+                        <ZoomOut size={18} />
+                    </button>
+                    <div style={{ width: 1, height: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', alignSelf: 'center' }} />
+                    <button
+                        onClick={resetToLeftFocus}
+                        style={{ fontSize: 11, fontWeight: 700, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#a1a1aa', cursor: 'pointer', padding: '0 4px' }}
+                    >
+                        {Math.round(scale * 100)}%
+                    </button>
+                    <div style={{ width: 1, height: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', alignSelf: 'center' }} />
+                    <button
+                        onClick={() => {
+                            const newScale = Math.min(2.0, scale + 0.05);
+                            setScale(newScale);
+                            const clamped = clampPosition(currentPosition.current.x, currentPosition.current.y, newScale);
+                            updateTransform(clamped.x, clamped.y, newScale);
+                        }}
+                        style={{ padding: 8, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#e4e4e7', cursor: 'pointer', display: 'flex' }}
+                        title={t('bracket.zoom_in' as any)}
+                    >
+                        <ZoomIn size={18} />
+                    </button>
+                    <button
+                        onClick={resetToLeftFocus}
+                        style={{ padding: 8, borderRadius: 8, border: 'none', backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#e4e4e7', cursor: 'pointer', display: 'flex', marginLeft: 4 }}
+                        title={t('bracket.zoom_reset' as any)}
+                    >
+                        <RefreshCw size={14} />
+                    </button>
+                </div>
             </div>
 
-            {/* Scrollable Container */}
-            <div style={{
-                flex: 1,
-                overflow: 'auto',
-                padding: '60px 40px',
-                textAlign: 'center',
-                scrollBehavior: 'smooth'
-            }}>
-                {/* Scalable Content wrapper that centers while allowing scroll to edges */}
-                <div style={{
-                    display: 'inline-block',
-                    transform: `scale(${scale})`,
-                    transformOrigin: 'top center',
-                    transition: 'transform 0.1s ease-out',
-                    textAlign: 'left', // Content inside stays left-aligned
-                    margin: '0 auto',
-                    minWidth: 'max-content'
-                }}>
+            {/* Grab-to-drag viewport container */}
+            <div
+                ref={containerRef}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                    flex: 1,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    cursor: isDragging ? 'grabbing' : 'grab',
+                    userSelect: 'none',
+                    touchAction: 'none'
+                }}
+            >
+                {/* Scalable & Pannable Content Canvas */}
+                <div
+                    ref={contentRef}
+                    style={{
+                        display: 'inline-block',
+                        position: 'absolute',
+                        transform: `translate(${currentPosition.current.x}px, ${currentPosition.current.y}px) scale(${scale})`,
+                        transformOrigin: 'top left',
+                        textAlign: 'left',
+                        minWidth: 'max-content',
+                        padding: '40px',
+                        willChange: 'transform'
+                    }}
+                >
                     {winnersRounds.length > 0 && (
                         <div style={{ marginBottom: isDoubleElim ? 80 : 0 }}>
                             {isDoubleElim && <SectionDivider>{t('admin.matches.winner_bracket' as any)}</SectionDivider>}

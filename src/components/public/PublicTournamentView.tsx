@@ -142,7 +142,12 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                 </div>
             </div>
 
-            <main className="relative z-10 max-w-4xl mx-auto px-6 pt-8 space-y-8">
+            <main className={cn(
+                "relative z-10 mx-auto transition-all duration-300",
+                activeTab === 'bracket' 
+                    ? "w-full max-w-none px-0 pt-0" 
+                    : "max-w-4xl px-6 pt-8 space-y-8"
+            )}>
                 {activeTab === 'players' ? (
                     <>
                         {/* Stats / Status */}
@@ -240,14 +245,14 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 min-h-[60vh] bg-secondary/30 rounded-3xl border border-white/5 overflow-hidden shadow-2xl relative">
+                    <div className="w-full h-[calc(100dvh-130px)] min-h-[500px] bg-secondary/10 border-t border-b border-white/5 relative overflow-hidden shadow-inner">
                         {loadingBracket ? (
                             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
                                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                                 <p className="font-medium animate-pulse text-muted-foreground">{t('public.status.started') || 'Loading...'}</p>
                             </div>
                         ) : tournament.provider === 'INTERNAL' ? (
-                            <div className="absolute inset-0 overflow-auto p-6 custom-scrollbar">
+                            <div className="absolute inset-0">
                                 {matches.length > 0 ? (
                                     <InternalBracket matches={matches} provider={tournament.provider} />
                                 ) : (
@@ -279,12 +284,14 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                 )}
 
                 {/* Footer Info */}
-                <div className="text-center pt-10 pb-4">
-                    <div className="h-px w-10 bg-white/10 mx-auto mb-6" />
-                    <p className="text-[10px] uppercase font-black italic tracking-[0.4em] text-muted-foreground/30">
-                        {t('public.powered_by')}
-                    </p>
-                </div>
+                {activeTab === 'players' && (
+                    <div className="text-center pt-10 pb-4">
+                        <div className="h-px w-10 bg-white/10 mx-auto mb-6" />
+                        <p className="text-[10px] uppercase font-black italic tracking-[0.4em] text-muted-foreground/30">
+                            {t('public.powered_by')}
+                        </p>
+                    </div>
+                )}
             </main>
         </div>
     );

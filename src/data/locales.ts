@@ -208,6 +208,7 @@ export const locales = {
         "bracket.zoom_out": "ซูมออก",
         "bracket.zoom_reset": "รีเซ็ต",
         "bracket.loser_of": "ผู้แพ้จากแมตช์ #{n}",
+        "bracket.winner_of": "ผู้ชนะจากแมตช์ #{n}",
 
         // General
         "gen.select": "เลือก...",
@@ -425,6 +426,7 @@ export const locales = {
         "bracket.zoom_out": "Zoom Out",
         "bracket.zoom_reset": "Reset",
         "bracket.loser_of": "Loser of Match #{n}",
+        "bracket.winner_of": "Winner of Match #{n}",
 
         // General
         "gen.select": "Select...",

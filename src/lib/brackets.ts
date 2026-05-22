@@ -22,6 +22,8 @@ export interface InternalMatch {
     loser_to_match_id?: string | null;
     is_reset_match?: boolean;
     suggested_play_order?: number;
+    player1_loser_feeder_id?: string | null;
+    player2_loser_feeder_id?: string | null;
     /** @internal tagged during generation, persisted to DB for LB builder identification */
     is_seeding_bye?: boolean;
 }
@@ -114,8 +116,23 @@ export function generateSingleElimination(
     if (n < 2) return [];
     const matches = buildWinnersBracket(tournamentId, participants);
     propagateWinners(matches);
+
+    const sortMatchesForOrder = (list: InternalMatch[]) => {
+        return [...list].sort((a, b) => {
+            const aBye = a.scores_csv?.includes('BYE') ? 1 : 0;
+            const bBye = b.scores_csv?.includes('BYE') ? 1 : 0;
+            if (aBye !== bBye) return aBye - bBye;
+
+            const aReady = (a.player1_id !== null && a.player2_id !== null) ? 0 : 1;
+            const bReady = (b.player1_id !== null && b.player2_id !== null) ? 0 : 1;
+            if (aReady !== bReady) return aReady - bReady;
+
+            return 0;
+        });
+    };
+
     let playOrderCtr = 1, byeCtr = 9999;
-    matches.forEach(m => {
+    sortMatchesForOrder(matches).forEach(m => {
         m.suggested_play_order = m.scores_csv?.includes('BYE') ? byeCtr++ : playOrderCtr++;
     });
     return matches;
@@ -163,9 +180,11 @@ export function generateDoubleElimination(
 
         for (let i = 0; i < numLBR1; i++) {
             const m = makeLB(1, null, null);
-            // Cross-pair: top[i] loser vs bottom[mirror] loser
-            allR1[i].loser_to_match_id = m.id;
-            allR1[allR1.length - 1 - i].loser_to_match_id = m.id;
+            // Adjacent crossover: allR1[i*2] vs allR1[i*2+1] (Challonge-style!)
+            allR1[i * 2].loser_to_match_id = m.id;
+            allR1[i * 2 + 1].loser_to_match_id = m.id;
+            m.player1_loser_feeder_id = allR1[i * 2].id;
+            m.player2_loser_feeder_id = allR1[i * 2 + 1].id;
             slots.push(m);
         }
         lbByRound.push(slots);
@@ -189,6 +208,7 @@ export function generateDoubleElimination(
                 const m = makeLB(lr, prevLBRound[i].id, null);
                 if (i < wbReversed.length) {
                     wbReversed[i].loser_to_match_id = m.id;
+                    m.player2_loser_feeder_id = wbReversed[i].id;
                 }
                 cur.push(m);
             }
@@ -227,138 +247,41 @@ export function generateDoubleElimination(
     const allMatches = [...wm, ...lm, grandFinal, grandFinalReset];
     propagateWinners(allMatches);
 
-    // ── 5.5 Mark guaranteed auto-advance BYEs in LB ──────────────────────────
-    console.log('=== BRACKETS.TS LB DEBUG ===');
-    console.log('nWR:', nWR, 'totalLB:', totalLB, 'bracketSize:', bracketSize);
-    
-    // Log LB structure before BYE pass
-    lbByRound.forEach((group, gi) => {
-        console.log(`LB R${gi + 1} (round=${-(gi + 1)}): ${group.length} matches`);
-        group.forEach((m, i) => {
-            const loserFeeders = allMatches.filter(x => x.loser_to_match_id === m.id);
-            const loserFeederInfo = loserFeeders.map(lf => 
-                `${lf.round > 0 ? 'WB' : 'LB'}R${Math.abs(lf.round)}(bye=${lf.is_seeding_bye}, csv=${lf.scores_csv?.slice(0, 3)})`
-            );
-            console.log(`  [${i}] id=${m.id.slice(0, 8)} p1prereq=${m.player1_prereq_match_id?.slice(0, 8)} p2prereq=${m.player2_prereq_match_id?.slice(0, 8)} loserFeeders=[${loserFeederInfo}] state=${m.state} csv=${m.scores_csv}`);
-        });
-    });
-
-    let byePass = true;
-    let passNum = 0;
-    while (byePass) {
-        byePass = false;
-        passNum++;
-        for (const m of lm) {
-            if (m.scores_csv?.includes('BYE')) continue;
-
-            let liveFeeders = 0;
-            const details: string[] = [];
-
-            // Check prereq feeders
-            for (const pid of [m.player1_prereq_match_id, m.player2_prereq_match_id]) {
-                if (!pid) continue;
-                const p = allMatches.find(x => x.id === pid);
-                if (!p) continue;
-                const isDead = p.state === 'COMPLETE' && p.scores_csv?.includes('BYE') && !p.winner_id;
-                if (!isDead) {
-                    liveFeeders++;
-                    details.push(`prereq ${pid.slice(0, 8)} ALIVE (state=${p.state},csv=${p.scores_csv?.slice(0, 3)},winner=${p.winner_id?.slice(0, 8)})`);
-                } else {
-                    details.push(`prereq ${pid.slice(0, 8)} DEAD`);
-                }
-            }
-
-            // Check loser feeders
-            for (const lf of allMatches.filter(x => x.loser_to_match_id === m.id)) {
-                const hasNoLoser = lf.is_seeding_bye ||
-                    (lf.scores_csv?.includes('BYE') && (!lf.player1_id || !lf.player2_id));
-                if (!hasNoLoser) {
-                    liveFeeders++;
-                    details.push(`loser ${lf.id.slice(0, 8)} HAS_LOSER (bye=${lf.is_seeding_bye},csv=${lf.scores_csv?.slice(0, 3)})`);
-                } else {
-                    details.push(`loser ${lf.id.slice(0, 8)} NO_LOSER`);
-                }
-            }
-
-            if (liveFeeders <= 1) {
-                console.log(`  Pass${passNum}: MARKING BYE round=${m.round} id=${m.id.slice(0, 8)} liveFeeders=${liveFeeders} [${details.join(', ')}]`);
-                m.scores_csv = 'BYE';
-                m.is_seeding_bye = true;
-                byePass = true;
-            }
-        }
-    }
-
-    // ── 5.6 Bypass auto-advance BYEs (Prune Graph) ───────────────────────────
-    // If a match is a BYE, it's just a passthrough. Downstream matches should
-    // point DIRECTLY to the real feeder (WB loser or earlier LB survivor) 
-    // so the UI labels and lines render correctly.
-    let bypassMutated = true;
-    while (bypassMutated) {
-        bypassMutated = false;
-        lm.forEach(child => {
-            const keys = ['player1_prereq_match_id', 'player2_prereq_match_id'] as const;
-            keys.forEach(key => {
-                const prereqId = child[key];
-                if (!prereqId) return;
-
-                const prereq = allMatches.find(x => x.id === prereqId);
-                if (prereq && prereq.scores_csv?.includes('BYE')) {
-                    // Try to find the real live feeder for this BYE match
-                    const wbFeeder = allMatches.find(
-                        x => x.loser_to_match_id === prereq.id &&
-                            !x.is_seeding_bye &&
-                            !(x.state === 'COMPLETE' && x.scores_csv?.includes('BYE') && !x.winner_id)
-                    );
-                    
-                    const lbP1Feeder = prereq.player1_prereq_match_id ? allMatches.find(
-                        x => x.id === prereq.player1_prereq_match_id && 
-                        !(x.state === 'COMPLETE' && x.scores_csv?.includes('BYE') && !x.winner_id)
-                    ) : null;
-                    
-                    const lbP2Feeder = prereq.player2_prereq_match_id ? allMatches.find(
-                        x => x.id === prereq.player2_prereq_match_id && 
-                        !(x.state === 'COMPLETE' && x.scores_csv?.includes('BYE') && !x.winner_id)
-                    ) : null;
-
-                    if (wbFeeder) {
-                        wbFeeder.loser_to_match_id = child.id;
-                        child[key] = null;
-                        bypassMutated = true;
-                    } else if (lbP1Feeder) {
-                        child[key] = lbP1Feeder.id;
-                        bypassMutated = true;
-                    } else if (lbP2Feeder) {
-                        child[key] = lbP2Feeder.id;
-                        bypassMutated = true;
-                    }
-                }
-            });
-        });
-    }
-    console.log('=== END BRACKETS.TS LB DEBUG ===');
-
     // ── 6. Phase-interleaved suggested_play_order ─────────────────────────────
+    const sortMatchesForOrder = (list: InternalMatch[]) => {
+        return [...list].sort((a, b) => {
+            const aBye = a.scores_csv?.includes('BYE') ? 1 : 0;
+            const bBye = b.scores_csv?.includes('BYE') ? 1 : 0;
+            if (aBye !== bBye) return aBye - bBye;
+
+            const aReady = (a.player1_id !== null && a.player2_id !== null) ? 0 : 1;
+            const bReady = (b.player1_id !== null && b.player2_id !== null) ? 0 : 1;
+            if (aReady !== bReady) return aReady - bReady;
+
+            return 0;
+        });
+    };
+
     let playOrderCtr = 1, byeCtr = 9999;
     const assignOrder = (m: InternalMatch) => {
         m.suggested_play_order = m.scores_csv?.includes('BYE') ? byeCtr++ : playOrderCtr++;
     };
 
     // Phase 1: WB R1
-    for (const m of (wbr.get(1) || [])) assignOrder(m);
+    sortMatchesForOrder(wbr.get(1) || []).forEach(assignOrder);
 
     // Phase 2 to nWR: Each phase assigns WB R(N), then LB R(2N-3) and LB R(2N-2)
     for (let wbRound = 2; wbRound <= nWR; wbRound++) {
-        for (const m of (wbr.get(wbRound) || [])) assignOrder(m);
+        sortMatchesForOrder(wbr.get(wbRound) || []).forEach(assignOrder);
         
         const lb1 = -(2 * wbRound - 3);
         const lb2 = -(2 * wbRound - 2);
 
         if (lb1 >= -totalLB) {
-            lm.filter(m => m.round === lb1).forEach(assignOrder);
+            sortMatchesForOrder(lm.filter(m => m.round === lb1)).forEach(assignOrder);
         }
         if (lb2 >= -totalLB) {
-            lm.filter(m => m.round === lb2).forEach(assignOrder);
+            sortMatchesForOrder(lm.filter(m => m.round === lb2)).forEach(assignOrder);
         }
     }
     assignOrder(grandFinal);
@@ -383,6 +306,22 @@ export function updateMatch(
 }
 
 export function propagateWinners(matches: InternalMatch[]) {
+    // ── Preprocessing: Reconstruct loser feeder IDs dynamically ──────────────
+    for (const match of matches) {
+        const feeders = matches.filter(f => f.loser_to_match_id === match.id);
+        if (feeders.length === 2) {
+            feeders.sort((a, b) => a.id.localeCompare(b.id));
+            match.player1_loser_feeder_id = feeders[0].id;
+            match.player2_loser_feeder_id = feeders[1].id;
+        } else if (feeders.length === 1) {
+            match.player2_loser_feeder_id = feeders[0].id;
+            match.player1_loser_feeder_id = null;
+        } else {
+            match.player1_loser_feeder_id = null;
+            match.player2_loser_feeder_id = null;
+        }
+    }
+
     let changed = true;
     while (changed) {
         changed = false;
@@ -390,7 +329,25 @@ export function propagateWinners(matches: InternalMatch[]) {
         // ── Phase A: propagate player IDs from all COMPLETE matches ──────────
         for (const match of matches) {
             if ((match.state || 'PENDING').toUpperCase() !== 'COMPLETE') continue;
-            if (!match.winner_id) continue;
+            
+            if (match.winner_id === null) {
+                // If a match is complete with a BYE and has no winner, it means both participants were BYEs.
+                // Propagate null to children.
+                const children = matches.filter(
+                    m => m.player1_prereq_match_id === match.id ||
+                        m.player2_prereq_match_id === match.id
+                );
+                for (const child of children) {
+                    if (child.is_reset_match) continue;
+                    const slot = child.player1_prereq_match_id === match.id
+                        ? 'player1_id' : 'player2_id';
+                    if (child[slot] !== null) {
+                        child[slot] = null;
+                        changed = true;
+                    }
+                }
+                continue;
+            }
 
             // Grand Final reset logic
             if (match.is_grand_final) {
@@ -420,7 +377,6 @@ export function propagateWinners(matches: InternalMatch[]) {
                     m.player2_prereq_match_id === match.id
             );
             for (const child of children) {
-                // Grand Final Reset match is populated specifically by the GF block above.
                 if (child.is_reset_match) continue;
                 
                 const slot = child.player1_prereq_match_id === match.id
@@ -437,13 +393,15 @@ export function propagateWinners(matches: InternalMatch[]) {
                     ? match.player2_id
                     : match.player1_id;
                 const target = matches.find(m => m.id === match.loser_to_match_id);
-                if (target && loserId) {
-                    if (!target.player1_id) {
-                        target.player1_id = loserId;
-                        changed = true;
-                    } else if (!target.player2_id && target.player1_id !== loserId) {
-                        target.player2_id = loserId;
-                        changed = true;
+                if (target) {
+                    if (target.player1_id !== loserId && target.player2_id !== loserId) {
+                        if (target.player1_id === null && !target.player1_prereq_match_id) {
+                            target.player1_id = loserId;
+                            changed = true;
+                        } else if (target.player2_id === null && !target.player2_prereq_match_id) {
+                            target.player2_id = loserId;
+                            changed = true;
+                        }
                     }
                 }
             }
@@ -452,12 +410,6 @@ export function propagateWinners(matches: InternalMatch[]) {
         // ── Phase B: open or BYE pending matches ─────────────────────────────
         for (const match of matches) {
             if ((match.state || 'PENDING').toUpperCase() !== 'PENDING') continue;
-
-            if (match.player1_id && match.player2_id) {
-                match.state = 'OPEN';
-                changed = true;
-                continue;
-            }
 
             const prereqFeeders = matches.filter(
                 m => m.id === match.player1_prereq_match_id ||
@@ -469,27 +421,87 @@ export function propagateWinners(matches: InternalMatch[]) {
             const allFeedersComplete = allFeeders.every(
                 f => (f.state || '').toUpperCase() === 'COMPLETE'
             );
+            const allFeedersPropagated = allFeeders.every(f => {
+                if ((f.state || '').toUpperCase() !== 'COMPLETE') return false;
+                if (f.winner_id === null) return true; // destined null
+                if (f.loser_to_match_id === match.id) {
+                    const loserId = f.player1_id === f.winner_id ? f.player2_id : f.player1_id;
+                    return match.player1_id === loserId || match.player2_id === loserId;
+                }
+                return match.player1_id === f.winner_id || match.player2_id === f.winner_id;
+            });
 
-            if (hasFeeders && allFeedersComplete) {
-                const soloPlayer = match.player1_id || match.player2_id;
-                if (soloPlayer && !(match.player1_id && match.player2_id)) {
-                    const loserFeedersSentPlayer = loserFeeders.every(f => {
-                        const loserId = f.player1_id === f.winner_id ? f.player2_id : f.player1_id;
-                        return loserId === match.player1_id || loserId === match.player2_id;
-                    });
-                    if (loserFeeders.length === 0 || loserFeedersSentPlayer) {
-                        match.winner_id = soloPlayer;
-                        match.state = 'COMPLETE';
-                        match.scores_csv = 'BYE';
-                        changed = true;
-                    }
-                } else if (!match.player1_id && !match.player2_id) {
-                    // All feeders complete but no players arrived (both feeders were BYEs)
+            if (hasFeeders && allFeedersComplete && allFeedersPropagated) {
+                const p1 = match.player1_id;
+                const p2 = match.player2_id;
+
+                if (p1 && p2) {
+                    match.state = 'OPEN';
+                    changed = true;
+                } else if (p1 && p2 === null) {
+                    match.winner_id = p1;
                     match.state = 'COMPLETE';
                     match.scores_csv = 'BYE';
+                    changed = true;
+                } else if (p2 && p1 === null) {
+                    match.winner_id = p2;
+                    match.state = 'COMPLETE';
+                    match.scores_csv = 'BYE';
+                    changed = true;
+                } else if (p1 === null && p2 === null) {
                     match.winner_id = null;
+                    match.state = 'COMPLETE';
+                    match.scores_csv = 'BYE';
                     changed = true;
                 }
+            }
+        }
+
+        // ── Phase C: recursive permanent BYE detection ───────────────────────
+        const isPrereqDestinedNull = (prereqId: string | null | undefined): boolean => {
+            if (!prereqId) return true;
+            const pm = matches.find(m => m.id === prereqId);
+            if (!pm) return true;
+            if ((pm.state || '').toUpperCase() === 'COMPLETE') {
+                return pm.winner_id === null;
+            }
+            const hasPendingLoserP1 = pm.player1_loser_feeder_id ? (matches.find(m => m.id === pm.player1_loser_feeder_id)?.state !== 'COMPLETE') : false;
+            const hasPendingLoserP2 = pm.player2_loser_feeder_id ? (matches.find(m => m.id === pm.player2_loser_feeder_id)?.state !== 'COMPLETE') : false;
+            
+            const p1Null = pm.player1_id === null && !hasPendingLoserP1 && isPrereqDestinedNull(pm.player1_prereq_match_id);
+            const p2Null = pm.player2_id === null && !hasPendingLoserP2 && isPrereqDestinedNull(pm.player2_prereq_match_id);
+            return p1Null && p2Null;
+        };
+
+        for (const match of matches) {
+            if (match.is_reset_match) continue;
+            if ((match.state || 'PENDING').toUpperCase() === 'COMPLETE') continue;
+            if (match.scores_csv?.includes('BYE')) continue;
+
+            const hasPendingLoserP1 = match.player1_loser_feeder_id ? (matches.find(m => m.id === match.player1_loser_feeder_id)?.state !== 'COMPLETE') : false;
+            const hasPendingLoserP2 = match.player2_loser_feeder_id ? (matches.find(m => m.id === match.player2_loser_feeder_id)?.state !== 'COMPLETE') : false;
+
+            const p1PermNull = match.player1_id === null && !hasPendingLoserP1 && isPrereqDestinedNull(match.player1_prereq_match_id);
+            const p2PermNull = match.player2_id === null && !hasPendingLoserP2 && isPrereqDestinedNull(match.player2_prereq_match_id);
+
+            if (p1PermNull || p2PermNull) {
+                match.scores_csv = 'BYE';
+                const p1 = match.player1_id;
+                const p2 = match.player2_id;
+                
+                if (p1 && p2 === null) {
+                    match.winner_id = p1;
+                    match.state = 'COMPLETE';
+                } else if (p2 && p1 === null) {
+                    match.winner_id = p2;
+                    match.state = 'COMPLETE';
+                } else if (p1 === null && p2 === null) {
+                    if (p1PermNull && p2PermNull) {
+                        match.winner_id = null;
+                        match.state = 'COMPLETE';
+                    }
+                }
+                changed = true;
             }
         }
     }
