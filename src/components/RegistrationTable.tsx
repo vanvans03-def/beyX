@@ -107,18 +107,27 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
         const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
         Object.keys(deviceCounts).forEach((uuid, i) => {
             deviceColors[uuid] = colors[i % colors.length];
-        // Filter first
-        const filtered = data.filter(r =>
-            r.player_name.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+        });
 
-        return filtered.map((row, filteredIdx) => {
+        // Filter first (support searching player name and main beys)
+        const filtered = data.filter(r => {
+            if (!searchQuery) return true;
+            const query = searchQuery.toLowerCase();
+            return (
+                r.player_name.toLowerCase().includes(query) ||
+                (r.main_bey1 && r.main_bey1.toLowerCase().includes(query)) ||
+                (r.main_bey2 && r.main_bey2.toLowerCase().includes(query)) ||
+                (r.main_bey3 && r.main_bey3.toLowerCase().includes(query))
+            );
+        });
+
+        return filtered.map((row) => {
             const validation = validateRow(row, tournamentType);
             const isMulti = (deviceCounts[row.device_uuid] || 0) > 1;
 
-            // Generate color for multi-device
-            let deviceColor = undefined;
-            if (isMulti) {
+            // Generate color for multi-device (use pre-calculated theme color, fallback to HSL)
+            let deviceColor = isMulti ? deviceColors[row.device_uuid] : undefined;
+            if (isMulti && !deviceColor) {
                 let hash = 0;
                 for (let i = 0; i < row.device_uuid.length; i++) hash = row.device_uuid.charCodeAt(i) + ((hash << 5) - hash);
                 const hue = Math.abs(hash % 360);
@@ -129,6 +138,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
             const originalIdx = data.indexOf(row);
             const isConflict = sameDeviceConflicts.includes(originalIdx);
             const isSwapSelected = swapSelection.includes(originalIdx);
+            const isSwapping = isSwapSelected;
 
             return {
                 ...row,
@@ -137,30 +147,10 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                 deviceColor,
                 isConflict,
                 isSwapSelected,
+                isSwapping,
                 originalIdx
             };
         });
-
-        return data
-            .map((r, i) => ({
-                ...r,
-                originalIdx: i,
-                validation: validateRow(r, tournamentType),
-                isMulti: deviceCounts[r.DeviceUUID] > 1,
-                deviceColor: deviceColors[r.DeviceUUID],
-                isConflict: sameDeviceConflicts.includes(i),
-                isSwapping: swapSelection.includes(i)
-            }))
-            .filter(r => {
-                if (!searchQuery) return true;
-                const query = searchQuery.toLowerCase();
-                return (
-                    r.PlayerName.toLowerCase().includes(query) ||
-                    r.Main_Bey1.toLowerCase().includes(query) ||
-                    r.Main_Bey2.toLowerCase().includes(query) ||
-                    r.Main_Bey3.toLowerCase().includes(query)
-                );
-            });
     }, [data, searchQuery, tournamentType, sameDeviceConflicts, swapSelection]);
 
     return (
@@ -177,7 +167,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 bg-black/40">
-                    {processedData.map((row) => (
+                    {processedData.map((row, i) => (
                         <tr
                             key={`${row.id}-${i}`}
                             className={`hover:bg-accent/5 transition-colors group ${row.isConflict ? 'bg-amber-500/10 border-l-2 border-l-amber-500' : ''} ${row.isSwapSelected ? 'bg-blue-500/15 ring-1 ring-blue-500/50' : ''} ${onSwapSelect ? 'cursor-pointer select-none' : ''}`}

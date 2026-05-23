@@ -38,8 +38,7 @@
   ],
   "exclude": [
     "node_modules",
-    "scratch"
+    "scratch",
+    "temp"
   ]
-}
-  "exclude": ["node_modules", "scratch", "temp"]
 }

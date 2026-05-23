@@ -121,15 +121,15 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         {t('public.players')}
                         {activeTab === 'players' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />}
                     </button>
-                    {(tournament.status === 'STARTED' || tournament.status === 'COMPLETED') && (
+                    {tournament.status !== 'OPEN' && (
                         <button 
                             onClick={() => setActiveTab('bracket')}
                             className={cn(
                                 "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
-                                activeTab === 'bracket' ? "text-primary" : tournament.status === 'STARTED' ? "text-white drop-shadow-[0_0_5px_rgba(var(--primary-rgb),0.8)]" : "text-muted-foreground hover:text-white"
+                                activeTab === 'bracket' ? "text-primary" : (tournament.status === 'CLOSED' || tournament.status === 'STARTED') ? "text-white drop-shadow-[0_0_5px_rgba(var(--primary-rgb),0.8)]" : "text-muted-foreground hover:text-white"
                             )}
                         >
-                            {tournament.status === 'STARTED' && activeTab !== 'bracket' && (
+                            {(tournament.status === 'CLOSED' || tournament.status === 'STARTED') && activeTab !== 'bracket' && (
                                 <span className="relative flex h-2 w-2 mr-0.5">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
@@ -166,10 +166,10 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                             <div className={cn(
                                 "border p-5 rounded-3xl flex flex-col justify-center backdrop-blur-md transition-all relative overflow-hidden",
                                 tournament.status === 'OPEN' ? "bg-emerald-500/5 border-emerald-500/10" :
-                                    tournament.status === 'STARTED' ? "bg-primary/10 border-primary/20 ring-1 ring-primary/20" :
+                                    (tournament.status === 'CLOSED' || tournament.status === 'STARTED') ? "bg-primary/10 border-primary/20 ring-1 ring-primary/20" :
                                         "bg-white/[0.02] border-white/10"
                             )}>
-                                {tournament.status === 'STARTED' && (
+                                {(tournament.status === 'CLOSED' || tournament.status === 'STARTED') && (
                                     <div className="absolute top-0 right-0 p-1">
                                         <div className="h-1 w-1 rounded-full bg-primary animate-ping" />
                                     </div>
@@ -183,7 +183,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                                 <p className={cn(
                                     "text-xs font-black uppercase italic tracking-widest",
                                     tournament.status === 'OPEN' ? "text-emerald-400" :
-                                        tournament.status === 'STARTED' ? "text-primary brightness-125 drop-shadow-[0_0_8px_rgba(var(--primary),0.5)]" :
+                                        (tournament.status === 'CLOSED' || tournament.status === 'STARTED') ? "text-primary brightness-125 drop-shadow-[0_0_8px_rgba(var(--primary),0.5)]" :
                                             "text-muted-foreground"
                                 )}>
                                     {getStatusText(tournament.status)}

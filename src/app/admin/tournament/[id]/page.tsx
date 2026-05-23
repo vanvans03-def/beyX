@@ -1065,7 +1065,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         fetch('/api/admin/tournaments/order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tournamentId: id, order: arr.map(r => r.PlayerName) })
+            body: JSON.stringify({ tournamentId: id, order: arr.map(r => r.player_name) })
         });
 
         if (conflicts.length > 0) {
@@ -1119,7 +1119,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         fetch('/api/admin/tournaments/order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tournamentId: id, order: currentData.map(r => r.PlayerName) })
+            body: JSON.stringify({ tournamentId: id, order: currentData.map(r => r.player_name) })
         });
 
         setSwapSelection([]);
@@ -1207,12 +1207,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         const savedOrder = orderJson.order as string[];
                         // Reconstruct shuffled data
                         const reordered = savedOrder
-                            .map(name => sorted.find((r: any) => r.PlayerName === name))
+                            .map(name => sorted.find((r: any) => r.player_name === name))
                             .filter(Boolean) as Registration[];
 
                         // Catch any players not in the saved order (new registrations)
                         const savedNamesSet = new Set(savedOrder);
-                        const newPlayers = sorted.filter((r: any) => !savedNamesSet.has(r.PlayerName)) as Registration[];
+                        const newPlayers = sorted.filter((r: any) => !savedNamesSet.has(r.player_name)) as Registration[];
 
                         const finalShuffled = [...reordered, ...newPlayers];
                         setShuffledData(finalShuffled);
@@ -1614,11 +1614,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             <span>•</span>
                                             <span className={cn(
                                                 "font-bold",
-                                                tournament.Status === 'OPEN' ? "text-green-500" :
-                                                    tournament.Status === 'COMPLETED' ? "text-blue-500" :
+                                                tournament.status === 'OPEN' ? "text-green-500" :
+                                                    tournament.status === 'COMPLETED' ? "text-blue-500" :
                                                         "text-muted-foreground"
                                             )}>
-                                                {tournament.Status}
+                                                {tournament.status}
                                             </span>
                                             {tournament?.provider && (
                                                 <>
@@ -2392,7 +2392,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 const attachment = parts[1];
 
                                                                 const point = tournament?.type === 'U10' ? (() => {
-                                                                    const pointData = tournament.Type === 'U10' ? (
+                                                                    const pointData = tournament.type === 'U10' ? (
                                                                         hoveredCombo.data.mode === "Under10South" ? gameDataSouth : gameDataStandard
                                                                     ) : null;
 
@@ -2985,7 +2985,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         setSwapSelection([]);
                                         setIsSwapMode(false);
                                     }}
-                                    disabled={!isListShuffled || !!bracketUrl || (tournament?.status && tournament.Status !== 'OPEN')}
+                                    disabled={!isListShuffled || !!bracketUrl || (tournament?.status && tournament.status !== 'OPEN')}
                                     className="text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 transition-colors px-3 py-1.5 rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                     title="Reset to Original Order"
                                 >
@@ -2994,7 +2994,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                                 <button
                                     onClick={handleShufflePlayers}
-                                    disabled={!!bracketUrl || (tournament?.status && tournament.Status !== 'OPEN')}
+                                    disabled={!!bracketUrl || (tournament?.status && tournament.status !== 'OPEN')}
                                     className="flex items-center gap-2 px-3 py-1.5 hover:bg-secondary rounded-md text-xs font-bold transition-colors text-foreground disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/10 first:border-0"
                                 >
                                     <Shuffle className="h-3.5 w-3.5" />
@@ -3023,7 +3023,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             ) : (
                                 <button
                                     onClick={() => setIsSwapMode(true)}
-                                    disabled={!!bracketUrl || (tournament?.status && tournament.Status !== 'OPEN')}
+                                    disabled={!!bracketUrl || (tournament?.status && tournament.status !== 'OPEN')}
                                     className="flex items-center justify-center p-2 bg-secondary/80 text-foreground rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-white/5"
                                     title="สลับผู้เล่น"
                                 >
@@ -3061,7 +3061,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         searchQuery={searchQuery}
                         onDelete={handleDelete}
                         onEditSession={setSharingSession}
-                        tournamentType={tournament?.Type}
+                        tournamentType={tournament?.type}
                         sameDeviceConflicts={isListShuffled ? sameDeviceConflicts : []}
                         swapSelection={isSwapMode ? swapSelection : []}
                         onSwapSelect={isSwapMode ? handleSwapSelect : undefined}
@@ -3085,14 +3085,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         isOpen={!!sharingSession}
                         onClose={() => setSharingSession(null)}
                         title="Edit Session (QR Code)"
-                        description={`Scan to transfer ${sharingSession?.PlayerName}'s session to a new device.`}
+                        description={`Scan to transfer ${sharingSession?.player_name}'s session to a new device.`}
                         type="custom"
                     >
                         <div className="flex flex-col items-center gap-6 p-4">
                             <div className="bg-white p-6 rounded-2xl shadow-xl">
                                 {sharingSession && (
                                     <QRCodeSVG
-                                        value={`${origin || ''}/register/${id}?editToken=${sharingSession.DeviceUUID}`}
+                                        value={`${origin || ''}/register/${id}?editToken=${sharingSession.device_uuid}`}
                                         size={256}
                                         level="H"
                                     />
@@ -3100,10 +3100,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             </div>
                             <div className="text-center space-y-2">
                                 <p className="text-sm font-medium text-foreground">
-                                    {sharingSession?.PlayerName}
+                                    {sharingSession?.player_name}
                                 </p>
                                 <p className="text-xs text-muted-foreground break-all max-w-[250px] font-mono">
-                                    {sharingSession?.DeviceUUID}
+                                    {sharingSession?.device_uuid}
                                 </p>
                             </div>
                             <button
