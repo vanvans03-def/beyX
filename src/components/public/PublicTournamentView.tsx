@@ -1,9 +1,12 @@
 "use client";
 
-import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe } from "lucide-react";
+import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe, Loader2, MonitorPlay } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useState, useEffect, useRef } from "react";
+import InternalBracket from "@/components/InternalBracket";
+import { createClient } from "@/utils/supabase/client";
 
 type PublicTournamentViewProps = {
     tournament: any;
@@ -12,6 +15,52 @@ type PublicTournamentViewProps = {
 
 export default function PublicTournamentView({ tournament, registrations }: PublicTournamentViewProps) {
     const { t, lang, toggleLang } = useTranslation();
+    const [activeTab, setActiveTab] = useState<'players' | 'bracket'>('players');
+    
+    // Bracket State
+    const [matches, setMatches] = useState<any[]>([]);
+    const [loadingBracket, setLoadingBracket] = useState(true);
+    const channelRef = useRef<any>(null);
+    const supabaseClient = createClient();
+
+    // Initial fetch for Internal Tournaments
+    const fetchInternalMatches = async (silent = false) => {
+        if (!silent) setLoadingBracket(true);
+        try {
+            const res = await fetch(`/api/public/tournaments/${tournament.id}/matches`);
+            if (!res.ok) return;
+            const json = await res.json();
+            if (json.matches) {
+                setMatches(prev => JSON.stringify(prev) === JSON.stringify(json.matches) ? prev : json.matches);
+            }
+        } catch (e) {
+            console.error("Failed to fetch matches", e);
+        } finally {
+            if (!silent) setLoadingBracket(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'bracket') {
+            if (tournament.provider === 'INTERNAL') {
+                fetchInternalMatches();
+
+                const channel = supabaseClient.channel(`public_bracket_${tournament.id}`)
+                    .on('broadcast', { event: 'match-update' }, () => fetchInternalMatches(true))
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_matches', filter: `tournament_id=eq.${tournament.id}` }, () => fetchInternalMatches(true))
+                    .subscribe();
+
+                channelRef.current = channel;
+
+                return () => {
+                    supabaseClient.removeChannel(channel);
+                    channelRef.current = null;
+                };
+            } else {
+                setLoadingBracket(false); // Challonge uses iframe
+            }
+        }
+    }, [activeTab, tournament.id, tournament.provider]);
 
     const getStatusText = (status: string) => {
         switch (status) {
@@ -33,7 +82,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
 
             {/* Header / Hero */}
             <div className="relative border-b border-white/5 bg-black/40 backdrop-blur-xl sticky top-0 z-50">
-                <div className="max-w-xl mx-auto px-6 py-4 flex items-center justify-between">
+                <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
                     <Link href="/" className="p-2 -ml-2 hover:bg-white/5 rounded-full transition-colors text-muted-foreground hover:text-white">
                         <ChevronLeft className="h-6 w-6" />
                     </Link>
@@ -41,10 +90,15 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         <h1 className="font-black italic text-xl tracking-tighter uppercase leading-tight text-white">
                             {tournament.name}
                         </h1>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 mt-0.5">
-                            <ShieldCheck className="h-3.5 w-3.5 text-primary/80" />
-                            {tournament.organizer_name}
-                        </p>
+                        <div className="flex items-center justify-center gap-2 mt-1">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] flex items-center gap-1.5">
+                                <ShieldCheck className="h-3.5 w-3.5 text-primary/80" />
+                                {tournament.organizer_name}
+                            </p>
+                            <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[8px] font-black uppercase tracking-widest text-muted-foreground/60">
+                                {tournament.provider}
+                            </span>
+                        </div>
                     </div>
                     <button 
                         onClick={toggleLang}
@@ -54,110 +108,190 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         {lang}
                     </button>
                 </div>
+
+                {/* Tabs */}
+                <div className="max-w-4xl mx-auto px-6 flex items-center gap-8 border-t border-white/5">
+                    <button 
+                        onClick={() => setActiveTab('players')}
+                        className={cn(
+                            "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
+                            activeTab === 'players' ? "text-primary" : "text-muted-foreground hover:text-white"
+                        )}
+                    >
+                        {t('public.players')}
+                        {activeTab === 'players' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />}
+                    </button>
+                    {(tournament.status === 'STARTED' || tournament.status === 'COMPLETED') && (
+                        <button 
+                            onClick={() => setActiveTab('bracket')}
+                            className={cn(
+                                "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
+                                activeTab === 'bracket' ? "text-primary" : tournament.status === 'STARTED' ? "text-white drop-shadow-[0_0_5px_rgba(var(--primary-rgb),0.8)]" : "text-muted-foreground hover:text-white"
+                            )}
+                        >
+                            {tournament.status === 'STARTED' && activeTab !== 'bracket' && (
+                                <span className="relative flex h-2 w-2 mr-0.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                </span>
+                            )}
+                            {t('admin.menu.bracket' as any) || 'Live Bracket'}
+                            {activeTab === 'bracket' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />}
+                        </button>
+                    )}
+                </div>
             </div>
 
-            <main className="relative z-10 max-w-xl mx-auto px-6 pt-8 space-y-8">
-                {/* Stats / Status */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white/[0.02] border border-white/10 p-5 rounded-3xl backdrop-blur-md">
-                        <div className="flex items-center gap-2 mb-1.5">
-                            <div className="p-1.5 bg-primary/20 rounded-lg">
-                                <Users className="h-4 w-4 text-primary" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase tracking-[0.1em] text-muted-foreground">{t('public.players')}</span>
-                        </div>
-                        <p className="text-3xl font-black italic text-white tracking-tighter">
-                            {registrations.length}
-                        </p>
-                    </div>
-                    <div className={cn(
-                        "border p-5 rounded-3xl flex flex-col justify-center backdrop-blur-md transition-all relative overflow-hidden",
-                        tournament.status === 'OPEN' ? "bg-emerald-500/5 border-emerald-500/10" :
-                            tournament.status === 'STARTED' ? "bg-primary/10 border-primary/20 ring-1 ring-primary/20" :
-                                "bg-white/[0.02] border-white/10"
-                    )}>
-                        {tournament.status === 'STARTED' && (
-                            <div className="absolute top-0 right-0 p-1">
-                                <div className="h-1 w-1 rounded-full bg-primary animate-ping" />
-                            </div>
-                        )}
-                        <div className="flex items-center gap-2 mb-1.5">
-                            <div className="p-1.5 bg-white/10 rounded-lg">
-                                <Clock className="h-4 w-4 text-muted-foreground" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase tracking-[0.1em] text-muted-foreground">{t('public.status')}</span>
-                        </div>
-                        <p className={cn(
-                            "text-xs font-black uppercase italic tracking-widest",
-                            tournament.status === 'OPEN' ? "text-emerald-400" :
-                                tournament.status === 'STARTED' ? "text-primary brightness-125 drop-shadow-[0_0_8px_rgba(var(--primary),0.5)]" :
-                                    "text-muted-foreground"
-                        )}>
-                            {getStatusText(tournament.status)}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Player List */}
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between px-2">
-                        <h2 className="font-black text-sm uppercase italic tracking-[0.2em] text-muted-foreground/80 flex items-center gap-2">
-                            <div className="h-1 w-8 bg-primary/50" />
-                            {t('public.registered_players')}
-                        </h2>
-                    </div>
-
-                    <div className="bg-white/[0.01] border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl shadow-2xl shadow-black/20">
-                        {registrations.length === 0 ? (
-                            <div className="py-24 text-center px-10">
-                                <div className="p-4 bg-white/5 rounded-full w-fit mx-auto mb-4">
-                                    <Trophy className="h-8 w-8 text-muted-foreground/20" />
+            <main className={cn(
+                "relative z-10 mx-auto transition-all duration-300",
+                activeTab === 'bracket' 
+                    ? "w-full max-w-none px-0 pt-0" 
+                    : "max-w-4xl px-6 pt-8 space-y-8"
+            )}>
+                {activeTab === 'players' ? (
+                    <>
+                        {/* Stats / Status */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white/[0.02] border border-white/10 p-5 rounded-3xl backdrop-blur-md">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                    <div className="p-1.5 bg-primary/20 rounded-lg">
+                                        <Users className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <span className="text-[10px] font-black uppercase tracking-[0.1em] text-muted-foreground">{t('public.players')}</span>
                                 </div>
-                                <h3 className="text-white font-bold text-lg mb-1">{t('public.no_registrations')}</h3>
-                                <p className="text-muted-foreground text-sm max-w-[200px] mx-auto">{t('public.be_first')}</p>
+                                <p className="text-3xl font-black italic text-white tracking-tighter">
+                                    {registrations.length}
+                                </p>
                             </div>
-                        ) : (
-                            <div className="divide-y divide-white/[0.05]">
-                                {registrations.map((player, idx) => (
-                                    <div key={player.id} className="p-5 flex items-center justify-between group hover:bg-white/[0.03] transition-all cursor-default">
-                                        <div className="flex items-center gap-5">
-                                            <div className="flex items-center justify-center w-8 text-center">
-                                                <span className="text-sm font-black italic tracking-tighter text-muted-foreground/30 group-hover:text-primary/50 transition-colors">
-                                                    {(idx + 1).toString().padStart(2, '0')}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-lg text-white/90 group-hover:text-white transition-colors tracking-tight">
-                                                    {player.player_name}
-                                                </p>
-                                                <div className="flex items-center gap-3 mt-0.5">
-                                                    <span className="px-2 py-0.5 bg-secondary text-[9px] font-black uppercase italic tracking-widest rounded-md text-muted-foreground/80">
-                                                        {player.mode}
-                                                    </span>
-                                                    <span className="text-[9px] text-muted-foreground/50 font-bold uppercase tracking-widest flex items-center gap-1">
-                                                        <Clock className="h-2.5 w-2.5" />
-                                                        {new Date(player.timestamp).toLocaleTimeString(lang === 'TH' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                                                    </span>
+                            <div className={cn(
+                                "border p-5 rounded-3xl flex flex-col justify-center backdrop-blur-md transition-all relative overflow-hidden",
+                                tournament.status === 'OPEN' ? "bg-emerald-500/5 border-emerald-500/10" :
+                                    tournament.status === 'STARTED' ? "bg-primary/10 border-primary/20 ring-1 ring-primary/20" :
+                                        "bg-white/[0.02] border-white/10"
+                            )}>
+                                {tournament.status === 'STARTED' && (
+                                    <div className="absolute top-0 right-0 p-1">
+                                        <div className="h-1 w-1 rounded-full bg-primary animate-ping" />
+                                    </div>
+                                )}
+                                <div className="flex items-center gap-2 mb-1.5">
+                                    <div className="p-1.5 bg-white/10 rounded-lg">
+                                        <Clock className="h-4 w-4 text-muted-foreground" />
+                                    </div>
+                                    <span className="text-[10px] font-black uppercase tracking-[0.1em] text-muted-foreground">{t('public.status')}</span>
+                                </div>
+                                <p className={cn(
+                                    "text-xs font-black uppercase italic tracking-widest",
+                                    tournament.status === 'OPEN' ? "text-emerald-400" :
+                                        tournament.status === 'STARTED' ? "text-primary brightness-125 drop-shadow-[0_0_8px_rgba(var(--primary),0.5)]" :
+                                            "text-muted-foreground"
+                                )}>
+                                    {getStatusText(tournament.status)}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Player List */}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between px-2">
+                                <h2 className="font-black text-sm uppercase italic tracking-[0.2em] text-muted-foreground/80 flex items-center gap-2">
+                                    <div className="h-1 w-8 bg-primary/50" />
+                                    {t('public.registered_players')}
+                                </h2>
+                            </div>
+
+                            <div className="bg-white/[0.01] border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl shadow-2xl shadow-black/20">
+                                {registrations.length === 0 ? (
+                                    <div className="py-24 text-center px-10">
+                                        <div className="p-4 bg-white/5 rounded-full w-fit mx-auto mb-4">
+                                            <Trophy className="h-8 w-8 text-muted-foreground/20" />
+                                        </div>
+                                        <h3 className="text-white font-bold text-lg mb-1">{t('public.no_registrations')}</h3>
+                                        <p className="text-muted-foreground text-sm max-w-[200px] mx-auto">{t('public.be_first')}</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-white/[0.05]">
+                                        {registrations.map((player, idx) => (
+                                            <div key={player.id} className="p-5 flex items-center justify-between group hover:bg-white/[0.03] transition-all cursor-default">
+                                                <div className="flex items-center gap-5">
+                                                    <div className="flex items-center justify-center w-8 text-center">
+                                                        <span className="text-sm font-black italic tracking-tighter text-muted-foreground/30 group-hover:text-primary/50 transition-colors">
+                                                            {(idx + 1).toString().padStart(2, '0')}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-lg text-white/90 group-hover:text-white transition-colors tracking-tight">
+                                                            {player.player_name}
+                                                        </p>
+                                                        <div className="flex items-center gap-3 mt-0.5">
+                                                            <span className="px-2 py-0.5 bg-secondary text-[9px] font-black uppercase italic tracking-widest rounded-md text-muted-foreground/80">
+                                                                {player.mode}
+                                                            </span>
+                                                            <span className="text-[9px] text-muted-foreground/50 font-bold uppercase tracking-widest flex items-center gap-1">
+                                                                <Clock className="h-2.5 w-2.5" />
+                                                                {new Date(player.timestamp).toLocaleTimeString(lang === 'TH' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-center p-3">
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-primary/40 shadow-[0_0_8px_rgba(var(--primary),0.5)]" />
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="flex items-center justify-center p-3">
-                                            <div className="h-1.5 w-1.5 rounded-full bg-primary/40 shadow-[0_0_8px_rgba(var(--primary),0.5)]" />
-                                        </div>
+                                        ))}
                                     </div>
-                                ))}
+                                )}
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="w-full h-[calc(100dvh-130px)] min-h-[500px] bg-secondary/10 border-t border-b border-white/5 relative overflow-hidden shadow-inner">
+                        {loadingBracket ? (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                <p className="font-medium animate-pulse text-muted-foreground">{t('public.status.started') || 'Loading...'}</p>
+                            </div>
+                        ) : tournament.provider === 'INTERNAL' ? (
+                            <div className="absolute inset-0">
+                                {matches.length > 0 ? (
+                                    <InternalBracket matches={matches} provider={tournament.provider} />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                                        <MonitorPlay className="w-12 h-12 mb-4 opacity-50" />
+                                        <p>{t('admin.bracket.not_generated' as any) || 'Bracket has not been generated yet.'}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="absolute inset-0 bg-white">
+                                {tournament.challonge_url ? (
+                                    <iframe
+                                        src={`https://challonge.com/${tournament.challonge_url.split('/').pop()}/module`}
+                                        width="100%"
+                                        height="100%"
+                                        frameBorder="0"
+                                        scrolling="auto"
+                                    />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-black">
+                                        <Trophy className="w-12 h-12 mb-4 opacity-50" />
+                                        <p>Challonge URL is unavailable.</p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
-                </div>
+                )}
 
                 {/* Footer Info */}
-                <div className="text-center pt-10 pb-4">
-                    <div className="h-px w-10 bg-white/10 mx-auto mb-6" />
-                    <p className="text-[10px] uppercase font-black italic tracking-[0.4em] text-muted-foreground/30">
-                        {t('public.powered_by')}
-                    </p>
-                </div>
+                {activeTab === 'players' && (
+                    <div className="text-center pt-10 pb-4">
+                        <div className="h-px w-10 bg-white/10 mx-auto mb-6" />
+                        <p className="text-[10px] uppercase font-black italic tracking-[0.4em] text-muted-foreground/30">
+                            {t('public.powered_by')}
+                        </p>
+                    </div>
+                )}
             </main>
         </div>
     );

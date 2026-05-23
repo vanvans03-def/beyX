@@ -22,14 +22,18 @@ type HistoryState = {
 
 interface ScoreboardProps {
     onBack?: () => void;
+    player1Name?: string;
+    player2Name?: string;
+    onReport?: (scores: string, winnerId: number) => void;
+    isReporting?: boolean;
 }
 
-export default function Scoreboard({ onBack }: ScoreboardProps) {
+export default function Scoreboard({ onBack, player1Name = "RED", player2Name = "BLUE", onReport, isReporting }: ScoreboardProps) {
     const [playerCount, setPlayerCount] = useState<2 | 3>(2);
     const [players, setPlayers] = useState<Player[]>([
         {
             id: 1,
-            name: "RED",
+            name: player1Name,
             score: 0,
             color: "red",
             bgClass: "from-red-600 to-red-800",
@@ -39,7 +43,7 @@ export default function Scoreboard({ onBack }: ScoreboardProps) {
         },
         {
             id: 2,
-            name: "BLUE",
+            name: player2Name,
             score: 0,
             color: "blue",
             bgClass: "from-blue-600 to-blue-800",
@@ -197,6 +201,24 @@ export default function Scoreboard({ onBack }: ScoreboardProps) {
                 <div className="flex items-center gap-4">
                     {/* Player Count Toggle - HIDDEN as requested (Only 2P) */}
                     {/* <div className="hidden md:flex bg-black/40 p-1 rounded-lg items-center border border-white/5">...</div> */}
+
+                    {onReport && (
+                        <button
+                            onClick={() => {
+                                const scoreCsv = `${players[0].score}-${players[1].score}`;
+                                const winnerId = players[0].score > players[1].score ? 1 : (players[1].score > players[0].score ? 2 : 0);
+                                if (winnerId === 0) {
+                                    alert("Match cannot be a tie. Please continue until a winner is determined.");
+                                    return;
+                                }
+                                onReport(scoreCsv, winnerId);
+                            }}
+                            disabled={isReporting}
+                            className="flex items-center gap-2 px-6 py-2 bg-primary text-black hover:bg-primary/90 rounded-full transition-all border border-primary/20 font-black uppercase text-xs tracking-widest shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)] disabled:opacity-50"
+                        >
+                            {isReporting ? "Reporting..." : "Submit Result"}
+                        </button>
+                    )}
 
                     <button
                         onClick={resetGame}

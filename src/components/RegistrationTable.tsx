@@ -8,16 +8,16 @@ import gameDataSouth from "@/data/game-data-south.json";
 
 // Define Types (subset of what is used in page.tsx)
 type Registration = {
-    TournamentID: string;
-    RoundID: string;
-    Timestamp: string;
-    DeviceUUID: string;
-    PlayerName: string;
-    Mode: string;
-    Main_Bey1: string;
-    Main_Bey2: string;
-    Main_Bey3: string;
-    TotalPoints: string;
+    tournament_id: string;
+    id: string;
+    timestamp: string;
+    device_uuid: string;
+    player_name: string;
+    mode: string;
+    main_bey1: string;
+    main_bey2: string;
+    main_bey3: string;
+    total_points: string;
 };
 
 type Props = {
@@ -34,18 +34,18 @@ type Props = {
 
 // Extracted validation logic
 const validateRow = (row: Registration, tournamentType?: string) => {
-    const mainBeys = [row.Main_Bey1, row.Main_Bey2, row.Main_Bey3];
+    const mainBeys = [row.main_bey1, row.main_bey2, row.main_bey3];
 
     // Check Tournament Type Mismatch
     if (tournamentType) {
         let isMatch = false;
-        if (tournamentType === 'U10' && row.Mode === 'Under10') isMatch = true;
-        else if (tournamentType === 'U10South' && row.Mode === 'Under10South') isMatch = true;
-        else if (tournamentType === 'NoMoreMeta' && row.Mode === 'NoMoreMeta') isMatch = true;
-        else if ((tournamentType === 'Open' || tournamentType === 'Standard') && (row.Mode === 'Standard' || row.Mode === 'Open')) isMatch = true;
+        if (tournamentType === 'U10' && row.mode === 'Under10') isMatch = true;
+        else if (tournamentType === 'U10South' && row.mode === 'Under10South') isMatch = true;
+        else if (tournamentType === 'NoMoreMeta' && row.mode === 'NoMoreMeta') isMatch = true;
+        else if ((tournamentType === 'Open' || tournamentType === 'Standard') && (row.mode === 'Standard' || row.mode === 'Open')) isMatch = true;
 
         if (!isMatch) {
-            return { status: "fail", msg: `Type Mismatch (${row.Mode})` };
+            return { status: "fail", msg: `Type Mismatch (${row.mode})` };
         }
     }
 
@@ -53,9 +53,9 @@ const validateRow = (row: Registration, tournamentType?: string) => {
         // Strip attachments for validation
         const cleanDeck = deck.map(d => d ? d.split('|')[0] : '');
 
-        if (row.Mode === "Under10" || row.Mode === "Under10South") {
+        if (row.mode === "Under10" || row.mode === "Under10South") {
             // Use appropriate point mapping based on mode
-            const pointData = row.Mode === "Under10South" ? gameDataSouth : gameDataStandard;
+            const pointData = row.mode === "Under10South" ? gameDataSouth : gameDataStandard;
             const pointsMap: Record<string, number> = {};
             Object.entries(pointData.points).forEach(([pt, names]) => {
                 names.forEach(name => pointsMap[name] = parseInt(pt));
@@ -63,7 +63,7 @@ const validateRow = (row: Registration, tournamentType?: string) => {
             let pts = cleanDeck.reduce((sum, name) => sum + (pointsMap[name] || 0), 0);
 
             // Add points for attachments if U10South
-            if (row.Mode === "Under10South") {
+            if (row.mode === "Under10South") {
                 deck.forEach(d => {
                     const parts = d.split('|');
                     if (parts.length > 1 && (parts[1] === 'Heavy' || parts[1] === 'Wheel')) {
@@ -99,7 +99,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
         // Pre-calculate device counts for duplicate detection
         const deviceCounts: Record<string, number> = {};
         data.forEach(r => {
-            deviceCounts[r.DeviceUUID] = (deviceCounts[r.DeviceUUID] || 0) + 1;
+            deviceCounts[r.device_uuid] = (deviceCounts[r.device_uuid] || 0) + 1;
         });
 
         // Pre-calculate some color hashes for devices
@@ -107,6 +107,38 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
         const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
         Object.keys(deviceCounts).forEach((uuid, i) => {
             deviceColors[uuid] = colors[i % colors.length];
+        // Filter first
+        const filtered = data.filter(r =>
+            r.player_name.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+
+        return filtered.map((row, filteredIdx) => {
+            const validation = validateRow(row, tournamentType);
+            const isMulti = (deviceCounts[row.device_uuid] || 0) > 1;
+
+            // Generate color for multi-device
+            let deviceColor = undefined;
+            if (isMulti) {
+                let hash = 0;
+                for (let i = 0; i < row.device_uuid.length; i++) hash = row.device_uuid.charCodeAt(i) + ((hash << 5) - hash);
+                const hue = Math.abs(hash % 360);
+                deviceColor = `hsl(${hue}, 70%, 60%)`;
+            }
+
+            // Find original index in data (before search filter) for conflict matching
+            const originalIdx = data.indexOf(row);
+            const isConflict = sameDeviceConflicts.includes(originalIdx);
+            const isSwapSelected = swapSelection.includes(originalIdx);
+
+            return {
+                ...row,
+                validation,
+                isMulti,
+                deviceColor,
+                isConflict,
+                isSwapSelected,
+                originalIdx
+            };
         });
 
         return data
@@ -147,9 +179,11 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                 <tbody className="divide-y divide-white/5 bg-black/40">
                     {processedData.map((row) => (
                         <tr
-                            key={row.RoundID}
-                            onClick={() => onSwapSelect?.(row.originalIdx)}
-                            className={`hover:bg-white/5 transition-all group ${row.isConflict ? 'bg-amber-500/5' : ''} ${row.isSwapping ? 'bg-blue-500/20 ring-1 ring-blue-500/50' : ''} ${onSwapSelect ? 'cursor-pointer' : ''}`}
+                            key={`${row.id}-${i}`}
+                            className={`hover:bg-accent/5 transition-colors group ${row.isConflict ? 'bg-amber-500/10 border-l-2 border-l-amber-500' : ''} ${row.isSwapSelected ? 'bg-blue-500/15 ring-1 ring-blue-500/50' : ''} ${onSwapSelect ? 'cursor-pointer select-none' : ''}`}
+                            onClick={() => {
+                                if (onSwapSelect) onSwapSelect(row.originalIdx);
+                            }}
                         >
                             <td className="p-4 whitespace-nowrap">
                                 <div className={`h-8 w-8 rounded-lg flex items-center justify-center font-bold text-xs border ${row.isSwapping ? 'bg-blue-500 border-blue-400 text-white animate-pulse' : 'bg-secondary border-white/5 text-muted-foreground'}`}>
@@ -161,15 +195,15 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                 </div>
                             </td>
                             <td className="p-4 whitespace-nowrap text-muted-foreground">
-                                {new Date(row.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </td>
                             <td className="p-4 font-medium text-foreground min-w-[150px] max-w-[200px]">
                                 <div className="flex items-center gap-2 break-all leading-tight">
-                                    {row.PlayerName}
+                                    {row.player_name}
                                     {row.isMulti && (
                                         <div
                                             className="flex items-center justify-center p-1 rounded-full bg-white/10"
-                                            title={`Multi-player Device: ${row.DeviceUUID.substring(0, 4)}...`}
+                                            title={`Multi-player Device: ${row.device_uuid.substring(0, 4)}...`}
                                             style={{ color: row.deviceColor }}
                                         >
                                             <Users className="h-3.5 w-3.5" />
@@ -186,19 +220,19 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                 </div>
                             </td>
                             <td className="p-4 whitespace-nowrap">
-                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.Mode === "Under10" ? "bg-blue-500/20 text-blue-400" :
-                                    row.Mode === "Under10South" ? "bg-cyan-500/20 text-cyan-400" :
-                                        row.Mode === "Standard" || row.Mode === "Open" ? "bg-green-500/20 text-green-400" :
+                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.mode === "Under10" ? "bg-blue-500/20 text-blue-400" :
+                                    row.mode === "Under10South" ? "bg-cyan-500/20 text-cyan-400" :
+                                        row.mode === "Standard" || row.mode === "Open" ? "bg-green-500/20 text-green-400" :
                                             "bg-purple-500/20 text-purple-400"
                                     }`}>
-                                    {row.Mode === "Under10" ? "U10" :
-                                        row.Mode === "Under10South" ? "U10S" :
-                                            row.Mode === "Standard" || row.Mode === "Open" ? "OPEN" : "NMM"}
+                                    {row.mode === "Under10" ? "U10" :
+                                        row.mode === "Under10South" ? "U10S" :
+                                            row.mode === "Standard" || row.mode === "Open" ? "OPEN" : "NMM"}
                                 </span>
                             </td>
                             <td className="p-4 text-xs space-y-1 min-w-[200px]">
                                 <div className="flex gap-1 flex-wrap">
-                                    {[row.Main_Bey1, row.Main_Bey2, row.Main_Bey3].map((b, idx) => {
+                                    {[row.main_bey1, row.main_bey2, row.main_bey3].map((b, idx) => {
                                         const parts = b ? b.split('|') : [''];
                                         const name = parts[0];
                                         const attachment = parts[1];
@@ -221,7 +255,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                             }`}>
                                             {(row.validation.status === "pass" && row.validation.msg === 'OK') ? t('table.status.ok') :
                                                 (row.validation.msg === 'Banned') ? t('table.status.banned') :
-                                                    (row.validation.msg.includes('Type Mismatch')) ? t('table.status.mismatch', { mode: row.Mode }) :
+                                                    (row.validation.msg.includes('Type Mismatch')) ? t('table.status.mismatch', { mode: row.mode }) :
                                                         row.validation.msg}
                                         </span>
                                     </div>

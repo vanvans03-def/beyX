@@ -41,3 +41,5 @@
     "scratch"
   ]
 }
+  "exclude": ["node_modules", "scratch", "temp"]
+}

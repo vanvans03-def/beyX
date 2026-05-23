@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { setupAndStartTournament } from '@/lib/challonge';
 import { createClient } from '@supabase/supabase-js';
-import { getUserApiKey } from '@/lib/repository';
+import { setupAndStartTournament } from '@/lib/challonge';
+import { getUserApiKey, getTournament, getRegistrations } from '@/lib/repository';
+import { generateSingleElimination, generateDoubleElimination } from '@/lib/brackets';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,12 +18,68 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized: Missing User ID' }, { status: 401 });
         }
 
+        const { roomName, players, type, shuffle, tournamentId, quickAdvance, arenaCount } = await request.json(); // tournamentId is our DB UUID
+
+        // 1. Fetch Tournament to check provider
+        const tournament = await getTournament(tournamentId);
+        if (!tournament) return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
+
+        if (tournament.provider === 'INTERNAL') {
+            // --- INTERNAL GENERATION ---
+            const registrations = await getRegistrations(tournamentId);
+            const participants = registrations.map(r => ({ id: r.id, name: r.player_name }));
+
+            let matches = [];
+            if (tournament.bracket_type === 'DOUBLE') {
+                matches = generateDoubleElimination(tournamentId, participants);
+            } else {
+                matches = generateSingleElimination(tournamentId, participants);
+            }
+
+            // Save Matches to internal_matches
+            // NOTE: suggested_play_order is already computed by generateDoubleElimination /
+            // generateSingleElimination with correct phase-interleaved ordering — do NOT
+            // override it with the flat array index here.
+            if (matches.length > 0) {
+                const { error } = await supabase
+                    .from('internal_matches')
+                    .insert(matches.map(m => ({
+                        id: m.id,
+                        tournament_id: m.tournament_id,
+                        player1_id: m.player1_id,
+                        player2_id: m.player2_id,
+                        winner_id: m.winner_id,
+                        state: m.state,
+                        scores_csv: m.scores_csv,
+                        round: m.round,
+                        player1_prereq_match_id: m.player1_prereq_match_id,
+                        player2_prereq_match_id: m.player2_prereq_match_id,
+                        loser_to_match_id: m.loser_to_match_id,
+                        is_grand_final: m.is_grand_final,
+                        is_reset_match: m.is_reset_match,
+                        suggested_play_order: m.suggested_play_order,
+                    })));
+
+                if (error) {
+                    console.error("Failed to save internal matches:", error);
+                    return NextResponse.json({ error: 'Failed to save bracket matches' }, { status: 500 });
+                }
+            }
+
+            // Update Tournament Status
+            await supabase
+                .from('tournaments')
+                .update({ status: 'STARTED' })
+                .eq('id', tournamentId);
+
+            return NextResponse.json({ success: true, url: `/tournament/${tournamentId}/bracket` });
+        }
+
+        // --- CHALLONGE GENERATION (Legacy) ---
         const apiKey = await getUserApiKey(userId);
         if (!apiKey) {
             return NextResponse.json({ error: 'Challonge API Key not configured. Please add it in the admin dashboard.' }, { status: 403 });
         }
-
-        const { roomName, players, type, shuffle, tournamentId, quickAdvance, arenaCount } = await request.json(); // tournamentId is our DB UUID
 
         if (!roomName) {
             return NextResponse.json({ error: 'Room name is required' }, { status: 400 });

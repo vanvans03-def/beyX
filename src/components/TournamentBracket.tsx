@@ -1,24 +1,38 @@
 import React from 'react';
+import InternalBracket from './InternalBracket';
 
 interface TournamentBracketProps {
     url: string;
+    provider?: 'CHALLONGE' | 'INTERNAL';
+    matches?: any[];
+    onMatchClick?: (match: any) => void;
+    onReportWin?: (match: any, winnerId: string, winnerName: string, scores: string) => void;
 }
 
-const TournamentBracket: React.FC<TournamentBracketProps> = ({ url }) => {
-    // Extract the identifier from the full URL if necessary, or assume url is the full "https://challonge.com/..."
-    // The module view is usually at /module
-    // If url is "https://challonge.com/my_tournament", embedUrl should be "https://challonge.com/my_tournament/module?..."
+const TournamentBracket: React.FC<TournamentBracketProps> = ({ url, provider = 'CHALLONGE', matches = [], onMatchClick, onReportWin }) => {
+    if (provider === 'INTERNAL') {
+        return (
+            <div className="space-y-4">
+                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5">
+                    <span className="text-sm font-bold text-primary">BeyX Internal Bracket</span>
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-[10px] text-muted-foreground uppercase">Real-time Connected</span>
+                    </div>
+                </div>
+                <InternalBracket matches={matches} onMatchClick={onMatchClick} onReportWin={onReportWin} />
+            </div>
+        );
+    }
 
-    // Basic validation to ensure we don't double slash
+    // --- CHALLONGE LOGIC ---
     const cleanUrl = url.replace(/\/$/, "");
-
-    // Theme and options as requested
     const embedUrl = `${cleanUrl}/module?theme=2&multiplier=1.0&match_width_multiplier=1.0&show_final_results=1`;
 
     return (
         <div className="w-full overflow-hidden rounded-lg shadow-lg bg-white/5 border border-white/10">
             <div className="p-2 flex justify-between items-center bg-black/20 px-4">
-                <span className="text-sm text-gray-400">Tournament Bracket</span>
+                <span className="text-sm text-gray-400">Tournament Bracket (Challonge)</span>
                 <a
                     href={url}
                     target="_blank"
