@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRegistrations, deleteRegistration, createRegistration, getTournament } from "@/lib/repository";
 import { v4 as uuidv4 } from 'uuid';
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
 
@@ -146,6 +147,59 @@ export async function DELETE(req: Request) {
         await deleteRegistration(body.id);
         return NextResponse.json({ success: true });
     } catch (error: any) {
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    }
+}
+
+export async function PATCH(req: Request) {
+    try {
+        const body = await req.json();
+        const { id, player_name } = body;
+
+        if (!id || !player_name || !player_name.trim()) {
+            return NextResponse.json({ success: false, message: "ID and player name are required" }, { status: 400 });
+        }
+
+        const trimmedName = player_name.trim();
+
+        // 1. Fetch current registration to find the tournamentId
+        const { data: reg, error: fetchErr } = await supabaseAdmin
+            .from('registrations')
+            .select('tournament_id')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !reg) {
+            return NextResponse.json({ success: false, message: "Registration not found" }, { status: 404 });
+        }
+
+        // 2. Fetch all other registrations for the same tournament to check for duplicates
+        const { data: existingRegs, error: fetchAllErr } = await supabaseAdmin
+            .from('registrations')
+            .select('id, player_name')
+            .eq('tournament_id', reg.tournament_id);
+
+        if (fetchAllErr) throw fetchAllErr;
+
+        const isDuplicate = existingRegs?.some(
+            r => r.id !== id && r.player_name.trim().toLowerCase() === trimmedName.toLowerCase()
+        );
+
+        if (isDuplicate) {
+            return NextResponse.json({ success: false, message: "ชื่อผู้เล่นนี้ถูกลงทะเบียนในทัวร์นาเมนต์นี้ไปแล้ว" }, { status: 400 });
+        }
+
+        // 3. Update the name
+        const { error } = await supabaseAdmin
+            .from('registrations')
+            .update({ player_name: trimmedName })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("Admin Registration PATCH Error:", error);
         return NextResponse.json({ success: false, message: error.message }, { status: 500 });
     }
 }

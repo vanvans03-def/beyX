@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useState, useEffect, useRef } from "react";
 import InternalBracket from "@/components/InternalBracket";
+import StandingsTable from "@/components/StandingsTable";
 import { createClient } from "@/utils/supabase/client";
 
 type PublicTournamentViewProps = {
@@ -15,13 +16,17 @@ type PublicTournamentViewProps = {
 
 export default function PublicTournamentView({ tournament, registrations }: PublicTournamentViewProps) {
     const { t, lang, toggleLang } = useTranslation();
-    const [activeTab, setActiveTab] = useState<'players' | 'bracket'>('players');
+    const [activeTab, setActiveTab] = useState<'players' | 'bracket' | 'standings'>('players');
     
     // Bracket State
     const [matches, setMatches] = useState<any[]>([]);
     const [loadingBracket, setLoadingBracket] = useState(true);
     const channelRef = useRef<any>(null);
     const supabaseClient = createClient();
+
+    // Standings State
+    const [standings, setStandings] = useState<any[]>([]);
+    const [loadingStandings, setLoadingStandings] = useState(false);
 
     // Initial fetch for Internal Tournaments
     const fetchInternalMatches = async (silent = false) => {
@@ -40,14 +45,37 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
         }
     };
 
+    // Fetch Standings
+    const fetchStandings = async () => {
+        setLoadingStandings(true);
+        try {
+            const res = await fetch(`/api/public/tournaments/${tournament.id}/standings`);
+            if (!res.ok) return;
+            const json = await res.json();
+            if (json.success && json.data) {
+                setStandings(json.data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch standings", e);
+        } finally {
+            setLoadingStandings(false);
+        }
+    };
+
     useEffect(() => {
-        if (activeTab === 'bracket') {
+        if (activeTab === 'bracket' || activeTab === 'standings') {
             if (tournament.provider === 'INTERNAL') {
-                fetchInternalMatches();
+                fetchInternalMatches(matches.length > 0);
 
                 const channel = supabaseClient.channel(`public_bracket_${tournament.id}`)
-                    .on('broadcast', { event: 'match-update' }, () => fetchInternalMatches(true))
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_matches', filter: `tournament_id=eq.${tournament.id}` }, () => fetchInternalMatches(true))
+                    .on('broadcast', { event: 'match-update' }, () => {
+                        fetchInternalMatches(true);
+                        if (activeTab === 'standings') fetchStandings();
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_matches', filter: `tournament_id=eq.${tournament.id}` }, () => {
+                        fetchInternalMatches(true);
+                        if (activeTab === 'standings') fetchStandings();
+                    })
                     .subscribe();
 
                 channelRef.current = channel;
@@ -61,6 +89,12 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
             }
         }
     }, [activeTab, tournament.id, tournament.provider]);
+
+    useEffect(() => {
+        if (activeTab === 'standings') {
+            fetchStandings();
+        }
+    }, [activeTab, tournament.id]);
 
     const getStatusText = (status: string) => {
         switch (status) {
@@ -139,6 +173,18 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                             {activeTab === 'bracket' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />}
                         </button>
                     )}
+                    {(tournament.status === 'COMPLETED' || tournament.status === 'CLOSED') && (
+                        <button 
+                            onClick={() => setActiveTab('standings')}
+                            className={cn(
+                                "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
+                                activeTab === 'standings' ? "text-primary" : "text-muted-foreground hover:text-white"
+                            )}
+                        >
+                            {t('public.standings' as any) || 'อันดับและสถิติ'}
+                            {activeTab === 'standings' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />}
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -148,7 +194,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                     ? "w-full max-w-none px-0 pt-0" 
                     : "max-w-4xl px-6 pt-8 space-y-8"
             )}>
-                {activeTab === 'players' ? (
+                {activeTab === 'players' && (
                     <>
                         {/* Stats / Status */}
                         <div className="grid grid-cols-2 gap-3">
@@ -244,7 +290,9 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                             </div>
                         </div>
                     </>
-                ) : (
+                )}
+
+                {activeTab === 'bracket' && (
                     <div className="w-full h-[calc(100dvh-130px)] min-h-[500px] bg-secondary/10 border-t border-b border-white/5 relative overflow-hidden shadow-inner">
                         {loadingBracket ? (
                             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
@@ -283,8 +331,29 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                     </div>
                 )}
 
+                {activeTab === 'standings' && (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between px-2">
+                            <h2 className="font-black text-sm uppercase italic tracking-[0.2em] text-muted-foreground/80 flex items-center gap-2">
+                                <div className="h-1 w-8 bg-primary/50" />
+                                {t('public.standings' as any) || 'อันดับและสถิติ'}
+                            </h2>
+                        </div>
+                        {loadingStandings ? (
+                            <div className="py-24 text-center">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+                                <p className="font-medium animate-pulse text-muted-foreground">กำลังโหลดอันดับและสถิติ...</p>
+                            </div>
+                        ) : (
+                            <div className="bg-white/[0.01] border border-white/5 rounded-[2.5rem] p-6 backdrop-blur-xl shadow-2xl shadow-black/20">
+                                <StandingsTable standings={standings} mode={tournament.type} matches={matches} />
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Footer Info */}
-                {activeTab === 'players' && (
+                {activeTab !== 'bracket' && (
                     <div className="text-center pt-10 pb-4">
                         <div className="h-px w-10 bg-white/10 mx-auto mb-6" />
                         <p className="text-[10px] uppercase font-black italic tracking-[0.4em] text-muted-foreground/30">

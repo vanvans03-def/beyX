@@ -66,10 +66,13 @@ export async function POST(request: Request) {
                 }
             }
 
-            // Update Tournament Status
+            // Update Tournament Status & Arena Count
             await supabase
                 .from('tournaments')
-                .update({ status: 'STARTED' })
+                .update({ 
+                    status: 'STARTED',
+                    arena_count: arenaCount || 0
+                })
                 .eq('id', tournamentId);
 
             return NextResponse.json({ success: true, url: `/tournament/${tournamentId}/bracket` });
@@ -98,7 +101,8 @@ export async function POST(request: Request) {
                 .update({
                     challonge_url: result.url,
                     tournament_type: type, // Save the type too
-                    arena_count: arenaCount || 0
+                    arena_count: arenaCount || 0,
+                    status: 'STARTED'
                 })
                 .eq('id', tournamentId);
 

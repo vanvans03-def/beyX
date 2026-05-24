@@ -106,6 +106,7 @@ export const locales = {
         "admin.settings.start": "เริ่มการแข่งขัน",
         "admin.settings.creating_challonge": "กำลังเชื่อมต่อ Challonge...",
         "admin.menu.bracket": "สายการแข่งขัน",
+        "public.standings": "อันดับและสถิติ",
 
         "admin.matches.title": "การแข่งขันที่กำลังแข่ง",
         "admin.matches.refresh": "รีเฟรชผล",
@@ -324,6 +325,7 @@ export const locales = {
         "admin.settings.start": "Start Tournament",
         "admin.settings.creating_challonge": "Creating on Challonge...",
         "admin.menu.bracket": "Live Bracket",
+        "public.standings": "Standings & Stats",
 
         "admin.matches.title": "Active Matches",
         "admin.matches.refresh": "Refresh Matches",

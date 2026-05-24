@@ -101,13 +101,18 @@ export async function PATCH(req: Request) {
         const body = await req.json();
         if (!body.tournamentId) throw new Error("Tournament ID required");
 
-        // Handle bracket_type update standalone
-        if (body.bracket_type && !body.status) {
+        // Handle bracket_type or arena_count updates standalone
+        if ((body.bracket_type || body.arena_count !== undefined) && !body.status) {
             const { createClient } = await import('@supabase/supabase-js');
             const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-            const { error } = await sb.from('tournaments').update({ bracket_type: body.bracket_type }).eq('id', body.tournamentId);
+            
+            const updateFields: any = {};
+            if (body.bracket_type) updateFields.bracket_type = body.bracket_type;
+            if (body.arena_count !== undefined) updateFields.arena_count = body.arena_count;
+            
+            const { error } = await sb.from('tournaments').update(updateFields).eq('id', body.tournamentId);
             if (error) throw new Error(error.message);
-            return NextResponse.json({ success: true, data: { bracket_type: body.bracket_type } });
+            return NextResponse.json({ success: true, data: updateFields });
         }
 
         if (!body.status) throw new Error("Status required");

@@ -26,6 +26,8 @@ type Props = {
     searchQuery: string;
     onDelete: (row: Registration) => void;
     onEditSession?: (row: Registration) => void;
+    onEditName?: (row: Registration) => void;
+    isEditNameDisabled?: boolean;
     tournamentType?: string;
     sameDeviceConflicts?: number[];
     swapSelection?: number[];
@@ -90,7 +92,7 @@ const validateRow = (row: Registration, tournamentType?: string) => {
 // Wrap in memo to prevent re-renders when parent state changes (like modals)
 import { useTranslation } from "@/hooks/useTranslation";
 
-const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, onEditSession, tournamentType, sameDeviceConflicts = [], swapSelection = [], onSwapSelect }: Props) {
+const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, onEditSession, onEditName, isEditNameDisabled, tournamentType, sameDeviceConflicts = [], swapSelection = [], onSwapSelect }: Props) {
     const { t } = useTranslation();
 
     // Memoize the processed data to avoid re-parsing JSON and re-validating on every render
@@ -260,6 +262,19 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                                 title="Edit Session (QR)"
                                             >
                                                 <Share2 className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                        {onEditName && (
+                                            <button
+                                                disabled={isEditNameDisabled}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onEditName(row);
+                                                }}
+                                                className={`p-2 transition-all ${isEditNameDisabled ? 'text-muted-foreground/30 cursor-not-allowed' : 'text-muted-foreground hover:text-primary'}`}
+                                                title={isEditNameDisabled ? "Cannot edit player name after tournament starts" : "Edit Player Name"}
+                                            >
+                                                <Edit className="h-4 w-4" />
                                             </button>
                                         )}
                                         <button

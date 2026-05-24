@@ -64,7 +64,7 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, nu
     if (isBye) return null;
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none', userSelect: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'auto', userSelect: 'none' }}>
             {matchNum !== undefined && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', minWidth: 18, textAlign: 'right', flexShrink: 0 }}>
                     {matchNum}
@@ -914,4 +914,4 @@ function SectionDivider({ children }: { children: React.ReactNode }) {
     );
 }
 
-export default InternalBracket;
+export default React.memo(InternalBracket);

@@ -52,6 +52,45 @@ type Match = {
 
 const supabaseClient = createClient();
 
+const ArenaCountInput = ({ 
+    initialValue, 
+    onChange 
+}: { 
+    initialValue: number; 
+    onChange: (val: number) => void; 
+}) => {
+    const [localVal, setLocalVal] = useState<string>(initialValue === 0 ? '' : String(initialValue));
+
+    useEffect(() => {
+        setLocalVal(initialValue === 0 ? '' : String(initialValue));
+    }, [initialValue]);
+
+    return (
+        <input
+            type="number"
+            min="0"
+            max="50"
+            value={localVal}
+            onChange={(e) => setLocalVal(e.target.value)}
+            onBlur={() => {
+                if (localVal === '') {
+                    onChange(0);
+                } else {
+                    const parsed = parseInt(localVal);
+                    onChange(isNaN(parsed) ? 0 : parsed);
+                }
+            }}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                }
+            }}
+            className="w-full bg-secondary border border-transparent rounded-lg p-2 text-sm"
+            placeholder="0 for no arenas"
+        />
+    );
+};
+
 export default function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { t } = useTranslation();
     const [id, setId] = useState<string>("");
@@ -177,6 +216,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     // Replace modal state with tooltip state
     const [hoveredCombo, setHoveredCombo] = useState<{ x: number, y: number, data: Registration, deckIndex: number } | null>(null);
     const [sharingSession, setSharingSession] = useState<Registration | null>(null);
+
+    // States for Editing Player Name Modal
+    const [editingRegistration, setEditingRegistration] = useState<Registration | null>(null);
+    const [newPlayerName, setNewPlayerName] = useState("");
+    const [editNameError, setEditNameError] = useState("");
+    const [isSavingName, setIsSavingName] = useState(false);
 
     // Toggle tooltip logic
     const handleShowCombo = (e: React.MouseEvent, reg: Registration) => {
@@ -539,7 +584,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         }
     };
 
-    const confirmUpdateMatch = async (matchId: number | string, scores: string, winnerId: number | string) => {
+    const confirmUpdateMatch = useCallback(async (matchId: number | string, scores: string, winnerId: number | string) => {
         if (!bracketUrl && tournament?.provider !== 'INTERNAL') return;
 
         const isInternal = tournament?.provider === 'INTERNAL';
@@ -555,6 +600,22 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 payload: { matchId, isUpdating: true }
             });
         }
+
+        // Save previous matches for rollback if needed
+        const prevMatches = [...matches];
+
+        // 1. Optimistic Update (Immediate UI response for winner selection)
+        setMatches(prev => prev.map(m => {
+            if (m.id === matchId) {
+                return {
+                    ...m,
+                    winner_id: winnerId,
+                    scores_csv: scores,
+                    state: 'complete'
+                };
+            }
+            return m;
+        }));
 
         try {
             const res = await fetch('/api/admin/matches', {
@@ -591,7 +652,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             toast.success("Match result updated successfully!");
         } catch (e: any) {
             console.error(e);
-            // Revert or just refresh to get true state
+            // Rollback on failure
+            setMatches(prevMatches);
+
             if (isInternal) fetchInternalMatches(true);
             else fetchMatches(bracketUrl, true);
             setModalConfig({
@@ -614,9 +677,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 });
             }
         }
-    };
+    }, [bracketUrl, tournament, matches, id, fetchInternalMatches, fetchMatches]);
 
-    const handleUpdateMatch = (matchId: number | string, scores: string, winnerId: number | string | null, playerName: string) => {
+    const handleUpdateMatch = useCallback((matchId: number | string, scores: string, winnerId: number | string | null, playerName: string) => {
         // No hiding scores logic anymore
         if (!winnerId) {
             toast.error("Invalid winner selected");
@@ -642,7 +705,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 }
             });
         }
-    };
+    }, [isQuickMode, confirmUpdateMatch, t]);
 
 
 
@@ -719,7 +782,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     throw new Error(json.error || 'Failed to generate bracket');
                 }
 
-                setTournament((prev: any) => ({ ...prev, Status: 'STARTED' }));
+                setTournament((prev: any) => ({ 
+                    ...prev, 
+                    status: 'STARTED',
+                    arena_count: arenaCount
+                }));
 
                 if (tournament?.provider === 'INTERNAL') {
                     setBracketUrl(""); // keep empty for internal
@@ -1227,6 +1294,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             if (tourJson.success) {
                 const tourData = tourJson.data;
                 setTournament(tourData);
+                if (tourData.arena_count !== undefined) {
+                    setArenaCount(tourData.arena_count);
+                }
 
                 // Determine if we should load matches
                 const url = tourData.challonge_url;
@@ -1271,7 +1341,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }, [id]);
 
     const copyToClipboard = () => {
-        const text = data.map(r => `${r.player_name} (${r.mode})`).join("\n");
+        const text = data.map(r => r.player_name).join("\n");
         navigator.clipboard.writeText(text);
         setModalConfig({
             isOpen: true,
@@ -1280,6 +1350,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             type: "alert"
         });
     };
+
+    const handleEditName = useCallback((row: Registration) => {
+        const isChallonge = tournament?.provider !== 'INTERNAL';
+        const isStarted = tournament?.status !== 'OPEN';
+        if (isChallonge && isStarted) {
+            toast.error("ทัวร์นาเมนต์นี้เริ่มการแข่งขันไปแล้วในระบบ Challonge ไม่สามารถแก้ไขรายชื่อผู้เล่นได้");
+            return;
+        }
+
+        setEditingRegistration(row);
+        setNewPlayerName(row.player_name);
+        setEditNameError("");
+    }, [tournament]);
 
     const handleDelete = useCallback((row: Registration) => {
         if (bracketUrl) {
@@ -1331,7 +1414,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         if (id) fetchLocks();
     }, [id, fetchLocks]);
 
-    const toggleMatchLock = async (matchId: number | string, arenaId?: number) => {
+    const toggleMatchLock = useCallback(async (matchId: number | string, arenaId?: number) => {
         if (!currentUser) return;
 
         const currentLock = lockedMatches[matchId];
@@ -1340,29 +1423,47 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
         if (isLockedByOther) return;
 
-        if (!isLockedByMe && !arenaId && (tournament?.ArenaCount && tournament.ArenaCount > 0)) {
+        if (!isLockedByMe && !arenaId && (tournament?.arena_count && tournament.arena_count > 0)) {
             setSelectedArenaMatchId(matchId);
             return;
         }
 
+        // Save previous locks for rollback if needed
+        const prevLocks = { ...lockedMatches };
+
         try {
             if (isLockedByMe) {
-                // Unlock
+                // 1. Optimistic Update (Immediate UI response)
+                setLockedMatches(prev => {
+                    const next = { ...prev };
+                    delete next[matchId];
+                    return next;
+                });
+
+                // 2. Perform Network Call
                 const { error } = await supabaseClient
                     .from('match_locks')
                     .delete()
                     .eq('match_id', matchId)
                     .eq('tournament_id', id);
 
-                if (error) throw error;
-                // Optimistic update
-                setLockedMatches(prev => {
-                    const next = { ...prev };
-                    delete next[matchId];
-                    return next;
-                });
+                if (error) {
+                    setLockedMatches(prevLocks); // Rollback
+                    throw error;
+                }
             } else {
-                // Lock
+                // 1. Optimistic Update (Immediate UI response)
+                setLockedMatches(prev => ({
+                    ...prev,
+                    [matchId]: {
+                        judgeName: currentUser.username,
+                        judgeShop: currentUser.shop_name,
+                        userId: currentUser.username,
+                        arena: arenaId
+                    }
+                }));
+
+                // 2. Perform Network Call
                 const { error } = await supabaseClient
                     .from('match_locks')
                     .insert({
@@ -1376,29 +1477,20 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                 if (error) {
                     if (error.code === '23505') {
+                        setLockedMatches(prevLocks); // Rollback
                         toast.error(t('admin.matches.lock_error_exists'));
                         fetchLocks();
                     } else {
+                        setLockedMatches(prevLocks); // Rollback
                         throw error;
                     }
-                } else {
-                    // Optimistic update
-                    setLockedMatches(prev => ({
-                        ...prev,
-                        [matchId]: {
-                            judgeName: currentUser.username,
-                            judgeShop: currentUser.shop_name,
-                            userId: currentUser.username,
-                            arena: arenaId
-                        }
-                    }));
                 }
             }
         } catch (e) {
             console.error("Lock error", e);
             toast.error(t('admin.matches.lock_error_failed'));
         }
-    };
+    }, [currentUser, lockedMatches, tournament, id, t, fetchLocks]);
 
     // Realtime Subscription
     useEffect(() => {
@@ -1460,7 +1552,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     filter: `tournament_id=eq.${id}`
                 },
                 () => {
-                    fetchMatches(bracketUrl, true);
+                    fetchInternalMatches(true);
                 }
             )
             .on(
@@ -1490,7 +1582,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             supabaseClient.removeChannel(channel);
             channelRef.current = null;
         };
-    }, [id, fetchData, bracketUrl, fetchLocks]);
+    }, [id, fetchData, bracketUrl, fetchLocks, fetchInternalMatches]);
 
     // validateRow moved to RegistrationTable component
 
@@ -1607,13 +1699,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
                                     {tournament?.name || "Tournament Details"}
                                 </h1>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground break-all">
-                                    <span>ID: {id}</span>
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+                                    <span className="truncate max-w-[100px] sm:max-w-none shrink" title={`ID: ${id}`}>ID: {id}</span>
                                     {tournament?.status && (
                                         <>
-                                            <span>•</span>
+                                            <span className="shrink-0 opacity-50">•</span>
                                             <span className={cn(
-                                                "font-bold",
+                                                "font-bold shrink-0 uppercase tracking-wider text-[10px]",
                                                 tournament.status === 'OPEN' ? "text-green-500" :
                                                     tournament.status === 'COMPLETED' ? "text-blue-500" :
                                                         "text-muted-foreground"
@@ -1622,8 +1714,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             </span>
                                             {tournament?.provider && (
                                                 <>
-                                                    <span>•</span>
-                                                    <span className="px-1.5 py-0.5 rounded-md bg-secondary text-[10px] font-black uppercase tracking-widest text-muted-foreground border border-white/10">
+                                                    <span className="shrink-0 opacity-50">•</span>
+                                                    <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-secondary text-[9px] font-black uppercase tracking-widest text-muted-foreground border border-white/10">
                                                         {tournament.provider}
                                                     </span>
                                                 </>
@@ -1664,6 +1756,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             url={bracketUrl}
                             provider={tournament?.provider}
                             matches={matches}
+                            onMatchClick={(match) => toggleMatchLock(match.id)}
                             onReportWin={(match, winnerId, winnerName, scores) => {
                                 handleUpdateMatch(match.id, scores, winnerId, winnerName);
                             }}
@@ -1677,7 +1770,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <Trophy className="h-5 w-5 text-yellow-500" />
                                 Final Standings
                             </h3>
-                            <StandingsTable standings={standings} mode={tournament?.type} />
+                            <StandingsTable standings={standings} mode={tournament?.type} matches={matches} />
                         </div>
                     )}
 
@@ -1923,7 +2016,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     <div
                                                         role="button"
                                                         tabIndex={0}
-                                                        className={`flex-1 min-w-0 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1
+                                                        className={`flex-1 min-w-0 text-center p-3 rounded-lg relative group transition-all flex flex-col items-center gap-1 active:scale-95 active:bg-blue-500/20 select-none
                                                         ${match.winner_id === match.player1_id
                                                                 ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                                                                 : 'bg-secondary/40 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 border border-transparent hover:border-blue-500/30 cursor-pointer'
@@ -2191,14 +2284,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                                     <div>
                                         <label className="block text-sm font-medium mb-1">{t('admin.settings.arena_count')}</label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            max="50"
-                                            value={arenaCount}
-                                            onChange={(e) => setArenaCount(parseInt(e.target.value) || 0)}
-                                            className="w-full bg-secondary border border-transparent rounded-lg p-2 text-sm"
-                                            placeholder="0 for no arenas"
+                                        <ArenaCountInput
+                                            initialValue={arenaCount}
+                                            onChange={setArenaCount}
                                         />
                                         <p className="text-[10px] text-muted-foreground mt-1">{t('admin.settings.arena_desc')}</p>
                                     </div>
@@ -2526,7 +2614,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     <Share2 className="h-4 w-4 text-primary" />
                                     {t('detail.share_link')} & Invite Card
                                 </h3>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
                                     <button
                                         onClick={handleGeneratePreview}
                                         disabled={generating}
@@ -2567,11 +2655,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             </div>
 
                             {/* Visible QR Info */}
-                            <div className="flex items-center gap-6">
+                            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
                                 <div className="bg-white p-2 rounded-lg">
                                     <QRCodeSVG value={`${origin || ''}/register/${id}`} size={100} />
                                 </div>
-                                <div className="space-y-2 flex-1 min-w-0">
+                                <div className="space-y-2 flex-1 min-w-0 w-full sm:w-auto">
                                     <div className="flex items-center gap-2">
                                         <div className="flex-1 p-2 bg-secondary rounded text-xs font-mono text-muted-foreground break-all border border-white/5">
                                             {origin ? `${origin.replace(/^https?:\/\//, '')}/register/${id}` : `.../register/${id}`}
@@ -2850,36 +2938,36 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     Public View (รายชื่อผู้เล่น & สายการแข่ง)
                                 </h3>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                                 <div className="flex-1 p-3 bg-primary/5 rounded-lg text-xs font-mono text-muted-foreground break-all border border-primary/20 flex items-center justify-between">
                                     <span>{origin ? `${origin.replace(/^https?:\/\//, '')}/${encodeURIComponent(currentUser.shop_name)}/${id.replace(/-/g, '').slice(-8)}` : `.../${encodeURIComponent(currentUser.shop_name)}/${id.replace(/-/g, '').slice(-8)}`}</span>
                                 </div>
-                                <button
-                                    onClick={() => {
-                                        const shortId = id.replace(/-/g, '').slice(-8);
-                                        const url = `${window.location.origin}/${encodeURIComponent(currentUser?.shop_name || "")}/${shortId}`;
-                                        navigator.clipboard.writeText(url);
-                                        toast.success("คัดลอกลิงก์หน้าดูรายชื่อและสายการแข่งสำเร็จ!");
-                                    }}
-                                    className="text-xs flex items-center gap-1.5 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all shrink-0"
-                                    title="Copy Public View Link"
-                                >
-                                    <Copy className="h-3 w-3" />
-                                    <span>คัดลอกลิงก์</span>
-                                </button>
-                                <Link
-                                    href={`/${encodeURIComponent(currentUser?.shop_name || "")}/${id.replace(/-/g, '').slice(-8)}`}
-                                    target="_blank"
-                                    className="text-xs flex items-center gap-1.5 bg-secondary hover:bg-secondary/80 text-primary px-3 py-1.5 rounded-lg font-bold transition-all shrink-0"
-                                    title="Open Public View"
-                                >
-                                    <Share2 className="h-3 w-3" />
-                                    <span>เปิดดูหน้านี้</span>
-                                </Link>
+                                <div className="flex gap-2 sm:shrink-0 w-full sm:w-auto">
+                                    <button
+                                        onClick={() => {
+                                            const shortId = id.replace(/-/g, '').slice(-8);
+                                            const url = `${window.location.origin}/${encodeURIComponent(currentUser?.shop_name || "")}/${shortId}`;
+                                            navigator.clipboard.writeText(url);
+                                            toast.success("คัดลอกลิงก์หน้าดูรายชื่อและสายการแข่งสำเร็จ!");
+                                        }}
+                                        className="flex-1 sm:flex-initial text-xs flex items-center justify-center gap-1.5 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all shrink-0"
+                                        title="Copy Public View Link"
+                                    >
+                                        <Copy className="h-3 w-3" />
+                                        <span>คัดลอกลิงก์</span>
+                                    </button>
+                                    <Link
+                                        href={`/${encodeURIComponent(currentUser?.shop_name || "")}/${id.replace(/-/g, '').slice(-8)}`}
+                                        target="_blank"
+                                        className="flex-1 sm:flex-initial text-xs flex items-center justify-center gap-1.5 bg-secondary hover:bg-secondary/80 text-primary px-3 py-1.5 rounded-lg font-bold transition-all shrink-0"
+                                        title="Open Public View"
+                                    >
+                                        <Share2 className="h-3 w-3" />
+                                        <span>เปิดดูหน้านี้</span>
+                                    </Link>
+                                </div>
                             </div>
                         </div>
-
-
                     )}
 
                     {/* Bulk Registration (Only for Open/Standard or when explicitly enabled) */}
@@ -3061,6 +3149,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         searchQuery={searchQuery}
                         onDelete={handleDelete}
                         onEditSession={setSharingSession}
+                        onEditName={handleEditName}
+                        isEditNameDisabled={tournament?.provider !== 'INTERNAL' && tournament?.status !== 'OPEN'}
                         tournamentType={tournament?.type}
                         sameDeviceConflicts={isListShuffled ? sameDeviceConflicts : []}
                         swapSelection={isSwapMode ? swapSelection : []}
@@ -3079,6 +3169,153 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         onConfirm={modalConfig.onConfirm}
                         confirmText={modalConfig.confirmText || (modalConfig.variant === 'destructive' ? t('gen.delete') : 'OK')}
                     />
+
+                    {/* EDIT PLAYER NAME MODAL */}
+                    <Modal
+                        isOpen={!!editingRegistration}
+                        onClose={() => {
+                            if (!isSavingName) {
+                                setEditingRegistration(null);
+                                setNewPlayerName("");
+                                setEditNameError("");
+                            }
+                        }}
+                        title="แก้ไขชื่อผู้เล่น"
+                        type="custom"
+                    >
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!editingRegistration || isSavingName) return;
+
+                            const trimmed = newPlayerName.trim();
+                            if (!trimmed) {
+                                setEditNameError("กรุณาระบุชื่อผู้เล่น");
+                                return;
+                            }
+
+                            if (trimmed === editingRegistration.player_name) {
+                                setEditingRegistration(null);
+                                setNewPlayerName("");
+                                setEditNameError("");
+                                return;
+                            }
+
+                            // Frontend validation for duplicate names
+                            const isDuplicate = data.some(
+                                r => r.id !== editingRegistration.id && r.player_name.trim().toLowerCase() === trimmed.toLowerCase()
+                            );
+
+                            if (isDuplicate) {
+                                setEditNameError(`ชื่อผู้เล่น "${trimmed}" ถูกใช้ไปแล้วในทัวร์นาเมนต์นี้`);
+                                return;
+                            }
+
+                            setIsSavingName(true);
+                            setEditNameError("");
+
+                            try {
+                                const oldName = editingRegistration.player_name;
+                                const res = await fetch("/api/admin/registrations", {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ id: editingRegistration.id, player_name: trimmed })
+                                });
+                                const json = await res.json();
+                                if (!res.ok) {
+                                    throw new Error(json.message || "Failed to update name");
+                                }
+
+                                // 1. Update local states immediately to prevent jump/flash
+                                setData(prev => prev.map(r => 
+                                    r.id === editingRegistration.id ? { ...r, player_name: trimmed } : r
+                                ));
+
+                                if (shuffledData) {
+                                    setShuffledData(prev => prev ? prev.map(r => 
+                                        r.id === editingRegistration.id ? { ...r, player_name: trimmed } : r
+                                    ) : null);
+                                }
+
+                                // 2. Update the saved order in DB if it contains the old name
+                                try {
+                                    const orderRes = await fetch(`/api/admin/tournaments/order?tournamentId=${id}`);
+                                    const orderJson = await orderRes.json();
+                                    if (orderJson.success && orderJson.order && orderJson.order.length > 0) {
+                                        const savedOrder = orderJson.order as string[];
+                                        const updatedOrder = savedOrder.map(name => 
+                                            name === oldName ? trimmed : name
+                                        );
+                                        await fetch('/api/admin/tournaments/order', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ tournamentId: id, order: updatedOrder })
+                                        });
+                                    }
+                                } catch (orderErr) {
+                                    console.error("Failed to sync order on name change", orderErr);
+                                }
+
+                                toast.success("แก้ไขชื่อผู้เล่นสำเร็จ");
+                                setEditingRegistration(null);
+                                setNewPlayerName("");
+                                setEditNameError("");
+                                fetchData(true); // Silent refresh
+                            } catch (e: any) {
+                                console.error("Edit name error:", e);
+                                setEditNameError(e.message || "เกิดข้อผิดพลาดในการแก้ไขชื่อผู้เล่น");
+                            } finally {
+                                setIsSavingName(false);
+                            }
+                        }} className="flex flex-col gap-4">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-muted-foreground block">
+                                    ชื่อเดิม: <span className="text-foreground font-bold">{editingRegistration?.player_name}</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newPlayerName}
+                                    onChange={(e) => {
+                                        setNewPlayerName(e.target.value);
+                                        if (editNameError) setEditNameError("");
+                                    }}
+                                    className="w-full px-4 py-2.5 bg-secondary/80 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm font-sans"
+                                    placeholder="ใส่ชื่อผู้เล่นใหม่..."
+                                    autoFocus
+                                    disabled={isSavingName}
+                                />
+                            </div>
+
+                            {editNameError && (
+                                <div className="p-3 bg-red-500/10 text-red-500 rounded-xl border border-red-500/20 text-xs flex items-start gap-2 animate-in slide-in-from-top-2">
+                                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                    <span>{editNameError}</span>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 justify-end mt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEditingRegistration(null);
+                                        setNewPlayerName("");
+                                        setEditNameError("");
+                                    }}
+                                    disabled={isSavingName}
+                                    className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors disabled:opacity-50"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSavingName || !newPlayerName.trim()}
+                                    className="px-6 py-2 rounded-lg text-sm font-bold text-black bg-primary hover:bg-primary/90 transition-colors shadow-lg shadow-black/20 flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    {isSavingName && <Loader2 className="w-4 h-4 animate-spin" />}
+                                    บันทึก
+                                </button>
+                            </div>
+                        </form>
+                    </Modal>
 
                     {/* SESSION TRANSFER MODAL */}
                     <Modal
@@ -3204,7 +3441,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             >
                                 No Arena
                             </button>
-                            {Array.from({ length: tournament?.ArenaCount || 0 }).map((_, i) => (
+                            {Array.from({ length: tournament?.arena_count || 0 }).map((_, i) => (
                                 <button
                                     key={i}
                                     onClick={() => {
