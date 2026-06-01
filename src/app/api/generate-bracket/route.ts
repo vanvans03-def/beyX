@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { setupAndStartTournament } from '@/lib/challonge';
-import { getUserApiKey, getTournament, getRegistrations } from '@/lib/repository';
+import { getUserApiKey, getTournament, getRegistrations, getParticipantOrder } from '@/lib/repository';
 import { generateSingleElimination, generateDoubleElimination } from '@/lib/brackets';
 
 const supabase = createClient(
@@ -27,7 +27,21 @@ export async function POST(request: Request) {
         if (tournament.provider === 'INTERNAL') {
             // --- INTERNAL GENERATION ---
             const registrations = await getRegistrations(tournamentId);
-            const participants = registrations.map(r => ({ id: r.id, name: r.player_name }));
+            const savedOrder = await getParticipantOrder(tournamentId);
+            
+            let orderedRegistrations = [...registrations];
+            if (savedOrder && savedOrder.length > 0) {
+                const orderMap = new Map(savedOrder.map((name, index) => [name, index]));
+                orderedRegistrations.sort((a, b) => {
+                    const indexA = orderMap.has(a.player_name) ? orderMap.get(a.player_name)! : Infinity;
+                    const indexB = orderMap.has(b.player_name) ? orderMap.get(b.player_name)! : Infinity;
+                    return indexA - indexB;
+                });
+            } else {
+                orderedRegistrations.reverse();
+            }
+
+            const participants = orderedRegistrations.map(r => ({ id: r.id, name: r.player_name }));
 
             let matches = [];
             if (tournament.bracket_type === 'DOUBLE') {

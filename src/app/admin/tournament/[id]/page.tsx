@@ -9,7 +9,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2, ArrowLeftRight } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2, ArrowLeftRight, Globe } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -92,7 +92,7 @@ const ArenaCountInput = ({
 };
 
 export default function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
-    const { t } = useTranslation();
+    const { t, lang, toggleLang } = useTranslation();
     const [id, setId] = useState<string>("");
 
     // Unwrap params
@@ -820,8 +820,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             }
         };
 
-        // Confirm start if not shuffled
-        if (!isListShuffled) {
+        // Confirm start if not shuffled (only for Challonge tournaments)
+        if (tournament?.provider !== 'INTERNAL' && !isListShuffled) {
             setModalConfig({
                 isOpen: true,
                 type: 'confirm',
@@ -1736,7 +1736,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             />
                         </div>
 
-                        <div className="flex gap-2 w-full md:w-auto justify-end">
+                        <div className="flex gap-2 w-full md:w-auto justify-end items-center">
+                            <button
+                                onClick={toggleLang}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-secondary rounded-lg hover:bg-secondary/80 text-xs font-bold transition-colors text-muted-foreground hover:text-foreground"
+                            >
+                                <Globe className="h-4 w-4" />
+                                {lang}
+                            </button>
+
                             <button
                                 onClick={() => fetchData()}
                                 disabled={loading}
@@ -1745,7 +1753,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                                 <span className="hidden md:inline">Refresh</span>
                             </button>
-
                         </div>
                     </header>
 
