@@ -3,7 +3,7 @@ import { Trophy, Medal, BarChart3 } from 'lucide-react';
 import { useTranslation } from "@/hooks/useTranslation";
 
 interface Standing {
-    id: number;
+    id: number | string;
     rank: number;
     name: string;
     misc?: string;
@@ -30,6 +30,11 @@ export default function StandingsTable({
                 .filter(m => {
                     const state = m.state?.toLowerCase();
                     if (state !== 'complete' && state !== 'completed') return false;
+                    
+                    // Try ID match first (most reliable)
+                    if (m.player1_id === player.id || m.player2_id === player.id) return true;
+
+                    // Fallback to name match for Challonge or if IDs missing
                     const p1Name = m.player1?.name?.trim().toLowerCase();
                     const p2Name = m.player2?.name?.trim().toLowerCase();
                     const targetName = player.name.trim().toLowerCase();
@@ -44,21 +49,34 @@ export default function StandingsTable({
             let wins = 0;
             let losses = 0;
             const results = playerMatches.map(m => {
-                const p1Name = m.player1?.name?.trim().toLowerCase();
-                const targetName = player.name.trim().toLowerCase();
-                const isP1 = p1Name === targetName;
-                const isP2 = !isP1;
-                const won = (m.winner_id === m.player1_id && isP1) || (m.winner_id === m.player2_id && isP2);
+                const targetId = player.id;
+                const isP1 = m.player1_id === targetId || m.player1?.name?.trim().toLowerCase() === player.name.trim().toLowerCase();
+                const won = (m.winner_id === m.player1_id && isP1) || (m.winner_id === m.player2_id && !isP1);
+                
                 if (won) wins++;
                 else losses++;
                 return won ? 'W' as const : 'L' as const;
             });
 
-            stats[player.name.trim().toLowerCase()] = { wins, losses, results };
+            stats[player.id.toString()] = { wins, losses, results };
         });
 
         return stats;
     }, [standings, matches]);
+
+    // Enhanced sort: Rank -> Wins -> Total Matches
+    const sortedStandings = React.useMemo(() => {
+        return [...standings].sort((a, b) => {
+            if (a.rank !== b.rank) return a.rank - b.rank;
+            
+            const statsA = playerStatsMap[a.id.toString()];
+            const statsB = playerStatsMap[b.id.toString()];
+            if (!statsA || !statsB) return 0;
+
+            if (statsA.wins !== statsB.wins) return statsB.wins - statsA.wins;
+            return (statsB.wins + statsB.losses) - (statsA.wins + statsA.losses);
+        });
+    }, [standings, playerStatsMap]);
 
     const maxMatches = React.useMemo(() => {
         return Math.max(...Object.values(playerStatsMap).map(s => s.results.length), 0);
@@ -106,8 +124,8 @@ export default function StandingsTable({
                 </div>
             )}
 
-            {standings.map((player) => {
-                const stats = playerStatsMap[player.name.trim().toLowerCase()];
+            {sortedStandings.map((player) => {
+                const stats = playerStatsMap[player.id.toString()];
                 const totalPlayed = stats ? stats.wins + stats.losses : 0;
                 const winRate = totalPlayed > 0 && stats ? Math.round((stats.wins / totalPlayed) * 100) : 0;
 

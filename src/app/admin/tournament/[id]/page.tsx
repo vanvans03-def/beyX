@@ -1307,6 +1307,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     // bracketUrl stays empty so Challonge embed is not shown
                     setBracketUrl('');
                     await fetchInternalMatches(silent);
+                    if (tourData.status === 'COMPLETED' || tourData.status === 'CLOSED') {
+                        fetchStandings();
+                    }
                 } else if (url) {
                     setBracketUrl(url);
                     fetchMatches(url, silent);
@@ -1615,7 +1618,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         })
         .sort((a, b) => (a.suggested_play_order || 0) - (b.suggested_play_order || 0));
     const historyMatches = matches
-        .filter(m => (m.state || '').toUpperCase() === 'COMPLETE')
+        .filter(m => (m.state || '').toUpperCase() === 'COMPLETE' && !m.scores_csv?.includes('BYE'))
         .sort((a, b) => new Date(b.completed_at || b.updated_at || "").getTime() - new Date(a.completed_at || a.updated_at || "").getTime());
 
     // Computed properties for the active matches
@@ -1771,7 +1774,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     )}
 
                     {/* Standings Section */}
-                    {standings.length > 0 && (
+                    {(tournament?.status === 'COMPLETED' || tournament?.status === 'CLOSED') && standings.length > 0 && (
                         <div className="bg-secondary/20 border border-white/10 rounded-xl p-4 mt-6">
                             <h3 className="text-lg font-bold flex items-center gap-2 mb-4">
                                 <Trophy className="h-5 w-5 text-yellow-500" />
@@ -2371,7 +2374,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 <span className="text-[10px] text-muted-foreground">{t('admin.matches.updating')}</span>
                                                             </div>
                                                         </div>
-                                                    ) : (tournament?.status !== 'COMPLETED' && tournament?.status !== 'CLOSED') && (
+                                                    ) : (tournament?.status !== 'COMPLETED' && tournament?.status !== 'CLOSED' || tournament?.provider === 'INTERNAL') && (
                                                         <button
                                                             onClick={() => {
                                                                 setModalConfig({

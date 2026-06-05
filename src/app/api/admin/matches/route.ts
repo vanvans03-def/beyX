@@ -139,10 +139,10 @@ export async function PUT(request: Request) {
             const target = ms.find(m => m.id === matchId);
             if (!target) throw new Error(`Match ${matchId} not found`);
 
-            // Sanity-check: match must be OPEN and have both players
-            if (target.state !== 'OPEN') {
+            // Sanity-check: match must be OPEN or COMPLETE (for history editing) and have both players
+            if (target.state !== 'OPEN' && target.state !== 'COMPLETE') {
                 return NextResponse.json(
-                    { error: `Match ${matchId} is not OPEN (state=${target.state})` },
+                    { error: `Match ${matchId} is not in a valid state for update (state=${target.state})` },
                     { status: 400 },
                 );
             }
@@ -180,27 +180,39 @@ export async function PUT(request: Request) {
             //
             // We upsert EVERY match, not just the changed ones, so the DB stays
             // perfectly in sync with the in-memory state after propagation.
+            // But we only update 'updated_at' for matches that actually changed
+            // so that the history sort remains valid.
             const now = new Date().toISOString();
             const { error: upsertErr } = await supabaseAdmin
                 .from('internal_matches')
                 .upsert(
-                    ms.map(m => ({
-                        id: m.id,
-                        tournament_id: m.tournament_id,
-                        player1_id: m.player1_id,
-                        player2_id: m.player2_id,
-                        winner_id: m.winner_id,
-                        state: m.state,
-                        scores_csv: m.scores_csv,
-                        round: m.round,
-                        player1_prereq_match_id: m.player1_prereq_match_id,
-                        player2_prereq_match_id: m.player2_prereq_match_id,
-                        loser_to_match_id: m.loser_to_match_id,
-                        is_grand_final: m.is_grand_final,
-                        is_reset_match: m.is_reset_match,
-                        suggested_play_order: m.suggested_play_order,
-                        updated_at: now,
-                    })),
+                    ms.map(m => {
+                        const original = rows.find(r => r.id === m.id);
+                        const hasChanged = !original || 
+                            original.state !== m.state || 
+                            original.winner_id !== m.winner_id || 
+                            original.scores_csv !== m.scores_csv ||
+                            original.player1_id !== m.player1_id ||
+                            original.player2_id !== m.player2_id;
+
+                        return {
+                            id: m.id,
+                            tournament_id: m.tournament_id,
+                            player1_id: m.player1_id,
+                            player2_id: m.player2_id,
+                            winner_id: m.winner_id,
+                            state: m.state,
+                            scores_csv: m.scores_csv,
+                            round: m.round,
+                            player1_prereq_match_id: m.player1_prereq_match_id,
+                            player2_prereq_match_id: m.player2_prereq_match_id,
+                            loser_to_match_id: m.loser_to_match_id,
+                            is_grand_final: m.is_grand_final,
+                            is_reset_match: m.is_reset_match,
+                            suggested_play_order: m.suggested_play_order,
+                            updated_at: hasChanged ? now : original.updated_at,
+                        };
+                    }),
                     { onConflict: 'id' },
                 );
 

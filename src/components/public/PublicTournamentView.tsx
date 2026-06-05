@@ -16,7 +16,15 @@ type PublicTournamentViewProps = {
 
 export default function PublicTournamentView({ tournament, registrations }: PublicTournamentViewProps) {
     const { t, lang, toggleLang } = useTranslation();
-    const [activeTab, setActiveTab] = useState<'players' | 'bracket' | 'standings'>('players');
+    const [activeTab, setActiveTab] = useState<'players' | 'bracket' | 'standings'>(() => {
+        if (tournament?.status === 'STARTED') {
+            return 'bracket';
+        }
+        if (tournament?.status === 'CLOSED' || tournament?.status === 'COMPLETED') {
+            return 'standings';
+        }
+        return 'players';
+    });
     
     // Bracket State
     const [matches, setMatches] = useState<any[]>([]);
@@ -115,9 +123,9 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
             </div>
 
             {/* Header / Hero */}
-            <div className="relative border-b border-white/5 bg-black/40 backdrop-blur-xl sticky top-0 z-50">
-                <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-                    <Link href="/" className="p-2 -ml-2 hover:bg-white/5 rounded-full transition-colors text-muted-foreground hover:text-white">
+            <div className="sticky top-0 z-[100] border-b border-white/5 bg-[#050505]/95 backdrop-blur-none md:bg-black/40 md:backdrop-blur-xl isolation-isolate">
+                <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between relative z-10">
+                    <Link href="/" className="p-2 -ml-2 hover:bg-white/5 rounded-full transition-colors text-muted-foreground hover:text-white relative z-20">
                         <ChevronLeft className="h-6 w-6" />
                     </Link>
                     <div className="text-center flex-1">
@@ -136,7 +144,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                     </div>
                     <button 
                         onClick={toggleLang}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-white transition-all active:scale-95"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-white transition-all active:scale-95 relative z-20"
                     >
                         <Globe className="h-3 w-3" />
                         {lang}
@@ -144,11 +152,11 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                 </div>
 
                 {/* Tabs */}
-                <div className="max-w-4xl mx-auto px-6 flex items-center gap-8 border-t border-white/5">
+                <div className="max-w-4xl mx-auto px-6 flex items-center gap-8 border-t border-white/5 relative z-10">
                     <button 
                         onClick={() => setActiveTab('players')}
                         className={cn(
-                            "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
+                            "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative z-20 flex items-center gap-1.5",
                             activeTab === 'players' ? "text-primary" : "text-muted-foreground hover:text-white"
                         )}
                     >
@@ -159,7 +167,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         <button 
                             onClick={() => setActiveTab('bracket')}
                             className={cn(
-                                "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
+                                "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative z-20 flex items-center gap-1.5",
                                 activeTab === 'bracket' ? "text-primary" : (tournament.status === 'CLOSED' || tournament.status === 'STARTED') ? "text-white drop-shadow-[0_0_5px_rgba(var(--primary-rgb),0.8)]" : "text-muted-foreground hover:text-white"
                             )}
                         >
@@ -177,7 +185,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         <button 
                             onClick={() => setActiveTab('standings')}
                             className={cn(
-                                "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center gap-1.5",
+                                "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative z-20 flex items-center gap-1.5",
                                 activeTab === 'standings' ? "text-primary" : "text-muted-foreground hover:text-white"
                             )}
                         >

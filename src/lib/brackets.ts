@@ -326,52 +326,54 @@ export function propagateWinners(matches: InternalMatch[]) {
     while (changed) {
         changed = false;
 
-        // ── Phase A: propagate player IDs from all COMPLETE matches ──────────
+        // ── Phase A: propagate player IDs (winners and losers) ───────────────
         for (const match of matches) {
-            if ((match.state || 'PENDING').toUpperCase() !== 'COMPLETE') continue;
-            
-            if (match.winner_id === null) {
-                // If a match is complete with a BYE and has no winner, it means both participants were BYEs.
-                // Propagate null to children.
-                const children = matches.filter(
-                    m => m.player1_prereq_match_id === match.id ||
-                        m.player2_prereq_match_id === match.id
-                );
-                for (const child of children) {
-                    if (child.is_reset_match) continue;
-                    const slot = child.player1_prereq_match_id === match.id
-                        ? 'player1_id' : 'player2_id';
-                    if (child[slot] !== null) {
-                        child[slot] = null;
-                        changed = true;
-                    }
-                }
-                continue;
-            }
+            const isComplete = (match.state || 'PENDING').toUpperCase() === 'COMPLETE';
+            const winnerId = isComplete ? match.winner_id : null;
 
-            // Grand Final reset logic
+            // 1. Grand Final reset logic
             if (match.is_grand_final) {
                 const resetMatch = matches.find(m => m.is_reset_match);
                 if (resetMatch) {
-                    if (match.winner_id === match.player1_id) {
-                        if (resetMatch.state !== 'COMPLETE') {
-                            resetMatch.state = 'COMPLETE';
-                            resetMatch.scores_csv = 'BYE (Cancelled)';
-                            changed = true;
+                    if (isComplete) {
+                        if (match.winner_id === match.player1_id) {
+                            // Winners bracket champion won the first GF match -> No reset needed
+                            if (resetMatch.state !== 'COMPLETE' || !resetMatch.scores_csv?.includes('Cancelled')) {
+                                resetMatch.state = 'COMPLETE';
+                                resetMatch.scores_csv = 'BYE (Cancelled)';
+                                resetMatch.winner_id = match.player1_id;
+                                changed = true;
+                            }
+                        } else {
+                            // Losers bracket survivor won the first GF match -> Force reset match
+                            // Fix: Don't set to OPEN if it's already COMPLETE (unless players changed or it was previously cancelled)
+                            const isCurrentlyCancelled = resetMatch.state === 'COMPLETE' && resetMatch.scores_csv?.includes('Cancelled');
+                            const playersChanged = resetMatch.player1_id !== match.player1_id || resetMatch.player2_id !== match.player2_id;
+                            
+                            if (playersChanged || resetMatch.state === 'PENDING' || isCurrentlyCancelled) {
+                                resetMatch.player1_id = match.player1_id;
+                                resetMatch.player2_id = match.player2_id;
+                                resetMatch.state = 'OPEN';
+                                resetMatch.scores_csv = '';
+                                resetMatch.winner_id = null;
+                                changed = true;
+                            }
                         }
                     } else {
-                        if (resetMatch.state === 'PENDING') {
-                            resetMatch.player1_id = match.player1_id;
-                            resetMatch.player2_id = match.player2_id;
-                            resetMatch.state = 'OPEN';
-                            resetMatch.scores_csv = '';
+                        // GF not complete -> reset match must be pending/cleared
+                        if (resetMatch.state !== 'PENDING' || resetMatch.player1_id !== null) {
+                            resetMatch.state = 'PENDING';
+                            resetMatch.player1_id = null;
+                            resetMatch.player2_id = null;
+                            resetMatch.winner_id = null;
+                            resetMatch.scores_csv = 'BYE';
                             changed = true;
                         }
                     }
                 }
             }
 
-            // Push winner to children via prereq links
+            // 2. Push winner (or null) to children via prereq links
             const children = matches.filter(
                 m => m.player1_prereq_match_id === match.id ||
                     m.player2_prereq_match_id === match.id
@@ -381,27 +383,33 @@ export function propagateWinners(matches: InternalMatch[]) {
                 
                 const slot = child.player1_prereq_match_id === match.id
                     ? 'player1_id' : 'player2_id';
-                if (child[slot] !== match.winner_id) {
-                    child[slot] = match.winner_id;
+                
+                if (child[slot] !== winnerId) {
+                    child[slot] = winnerId;
+                    // Reset child state because its inputs changed
+                    child.state = 'PENDING'; 
+                    child.winner_id = null;
+                    child.scores_csv = '';
                     changed = true;
                 }
             }
 
-            // Push loser to LB target via loser_to_match_id
+            // 3. Push loser (or null) to LB target via loser_to_match_id
             if (!match.is_grand_final && match.loser_to_match_id) {
-                const loserId = match.player1_id === match.winner_id
-                    ? match.player2_id
-                    : match.player1_id;
+                const loserId = isComplete ? (match.player1_id === match.winner_id ? match.player2_id : match.player1_id) : null;
                 const target = matches.find(m => m.id === match.loser_to_match_id);
                 if (target) {
-                    if (target.player1_id !== loserId && target.player2_id !== loserId) {
-                        if (target.player1_id === null && !target.player1_prereq_match_id) {
-                            target.player1_id = loserId;
-                            changed = true;
-                        } else if (target.player2_id === null && !target.player2_prereq_match_id) {
-                            target.player2_id = loserId;
-                            changed = true;
-                        }
+                    const isSlot1 = target.player1_loser_feeder_id === match.id;
+                    const isSlot2 = target.player2_loser_feeder_id === match.id;
+                    const slot = isSlot1 ? 'player1_id' : (isSlot2 ? 'player2_id' : null);
+
+                    if (slot && target[slot] !== loserId) {
+                        target[slot] = loserId;
+                        // Reset target state because its inputs changed
+                        target.state = 'PENDING';
+                        target.winner_id = null;
+                        target.scores_csv = '';
+                        changed = true;
                     }
                 }
             }

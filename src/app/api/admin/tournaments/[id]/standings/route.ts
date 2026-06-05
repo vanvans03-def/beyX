@@ -38,10 +38,42 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             const standings: any[] = [];
             const processedIds = new Set<string>();
 
+            // Calculate stats for all players to use as tie-breakers
+            const playerStats = new Map<string, { wins: number, total: number }>();
+            (matches || []).forEach((m: any) => {
+                if (m.state === 'COMPLETE') {
+                    if (m.player1_id) {
+                        const s1 = playerStats.get(m.player1_id) || { wins: 0, total: 0 };
+                        s1.total++;
+                        if (m.winner_id === m.player1_id) s1.wins++;
+                        playerStats.set(m.player1_id, s1);
+                    }
+                    if (m.player2_id) {
+                        const s2 = playerStats.get(m.player2_id) || { wins: 0, total: 0 };
+                        s2.total++;
+                        if (m.winner_id === m.player2_id) s2.wins++;
+                        playerStats.set(m.player2_id, s2);
+                    }
+                }
+            });
+
+            const getTieBreakerSort = (aId: string, bId: string) => {
+                const sA = playerStats.get(aId) || { wins: 0, total: 0 };
+                const sB = playerStats.get(bId) || { wins: 0, total: 0 };
+                if (sA.wins !== sB.wins) return sB.wins - sA.wins;
+                return sB.total - sA.total;
+            };
+
             const playedWbMatches = (matches || [])
                 .filter((m: any) => m.round > 0 && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled'))
                 .sort((a: any, b: any) => b.round - a.round);
-            const finalMatch = playedWbMatches[0];
+            
+            // The very last WB match might be the Grand Final or Winners Final
+            // In Double Elim, the Grand Final determines 1st and 2nd.
+            const isDoubleElim = (matches || []).some((m: any) => m.round < 0);
+            const finalMatch = (matches || []).find((m: any) => m.is_grand_final && m.state === 'COMPLETE') 
+                               || (matches || []).find((m: any) => m.is_reset_match && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled'))
+                               || playedWbMatches[0];
 
             if (finalMatch) {
                 const winnerId = finalMatch.winner_id;
@@ -56,14 +88,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                     processedIds.add(loserId);
                 }
 
-                const isDoubleElim = (matches || []).some((m: any) => m.round < 0);
                 let currentRank = 3;
 
                 if (isDoubleElim) {
                     const losersByLBRound = new Map<number, Set<string>>();
-                    matches.filter((m: any) => m.state === 'COMPLETE').forEach((m: any) => {
+                    matches.filter((m: any) => m.state === 'COMPLETE' && m.round < 0).forEach((m: any) => {
                         const lId = m.winner_id === m.player1_id ? m.player2_id : m.player1_id;
-                        if (lId && m.round < 0) {
+                        if (lId) {
                             const absR = Math.abs(m.round);
                             if (!losersByLBRound.has(absR)) losersByLBRound.set(absR, new Set());
                             losersByLBRound.get(absR)!.add(lId);
@@ -72,7 +103,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
                     const lbRounds = Array.from(losersByLBRound.keys()).sort((a, b) => b - a);
                     lbRounds.forEach(r => {
-                        const playersInThisRound = Array.from(losersByLBRound.get(r)!).filter(id => !processedIds.has(id));
+                        const playersInThisRound = Array.from(losersByLBRound.get(r)!)
+                            .filter(id => !processedIds.has(id))
+                            .sort(getTieBreakerSort);
+
                         if (playersInThisRound.length > 0) {
                             playersInThisRound.forEach(id => {
                                 standings.push({ id, rank: currentRank, name: playerMap.get(id) || 'Unknown' });
@@ -93,7 +127,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
                     const wbRounds = Array.from(losersByWbRound.keys()).sort((a, b) => b - a);
                     wbRounds.forEach(r => {
-                        const playersInThisRound = Array.from(losersByWbRound.get(r)!).filter(id => !processedIds.has(id));
+                        const playersInThisRound = Array.from(losersByWbRound.get(r)!)
+                            .filter(id => !processedIds.has(id))
+                            .sort(getTieBreakerSort);
+
                         if (playersInThisRound.length > 0) {
                             playersInThisRound.forEach(id => {
                                 standings.push({ id, rank: currentRank, name: playerMap.get(id) || 'Unknown' });
@@ -104,6 +141,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                     });
                 }
             }
+
+            // Fallback for anyone else who registered but didn't play or was not captured
+            const remainingPlayers = Array.from(playerMap.keys())
+                .filter(id => !processedIds.has(id))
+                .sort(getTieBreakerSort);
+            
+            remainingPlayers.forEach(id => {
+                standings.push({ id, rank: standings.length + 1, name: playerMap.get(id) || 'Unknown' });
+            });
 
             // Fallback for others or for non-Double brackets: sort by round of exit
             // (Excluded for brevity, usually enough for top 3)
