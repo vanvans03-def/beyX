@@ -200,15 +200,33 @@ export function generateDoubleElimination(
         if (isMixing) {
             // Mixing: each LB survivor meets one WB loser (1-to-1)
             const wbFeeders = wbr.get(wbFeedRound) || [];
-            // Reverse WB feeders for anti-rematch
-            const wbReversed = [...wbFeeders].reverse();
+            const L = wbFeeders.length;
+
+            // Determine XOR mask for this WB round
+            let mask = 0;
+            if (wbFeedRound === 2) {
+                mask = L - 1; // Reverse for WB R2
+            } else {
+                if (wbFeedRound % 2 === 1) {
+                    mask = (L >= 4) ? Math.floor(L / 4) : 0; // Odd rounds: L/4
+                } else {
+                    mask = (L >= 2) ? Math.floor(L / 2) : 0; // Even rounds: L/2
+                }
+            }
+
+            // Permute WB feeders using crossover XOR mask
+            const wbPermuted = new Array(L);
+            for (let i = 0; i < L; i++) {
+                const targetIdx = i ^ mask;
+                wbPermuted[i] = wbFeeders[targetIdx];
+            }
             wbFeedRound++;
 
             for (let i = 0; i < prevLBRound.length; i++) {
                 const m = makeLB(lr, prevLBRound[i].id, null);
-                if (i < wbReversed.length) {
-                    wbReversed[i].loser_to_match_id = m.id;
-                    m.player2_loser_feeder_id = wbReversed[i].id;
+                if (i < wbPermuted.length && wbPermuted[i]) {
+                    wbPermuted[i].loser_to_match_id = m.id;
+                    m.player2_loser_feeder_id = wbPermuted[i].id;
                 }
                 cur.push(m);
             }

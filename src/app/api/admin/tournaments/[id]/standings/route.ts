@@ -40,8 +40,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
             // Calculate stats for all players to use as tie-breakers
             const playerStats = new Map<string, { wins: number, total: number }>();
+
+
             (matches || []).forEach((m: any) => {
-                if (m.state === 'COMPLETE') {
+                if (m.state === 'COMPLETE' && !m.scores_csv?.includes('BYE')) {
                     if (m.player1_id) {
                         const s1 = playerStats.get(m.player1_id) || { wins: 0, total: 0 };
                         s1.total++;

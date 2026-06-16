@@ -295,6 +295,14 @@ export async function setParticipantOrder(tournamentId: string, order: string[])
     await setSystemSetting(`participant_order_${tournamentId}`, order);
 }
 
+export async function deleteParticipantOrder(tournamentId: string) {
+    const { error } = await supabaseAdmin
+        .from('system_settings')
+        .delete()
+        .eq('key', `participant_order_${tournamentId}`);
+    if (error) throw new Error(error.message);
+}
+
 export async function getMatchesFromDB(tournamentIdentifier: string) {
     // 1. Try to find the tournament UUID from the identifier (url slug)
     const { data: tour } = await supabaseAdmin
@@ -394,7 +402,7 @@ export async function getRegistrations(tournamentId: string): Promise<Registrati
         .from('registrations')
         .select('*')
         .eq('tournament_id', tournamentId)
-        .order('timestamp', { ascending: false });
+        .order('timestamp', { ascending: true });
 
     if (error) {
         console.error(`[Repo] getRegistrations error for ${tournamentId}:`, error);

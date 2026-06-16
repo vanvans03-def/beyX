@@ -29,7 +29,7 @@ export async function POST(request: Request) {
             const registrations = await getRegistrations(tournamentId);
             const savedOrder = await getParticipantOrder(tournamentId);
             
-            let orderedRegistrations = [...registrations];
+            const orderedRegistrations = [...registrations];
             if (savedOrder && savedOrder.length > 0) {
                 const orderMap = new Map(savedOrder.map((name, index) => [name, index]));
                 orderedRegistrations.sort((a, b) => {
@@ -37,8 +37,6 @@ export async function POST(request: Request) {
                     const indexB = orderMap.has(b.player_name) ? orderMap.get(b.player_name)! : Infinity;
                     return indexA - indexB;
                 });
-            } else {
-                orderedRegistrations.reverse();
             }
 
             const participants = orderedRegistrations.map(r => ({ id: r.id, name: r.player_name }));

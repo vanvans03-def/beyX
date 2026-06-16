@@ -30,6 +30,7 @@ export default function StandingsTable({
                 .filter(m => {
                     const state = m.state?.toLowerCase();
                     if (state !== 'complete' && state !== 'completed') return false;
+                    if (m.scores_csv?.includes('BYE')) return false; // Skip BYEs from stats
                     
                     // Try ID match first (most reliable)
                     if (m.player1_id === player.id || m.player2_id === player.id) return true;

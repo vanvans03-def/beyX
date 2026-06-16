@@ -23,7 +23,6 @@ interface InternalMatch {
 
 interface Props {
     matches: InternalMatch[];
-    onMatchClick?: (match: InternalMatch) => void;
     onReportWin?: (match: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
     provider?: string;
 }
@@ -43,9 +42,8 @@ function cardTopY(slotIdx: number, roundIdx: number, UNIT: number): number {
 }
 
 // ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, numMap, t }: {
+function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t }: {
     match: InternalMatch;
-    onMatchClick?: (m: InternalMatch) => void;
     onReportWin?: (m: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
     matchNum?: number;
     loserOfNums?: [number | undefined, number | undefined];
@@ -72,13 +70,12 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, nu
             )}
 
             <div
-                onClick={() => isOpen && onMatchClick?.(match)}
                 style={{
                     width: CARD_W, height: CARD_H,
                     display: 'flex', flexDirection: 'column',
                     border: isOpen ? '1px solid #3f3f46' : '1px solid #27272a',
                     borderRadius: 5, overflow: 'hidden',
-                    cursor: isOpen ? 'pointer' : 'default',
+                    cursor: 'default',
                     position: 'relative', flexShrink: 0,
                 }}
             >
@@ -87,17 +84,10 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, nu
                 )}
                 {/* P1 */}
                 <div
-                    onClick={(e) => {
-                        if (isOpen && match.player1_id && onReportWin) {
-                            e.stopPropagation();
-                            onReportWin(match, match.player1_id, p1 || "Player 1", "1-0");
-                        }
-                    }}
                     style={{
                         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '0 10px', borderBottom: '1px solid #27272a',
                         backgroundColor: p1Won ? '#1e2d1e' : '#1c1c1e',
-                        cursor: (isOpen && match.player1_id) ? 'pointer' : 'default',
                     }}
                 >
                     <span style={{ fontSize: 13, color: p1Won ? '#10b981' : p2Won ? '#71717a' : '#e4e4e7', fontWeight: p1Won ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 144 }}>
@@ -115,17 +105,10 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, nu
                 </div>
                 {/* P2 */}
                 <div
-                    onClick={(e) => {
-                        if (isOpen && match.player2_id && onReportWin) {
-                            e.stopPropagation();
-                            onReportWin(match, match.player2_id, p2 || "Player 2", "0-1");
-                        }
-                    }}
                     style={{
                         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '0 10px',
                         backgroundColor: p2Won ? '#1e2d1e' : '#1c1c1e',
-                        cursor: (isOpen && match.player2_id) ? 'pointer' : 'default',
                     }}
                 >
                     <span style={{ fontSize: 13, color: p2Won ? '#10b981' : p1Won ? '#71717a' : '#e4e4e7', fontWeight: p2Won ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 144 }}>
@@ -149,7 +132,6 @@ function MatchCard({ match, onMatchClick, onReportWin, matchNum, loserOfNums, nu
 // ─── Bracket Section with SVG connectors ─────────────────────────────────────
 function BracketSection({
     rounds,
-    onMatchClick,
     onReportWin,
     slotMap,
     UNIT,
@@ -159,7 +141,6 @@ function BracketSection({
     t
 }: {
     rounds: { label: string; matches: InternalMatch[]; isQualify: boolean }[];
-    onMatchClick?: (m: InternalMatch) => void;
     onReportWin?: (m: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
     slotMap: Map<string, number>;
     UNIT: number;
@@ -260,7 +241,6 @@ function BracketSection({
                                         <div key={m.id} style={{ position: 'absolute', top: topY, left: 0 }}>
                                             <MatchCard
                                                 match={m}
-                                                onMatchClick={onMatchClick}
                                                 onReportWin={onReportWin}
                                                 matchNum={num}
                                                 loserOfNums={loserOfNums}
@@ -280,7 +260,7 @@ function BracketSection({
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }) => {
+const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
     const { t } = useTranslation();
     
     const containerRef = useRef<HTMLDivElement>(null);
@@ -314,15 +294,37 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
         const padX = 80;
         const padY = 80;
 
-        const minX = viewportW - contentW - padX;
-        const maxX = padX;
-        const minY = viewportH - contentH - padY;
-        const maxY = padY;
+        const minX = contentW < viewportW ? -padX : viewportW - contentW - padX;
+        const maxX = contentW < viewportW ? viewportW - contentW + padX : padX;
+        const minY = contentH < viewportH ? -padY : viewportH - contentH - padY;
+        const maxY = contentH < viewportH ? viewportH - contentH + padY : padY;
 
         const clampedX = Math.max(minX, Math.min(maxX, x));
         const clampedY = Math.max(minY, Math.min(maxY, y));
 
         return { x: clampedX, y: clampedY };
+    };
+
+    const adjustZoom = (newScale: number) => {
+        if (!containerRef.current || !contentRef.current) return;
+
+        const viewportW = containerRef.current.clientWidth;
+        const viewportH = containerRef.current.clientHeight;
+
+        const cx = viewportW / 2;
+        const cy = viewportH / 2;
+
+        const x = currentPosition.current.x;
+        const y = currentPosition.current.y;
+
+        const ratio = newScale / scale;
+        const rawX = cx - (cx - x) * ratio;
+        const rawY = cy - (cy - y) * ratio;
+
+        const clamped = clampPosition(rawX, rawY, newScale);
+        currentPosition.current = clamped;
+        setScale(newScale);
+        updateTransform(clamped.x, clamped.y, newScale);
     };
 
     const resetToLeftFocus = () => {
@@ -367,6 +369,42 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
+    }, [scale]);
+
+    // Native wheel zoom listener (zoom to cursor position)
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            const rect = container.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const zoomFactor = 0.05;
+            const direction = e.deltaY < 0 ? 1 : -1;
+            const newScale = Math.max(0.15, Math.min(2.0, scale + direction * zoomFactor));
+
+            if (newScale !== scale) {
+                const x = currentPosition.current.x;
+                const y = currentPosition.current.y;
+                const ratio = newScale / scale;
+
+                const rawX = mouseX - (mouseX - x) * ratio;
+                const rawY = mouseY - (mouseY - y) * ratio;
+
+                const clamped = clampPosition(rawX, rawY, newScale);
+                currentPosition.current = clamped;
+                setScale(newScale);
+                updateTransform(clamped.x, clamped.y, newScale);
+            }
+        };
+
+        container.addEventListener('wheel', handleWheel, { passive: false });
+        return () => {
+            container.removeEventListener('wheel', handleWheel);
+        };
     }, [scale]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -812,9 +850,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
                     <button
                         onClick={() => {
                             const newScale = Math.max(0.15, scale - 0.05);
-                            setScale(newScale);
-                            const clamped = clampPosition(currentPosition.current.x, currentPosition.current.y, newScale);
-                            updateTransform(clamped.x, clamped.y, newScale);
+                            adjustZoom(newScale);
                         }}
                         style={{ padding: 8, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#e4e4e7', cursor: 'pointer', display: 'flex' }}
                         title={t('bracket.zoom_out' as any)}
@@ -832,9 +868,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
                     <button
                         onClick={() => {
                             const newScale = Math.min(2.0, scale + 0.05);
-                            setScale(newScale);
-                            const clamped = clampPosition(currentPosition.current.x, currentPosition.current.y, newScale);
-                            updateTransform(clamped.x, clamped.y, newScale);
+                            adjustZoom(newScale);
                         }}
                         style={{ padding: 8, borderRadius: 8, border: 'none', backgroundColor: 'transparent', color: '#e4e4e7', cursor: 'pointer', display: 'flex' }}
                         title={t('bracket.zoom_in' as any)}
@@ -887,14 +921,14 @@ const InternalBracket: React.FC<Props> = ({ matches, onMatchClick, onReportWin }
                     {winnersRounds.length > 0 && (
                         <div style={{ marginBottom: isDoubleElim ? 80 : 0 }}>
                             {isDoubleElim && <SectionDivider>{t('admin.matches.winner_bracket' as any)}</SectionDivider>}
-                            <BracketSection rounds={winnersRounds} onMatchClick={onMatchClick} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} />
+                            <BracketSection rounds={winnersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} />
                         </div>
                     )}
 
                     {losersRounds.length > 0 && (
                         <div>
                             <SectionDivider>{t('admin.matches.loser_bracket' as any)}</SectionDivider>
-                            <BracketSection rounds={losersRounds} onMatchClick={onMatchClick} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} />
+                            <BracketSection rounds={losersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} />
                         </div>
                     )}
                 </div>

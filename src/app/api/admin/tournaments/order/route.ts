@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getParticipantOrder, setParticipantOrder } from "@/lib/repository";
+import { getParticipantOrder, setParticipantOrder, deleteParticipantOrder } from "@/lib/repository";
 
 export async function GET(req: Request) {
     try {
@@ -9,8 +9,8 @@ export async function GET(req: Request) {
 
         const order = await getParticipantOrder(tournamentId);
         return NextResponse.json({ success: true, order });
-    } catch (e: any) {
-        return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    } catch (e: unknown) {
+        return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
     }
 }
 
@@ -21,7 +21,20 @@ export async function POST(req: Request) {
 
         await setParticipantOrder(body.tournamentId, body.order);
         return NextResponse.json({ success: true, message: "Order saved successfully" });
-    } catch (e: any) {
-        return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    } catch (e: unknown) {
+        return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
+    }
+}
+
+export async function DELETE(req: Request) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const tournamentId = searchParams.get("tournamentId");
+        if (!tournamentId) throw new Error("Tournament ID is required");
+
+        await deleteParticipantOrder(tournamentId);
+        return NextResponse.json({ success: true, message: "Order reset successfully" });
+    } catch (e: unknown) {
+        return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
     }
 }

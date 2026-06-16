@@ -1262,7 +1262,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
             if (regJson.success) {
                 const sorted = regJson.data.sort((a: any, b: any) =>
-                    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                 );
                 setData(sorted);
 
@@ -1766,7 +1766,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             url={bracketUrl}
                             provider={tournament?.provider}
                             matches={matches}
-                            onMatchClick={(match) => toggleMatchLock(match.id)}
                             onReportWin={(match, winnerId, winnerName, scores) => {
                                 handleUpdateMatch(match.id, scores, winnerId, winnerName);
                             }}
@@ -3076,12 +3075,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             <div className="flex items-center gap-1 bg-secondary/30 p-1 rounded-lg border border-white/5">
                                 {/* Reset Order (Now always visible, enabled when shuffled) */}
                                 <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                         setIsListShuffled(false);
                                         setShuffledData(null);
                                         setSameDeviceConflicts([]);
                                         setSwapSelection([]);
                                         setIsSwapMode(false);
+                                        try {
+                                            await fetch(`/api/admin/tournaments/order?tournamentId=${id}`, {
+                                                method: 'DELETE'
+                                            });
+                                        } catch (e) {
+                                            console.error("Failed to delete saved order:", e);
+                                        }
                                     }}
                                     disabled={!isListShuffled || !!bracketUrl || (tournament?.status && tournament.status !== 'OPEN')}
                                     className="text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 transition-colors px-3 py-1.5 rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"

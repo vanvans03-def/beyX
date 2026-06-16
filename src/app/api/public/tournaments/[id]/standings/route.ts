@@ -35,7 +35,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             const processedIds = new Set<string>();
 
             const playedWbMatches = (matches || [])
-                .filter((m: any) => m.round > 0 && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled'))
+                .filter((m: any) => m.round > 0 && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled') && !m.scores_csv?.includes('BYE'))
                 .sort((a: any, b: any) => b.round - a.round);
             const finalMatch = playedWbMatches[0];
 
@@ -57,7 +57,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
                 if (isDoubleElim) {
                     const losersByLBRound = new Map<number, Set<string>>();
-                    matches.filter((m: any) => m.state === 'COMPLETE').forEach((m: any) => {
+                    matches.filter((m: any) => m.state === 'COMPLETE' && !m.scores_csv?.includes('BYE')).forEach((m: any) => {
                         const lId = m.winner_id === m.player1_id ? m.player2_id : m.player1_id;
                         if (lId && m.round < 0) {
                             const absR = Math.abs(m.round);

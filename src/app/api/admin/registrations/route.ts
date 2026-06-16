@@ -43,13 +43,13 @@ export async function GET(req: Request) {
                 'Cache-Control': 'no-store, max-age=0'
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Admin Registrations GET Error:", {
-            message: error.message,
-            stack: error.stack,
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
             tournamentId
         });
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
     }
 }
 
@@ -117,8 +117,8 @@ export async function POST(req: Request) {
             }, { status: 400 });
         }
 
-        // 4. Proceed to Bulk Insert (We know they are unique now)
-        const promises = trimmedPlayers.map(async (playerName: string) => {
+                // 4. Proceed to Bulk Insert (We know they are unique now)
+        for (const playerName of trimmedPlayers) {
             const deviceUuid = `admin-manual-${uuidv4().substring(0, 8)}`;
             // Basic create without re-checking since we just checked
             await createRegistration({
@@ -128,14 +128,12 @@ export async function POST(req: Request) {
                 mode: mode || "Open",
                 main_deck: []
             });
-        });
-
-        await Promise.all(promises);
+        }
 
         return NextResponse.json({ success: true, message: `Registered ${trimmedPlayers.length} players successfully` });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Bulk Registration Error:", error);
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
     }
 }
 
@@ -146,8 +144,8 @@ export async function DELETE(req: Request) {
 
         await deleteRegistration(body.id);
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
     }
 }
 
@@ -198,8 +196,8 @@ export async function PATCH(req: Request) {
         if (error) throw error;
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Admin Registration PATCH Error:", error);
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
     }
 }
