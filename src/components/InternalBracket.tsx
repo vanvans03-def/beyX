@@ -538,10 +538,8 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
                 const m = winnersMatches.find(xm => xm.id === id);
                 if (!m) continue;
 
-                // ถ้าเป็น BYE match ไม่ต้อง set slot (จะซ่อน) แต่ต้อง traverse ต่อ
-                if (!m.scores_csv?.includes('BYE')) {
-                    slotMap.set(id, slot);
-                }
+                // Set slot for all matches (including BYEs) to maintain correct tree alignment
+                slotMap.set(id, slot);
 
                 if (m.player1_prereq_match_id) {
                     const p1m = winnersMatches.find(x => x.id === m.player1_prereq_match_id);
@@ -571,8 +569,14 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
                 let sortKey = i; // fallback
 
                 if (gi === 0) {
-                    // LB R1: matches are already in correct spatial order from cross-pairing
-                    sortKey = i;
+                    // LB R1: sort by the slots of their WB Round 1 feeders to preserve correct spatial order
+                    const wbFeeders = ws.filter(wm => wm.loser_to_match_id === m.id);
+                    const slots = wbFeeders.map(wm => slotMap.get(wm.id)).filter(s => s !== undefined) as number[];
+                    if (slots.length > 0) {
+                        sortKey = Math.min(...slots);
+                    } else {
+                        sortKey = i;
+                    }
                 } else if (isMixing) {
                     // Mixing round: sort by LB prerequisite slot to keep lines straight
                     // (WB feeder slot is reversed for anti-rematch, don't use it for positioning)
@@ -760,6 +764,11 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
                     yMap.set(m.id, cardCenterY(slot, 0, UNIT_BASE));
                 }
             });
+        });
+
+        console.log("=== CLIENT Y MAP DEBUG ===");
+        matches.forEach(m => {
+            console.log(`  Match #${m.suggested_play_order} (ID: ${m.id.slice(0, 8)}) -> Y: ${yMap.get(m.id)}, slot: ${slotMap.get(m.id)}`);
         });
 
         return { winnersRounds, losersRounds, slotMap, UNIT: UNIT_BASE, numMap, yMap };
