@@ -124,17 +124,28 @@ export default function AdminPage() {
     };
 
     const handleUpdateShopName = async () => {
-        if (!shopNameInput.trim()) return;
+        const trimmed = shopNameInput.trim();
+        if (!trimmed) return;
+
+        const shopNameRegex = /^[a-zA-Z0-9\u0E00-\u0E7F_-]+$/;
+        if (!shopNameRegex.test(trimmed)) {
+            toast.error("ชื่อร้านต้องไม่มีเว้นวรรค และไม่มีตัวอักษรพิเศษ (อนุญาตเฉพาะตัวอักษร ตัวเลข - และ _ เท่านั้น)");
+            return;
+        }
+
         try {
             const res = await fetch("/api/admin/profile", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ shop_name: shopNameInput })
+                body: JSON.stringify({ shop_name: trimmed })
             });
             if (res.ok) {
-                setUserProfile(prev => prev ? { ...prev, shop_name: shopNameInput } : null);
+                setUserProfile(prev => prev ? { ...prev, shop_name: trimmed } : null);
                 setIsEditingShop(false);
                 toast.success("Shop name updated successfully");
+            } else {
+                const json = await res.json();
+                toast.error(json.error || "Failed to update shop name");
             }
         } catch (e) {
             toast.error("Failed to update shop name");

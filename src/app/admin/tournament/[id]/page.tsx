@@ -20,6 +20,7 @@ import StandingsTable from "@/components/StandingsTable";
 import RegistrationTable from "@/components/RegistrationTable";
 import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
+import { speakText, DEFAULT_ANNOUNCER_SETTINGS, type AnnouncerSettings } from "@/utils/announcer";
 
 type Registration = {
     tournament_id: string;
@@ -155,6 +156,28 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     // Arena State
     const [arenaCount, setArenaCount] = useState(0);
     const [selectedArenaMatchId, setSelectedArenaMatchId] = useState<number | string | null>(null);
+
+    // Voice Announcer States
+    const [announcerSettings, setAnnouncerSettings] = useState<AnnouncerSettings>(DEFAULT_ANNOUNCER_SETTINGS);
+    const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("beyx_announcer_settings");
+            if (saved) {
+                try {
+                    setAnnouncerSettings(JSON.parse(saved));
+                } catch (e) {
+                    console.error("Failed to parse announcer settings", e);
+                }
+            }
+        }
+    }, []);
+
+    const saveAnnouncerSettings = (newSettings: AnnouncerSettings) => {
+        setAnnouncerSettings(newSettings);
+        localStorage.setItem("beyx_announcer_settings", JSON.stringify(newSettings));
+    };
 
     // Bulk Register State
     const [bulkPlayers, setBulkPlayers] = useState("");
@@ -1890,6 +1913,21 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             <Volume2 className={cn("h-4 w-4", isCountdownPlaying && "animate-bounce")} />
                                             <span>{isCountdownPlaying ? "กำลังเล่น..." : "3-2-1"}</span>
                                         </button>
+
+                                        {/* Voice Settings Button */}
+                                        <button
+                                            onClick={() => setIsVoiceSettingsOpen(true)}
+                                            className={cn(
+                                                "flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap active:scale-95",
+                                                announcerSettings.enabled
+                                                    ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30 animate-pulse"
+                                                    : "bg-secondary/80 text-muted-foreground border-transparent hover:border-white/10"
+                                            )}
+                                            title="ตั้งค่าเสียงเรียกผู้เข้าแข่งขัน"
+                                        >
+                                            <Volume2 className="h-4 w-4" />
+                                            <span>เรียกเสียง {announcerSettings.enabled ? "เปิด" : "ปิด"}</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -3461,7 +3499,22 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <button
                                     key={i}
                                     onClick={() => {
-                                        if (selectedArenaMatchId) toggleMatchLock(selectedArenaMatchId, i + 1);
+                                        if (selectedArenaMatchId) {
+                                            toggleMatchLock(selectedArenaMatchId, i + 1);
+                                            
+                                            // Speak the match call if announcer is enabled
+                                            if (announcerSettings.enabled) {
+                                                const match = matches.find(m => m.id === selectedArenaMatchId);
+                                                if (match) {
+                                                    const p1 = match.player1?.name || "ผู้เล่น 1";
+                                                    const p2 = match.player2?.name || "ผู้เล่น 2";
+                                                    const cleanP1 = p1.trim();
+                                                    const cleanP2 = p2.trim();
+                                                    const text = `${cleanP1} ปะทะ ${cleanP2} ที่สนาม ${i + 1}`;
+                                                    speakText(text, announcerSettings);
+                                                }
+                                            }
+                                        }
                                         setSelectedArenaMatchId(null);
                                     }}
                                     className="bg-primary/10 hover:bg-primary/20 p-3 rounded-lg border border-primary/20 text-primary font-bold text-lg transition-colors flex items-center justify-center"
@@ -3469,6 +3522,89 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     {i + 1}
                                 </button>
                             ))}
+                        </div>
+                    </Modal>
+
+                    {/* VOICE SETTINGS MODAL */}
+                    <Modal
+                        isOpen={isVoiceSettingsOpen}
+                        onClose={() => setIsVoiceSettingsOpen(false)}
+                        title="ตั้งค่าเสียงเรียกผู้เข้าแข่งขัน"
+                        type="custom"
+                    >
+                        <div className="space-y-4">
+                            {/* Toggle Voice Announcement */}
+                            <div className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg border border-white/5">
+                                <div>
+                                    <label className="text-sm font-bold block text-foreground">เปิดโหมดเสียงเรียก</label>
+                                    <span className="text-[10px] text-muted-foreground block">เมื่อกรรมการกดเลือกสนาม จะมีเสียงเรียกผู้แข่ง (Google TTS)</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => saveAnnouncerSettings({ ...announcerSettings, enabled: !announcerSettings.enabled })}
+                                    className={cn(
+                                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all border",
+                                        announcerSettings.enabled
+                                            ? "bg-green-500 text-black border-green-400"
+                                            : "bg-secondary border-white/10 text-muted-foreground hover:bg-white/5"
+                                    )}
+                                >
+                                    {announcerSettings.enabled ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+                                </button>
+                            </div>
+
+                            {/* Speed Range Slider */}
+                            <div className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-xs font-bold text-muted-foreground">ความเร็วในการอ่าน (Speed)</label>
+                                    <span className="text-[10px] font-mono text-primary">{announcerSettings.rate}x</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0.5"
+                                    max="2.0"
+                                    step="0.1"
+                                    value={announcerSettings.rate}
+                                    onChange={(e) => saveAnnouncerSettings({ ...announcerSettings, rate: parseFloat(e.target.value) })}
+                                    className="w-full h-1 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                                />
+                            </div>
+
+                            {/* Text Test Area */}
+                            <div className="pt-2 border-t border-white/5 space-y-2">
+                                <label className="text-xs font-bold text-muted-foreground block">ทดสอบอ่านออกเสียง</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        id="tts-test-input"
+                                        type="text"
+                                        defaultValue="พระบิดอง k.u.y vs yanma k.u.y"
+                                        placeholder="พิมพ์คำที่ต้องการทดสอบ..."
+                                        className="flex-1 bg-secondary/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-primary/50 text-foreground"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const input = document.getElementById("tts-test-input") as HTMLInputElement;
+                                            const text = input ? input.value : "ทดสอบเรียกเสียง";
+                                            speakText(text, announcerSettings);
+                                        }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-black rounded-lg text-xs font-bold hover:opacity-90 active:scale-95 transition-all"
+                                    >
+                                        <Volume2 className="h-3.5 w-3.5" />
+                                        ทดสอบ
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end pt-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsVoiceSettingsOpen(false)}
+                                    className="px-4 py-2 bg-secondary text-foreground text-xs font-bold rounded-lg hover:bg-white/5 transition-colors"
+                                >
+                                    ปิดหน้าต่าง
+                                </button>
+                            </div>
                         </div>
                     </Modal>
 

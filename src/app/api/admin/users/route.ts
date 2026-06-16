@@ -12,6 +12,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        const shopNameRegex = /^[a-zA-Z0-9\u0E00-\u0E7F_-]+$/;
+        if (!shopNameRegex.test(shopName)) {
+            return NextResponse.json({ error: 'ชื่อร้านต้องไม่มีเว้นวรรค และไม่มีตัวอักษรพิเศษ (อนุญาตเฉพาะตัวอักษร ตัวเลข - และ _ เท่านั้น)' }, { status: 400 });
+        }
+
         // Check if username exists (Case-Insensitive)
         const { data: existing } = await supabaseAdmin
             .from('users')

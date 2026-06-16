@@ -19,6 +19,13 @@ export default function CreateUserPage() {
         e.preventDefault();
         setLoading(true);
 
+        const shopNameRegex = /^[a-zA-Z0-9\u0E00-\u0E7F_-]+$/;
+        if (!shopNameRegex.test(formData.shopName)) {
+            toast.error("ชื่อร้านต้องไม่มีเว้นวรรค และไม่มีตัวอักษรพิเศษ (อนุญาตเฉพาะตัวอักษร ตัวเลข - และ _ เท่านั้น)");
+            setLoading(false);
+            return;
+        }
+
         try {
             const res = await fetch('/api/admin/users', {
                 method: 'POST',

@@ -29,7 +29,13 @@ export async function PATCH(req: Request) {
         const { shop_name, challonge_api_key } = body;
 
         const updates: any = {};
-        if (shop_name !== undefined) updates.shop_name = shop_name;
+        if (shop_name !== undefined) {
+            const shopNameRegex = /^[a-zA-Z0-9\u0E00-\u0E7F_-]+$/;
+            if (!shopNameRegex.test(shop_name)) {
+                return NextResponse.json({ error: "ชื่อร้านต้องไม่มีเว้นวรรค และไม่มีตัวอักษรพิเศษ (อนุญาตเฉพาะตัวอักษร ตัวเลข - และ _ เท่านั้น)" }, { status: 400 });
+            }
+            updates.shop_name = shop_name;
+        }
         if (challonge_api_key !== undefined) updates.challonge_api_key = challonge_api_key;
 
         if (Object.keys(updates).length === 0) {
