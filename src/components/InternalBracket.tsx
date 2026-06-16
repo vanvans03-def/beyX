@@ -602,16 +602,8 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
             });
         });
 
-        // Re-compact LB slots: remove gaps from hidden BYE matches
-        // Visible matches get sequential slots 0, 1, 2, ...
-        lGroups.forEach((group) => {
-            const visible = group
-                .filter(m => !m.scores_csv?.includes('BYE'))
-                .sort((a, b) => (slotMap.get(a.id) ?? 0) - (slotMap.get(b.id) ?? 0));
-            visible.forEach((m, idx) => {
-                slotMap.set(m.id, idx);
-            });
-        });
+        // LB slot compaction removed to preserve binary tree alignment and prevent overlaps
+
 
 
         // Removed WB R1 slot compaction. Pure binary tree structure must be preserved
@@ -733,9 +725,6 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
         // WB Y coordinates (Pure geometric strict binary tree)
         wGroups.forEach((group, ri) => {
             group.forEach(m => {
-                const isBye = m.scores_csv?.includes('BYE');
-                if (isBye) return;
-
                 if (m.is_reset_match) {
                     // Reset match always aligns vertically with the Grand Final match!
                     const gfMatch = matches.find(xm => xm.is_grand_final);
@@ -754,9 +743,6 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
         // LB Y coordinates
         lGroups.forEach((group, gi) => {
             group.forEach(m => {
-                const isBye = m.scores_csv?.includes('BYE');
-                if (isBye) return;
-
                 const f1Id = m.player1_prereq_match_id;
                 const f2Id = m.player2_prereq_match_id;
                 const f1y = f1Id ? yMap.get(f1Id) : undefined;
