@@ -9,7 +9,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2, ArrowLeftRight, Globe } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2, ArrowLeftRight, Globe, Music, Disc, Pause, Repeat, RotateCcw } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -52,6 +52,11 @@ type Match = {
 };
 
 const supabaseClient = createClient();
+
+const MUSIC_TRACKS = [
+    { name: "Godong Song", filename: "godong-song.mp3" },
+    { name: "Kuy Song", filename: "kuy-song.mp3" }
+];
 
 const ArenaCountInput = ({ 
     initialValue, 
@@ -135,6 +140,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [isCountdownPlaying, setIsCountdownPlaying] = useState(false);
     const countdownAudioRef = useRef<HTMLAudioElement | null>(null);
 
+    // Referee Music Player States
+    const [isMusicModalOpen, setIsMusicModalOpen] = useState(false);
+    const [selectedMusic, setSelectedMusic] = useState<string>("godong-song.mp3");
+    const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+    const [musicCurrentTime, setMusicCurrentTime] = useState(0);
+    const [musicDuration, setMusicDuration] = useState(0);
+    const [musicLoop, setMusicLoop] = useState(false);
+    const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+
     // New States for Enhancements
     const [matches, setMatches] = useState<Match[]>([]);
     const [standings, setStandings] = useState<any[]>([]);
@@ -173,6 +187,109 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             }
         }
     }, []);
+
+    // Cleanup referee music audio on unmount
+    useEffect(() => {
+        return () => {
+            if (musicAudioRef.current) {
+                musicAudioRef.current.pause();
+                musicAudioRef.current = null;
+            }
+        };
+    }, []);
+
+    const handlePlayMusic = (filename: string) => {
+        if (musicAudioRef.current) {
+            musicAudioRef.current.pause();
+        }
+
+        const trackUrl = `/sound/music/${filename}`;
+        let audio = musicAudioRef.current;
+        const sourceChanged = !audio || !audio.src.endsWith(trackUrl);
+
+        if (sourceChanged) {
+            const newAudio = new Audio(trackUrl);
+            audio = newAudio;
+            musicAudioRef.current = newAudio;
+
+            newAudio.loop = musicLoop;
+
+            newAudio.addEventListener('timeupdate', () => {
+                setMusicCurrentTime(newAudio.currentTime);
+            });
+
+            newAudio.addEventListener('loadedmetadata', () => {
+                setMusicDuration(newAudio.duration || 0);
+            });
+
+            newAudio.addEventListener('ended', () => {
+                if (!newAudio.loop) {
+                    setIsMusicPlaying(false);
+                }
+            });
+        }
+
+        if (!audio) return;
+
+        // Stop countdown sound if active
+        if (countdownAudioRef.current) {
+            countdownAudioRef.current.pause();
+            countdownAudioRef.current.currentTime = 0;
+            countdownAudioRef.current = null;
+            setIsCountdownPlaying(false);
+        }
+
+        audio.play().then(() => {
+            setIsMusicPlaying(true);
+            setSelectedMusic(filename);
+        }).catch(err => {
+            console.error("Audio playback error", err);
+            toast.error("ไม่สามารถเล่นเสียงได้");
+        });
+    };
+
+    const handlePauseMusic = () => {
+        if (musicAudioRef.current) {
+            musicAudioRef.current.pause();
+            setIsMusicPlaying(false);
+        }
+    };
+
+    const handleSelectMusic = (filename: string) => {
+        setSelectedMusic(filename);
+        if (isMusicPlaying) {
+            handlePlayMusic(filename);
+        } else {
+            if (musicAudioRef.current) {
+                musicAudioRef.current.pause();
+                musicAudioRef.current = null;
+            }
+            setMusicCurrentTime(0);
+            setMusicDuration(0);
+        }
+    };
+
+    const handleToggleLoop = () => {
+        const nextLoop = !musicLoop;
+        setMusicLoop(nextLoop);
+        if (musicAudioRef.current) {
+            musicAudioRef.current.loop = nextLoop;
+        }
+    };
+
+    const handleSeekMusic = (time: number) => {
+        if (musicAudioRef.current) {
+            musicAudioRef.current.currentTime = time;
+            setMusicCurrentTime(time);
+        }
+    };
+
+    const formatMusicTime = (secs: number) => {
+        if (isNaN(secs)) return "00:00";
+        const minutes = Math.floor(secs / 60);
+        const seconds = Math.floor(secs % 60);
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    };
 
     const saveAnnouncerSettings = (newSettings: AnnouncerSettings) => {
         setAnnouncerSettings(newSettings);
@@ -1893,6 +2010,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     setIsCountdownPlaying(false);
                                                     return;
                                                 }
+                                                // Pause background music if it is active
+                                                if (musicAudioRef.current) {
+                                                    musicAudioRef.current.pause();
+                                                    setIsMusicPlaying(false);
+                                                }
                                                 const audio = new Audio('/sound/321goshoot.mp3');
                                                 countdownAudioRef.current = audio;
                                                 audio.addEventListener('ended', () => {
@@ -1912,6 +2034,20 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         >
                                             <Volume2 className={cn("h-4 w-4", isCountdownPlaying && "animate-bounce")} />
                                             <span>{isCountdownPlaying ? "กำลังเล่น..." : "3-2-1"}</span>
+                                        </button>
+
+                                        {/* Play Music Button */}
+                                        <button
+                                            onClick={() => setIsMusicModalOpen(true)}
+                                            className={cn(
+                                                "flex-1 md:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap active:scale-95",
+                                                isMusicPlaying
+                                                    ? "bg-primary text-black border-primary shadow-[0_0_15px_rgba(34,197,94,0.4)] animate-pulse"
+                                                    : "bg-primary/20 text-primary border-primary/30 hover:bg-primary/30"
+                                            )}
+                                        >
+                                            <Music className="h-4 w-4" />
+                                            <span>{isMusicPlaying ? "กำลังเล่นเพลง..." : "เล่นเพลง"}</span>
                                         </button>
 
                                         {/* Voice Settings Button */}
@@ -3522,6 +3658,147 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     {i + 1}
                                 </button>
                             ))}
+                        </div>
+                    </Modal>
+
+                    {/* MUSIC PLAYER MODAL */}
+                    <Modal
+                        isOpen={isMusicModalOpen}
+                        onClose={() => setIsMusicModalOpen(false)}
+                        title="เครื่องเล่นเพลงกรรมการ"
+                        type="custom"
+                    >
+                        <div className="space-y-6 flex flex-col items-stretch">
+                            {/* Spinning Disc / Vinyl Record */}
+                            <div className="flex flex-col items-center justify-center py-2">
+                                <div 
+                                    className={cn(
+                                        "w-36 h-36 rounded-full bg-gradient-to-r from-neutral-900 via-neutral-800 to-black border-4 border-white/10 flex items-center justify-center shadow-2xl relative overflow-hidden transition-all duration-500",
+                                        isMusicPlaying && "animate-spin ring-4 ring-primary/20"
+                                    )}
+                                    style={isMusicPlaying ? { animationDuration: '10s' } : undefined}
+                                >
+                                    {/* Vinyl Grooves */}
+                                    <div className="absolute inset-2 border border-white/5 rounded-full" />
+                                    <div className="absolute inset-4 border border-white/5 rounded-full" />
+                                    <div className="absolute inset-8 border border-white/5 rounded-full" />
+                                    <div className="absolute inset-12 border border-white/5 rounded-full" />
+                                    {/* Disc label */}
+                                    <div className="w-12 h-12 rounded-full bg-primary/95 border-2 border-background flex flex-col items-center justify-center z-10 shadow-inner">
+                                        <Disc className="w-5 h-5 text-black animate-pulse" />
+                                        <div className="w-2.5 h-2.5 rounded-full bg-black mt-0.5" />
+                                    </div>
+                                </div>
+                                <div className="mt-3 text-center">
+                                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest block">
+                                        Now Playing
+                                    </span>
+                                    <span className="text-sm font-black text-foreground block truncate max-w-[200px]">
+                                        {MUSIC_TRACKS.find(t => t.filename === selectedMusic)?.name || "Select Track"}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Song Selector Cards */}
+                            <div className="grid grid-cols-2 gap-3">
+                                {MUSIC_TRACKS.map(track => {
+                                    const isSelected = selectedMusic === track.filename;
+                                    return (
+                                        <button
+                                            key={track.filename}
+                                            type="button"
+                                            onClick={() => handleSelectMusic(track.filename)}
+                                            className={cn(
+                                                "flex items-center justify-start gap-2.5 p-3 rounded-xl border transition-all text-left",
+                                                isSelected
+                                                    ? "bg-primary/15 border-primary text-primary shadow-[0_0_15px_rgba(34,197,94,0.15)] font-bold"
+                                                    : "bg-secondary/40 border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+                                            )}
+                                        >
+                                            <Music className={cn("h-4 w-4 shrink-0", isSelected && "animate-bounce")} />
+                                            <span className="text-xs truncate">{track.name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Progress Bar (Scrubber) */}
+                            <div className="space-y-1">
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={musicDuration || 100}
+                                    value={musicCurrentTime}
+                                    onChange={(e) => handleSeekMusic(parseFloat(e.target.value))}
+                                    className="w-full h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                                />
+                                <div className="flex justify-between items-center text-[10px] text-muted-foreground font-mono">
+                                    <span>{formatMusicTime(musicCurrentTime)}</span>
+                                    <span>{formatMusicTime(musicDuration)}</span>
+                                </div>
+                            </div>
+
+                            {/* Playback Controls */}
+                            <div className="flex items-center justify-center gap-6 pb-2 border-b border-white/5">
+                                {/* Loop/Repeat Button */}
+                                <button
+                                    type="button"
+                                    onClick={handleToggleLoop}
+                                    className={cn(
+                                        "p-2 rounded-full border transition-all active:scale-95",
+                                        musicLoop
+                                            ? "bg-green-500/20 text-green-400 border-green-500/30 shadow-inner"
+                                            : "bg-secondary text-muted-foreground border-transparent hover:border-white/10"
+                                    )}
+                                    title="วนลูปเพลง"
+                                >
+                                    <Repeat className="h-4 w-4" />
+                                </button>
+
+                                {/* Main Play/Pause Button */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (isMusicPlaying) {
+                                            handlePauseMusic();
+                                        } else {
+                                            handlePlayMusic(selectedMusic);
+                                        }
+                                    }}
+                                    className="w-12 h-12 rounded-full bg-primary text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
+                                >
+                                    {isMusicPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 fill-current ml-0.5" />}
+                                </button>
+
+                                {/* Replay/Reset Button */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (musicAudioRef.current) {
+                                            musicAudioRef.current.currentTime = 0;
+                                            setMusicCurrentTime(0);
+                                            if (!isMusicPlaying) {
+                                                handlePlayMusic(selectedMusic);
+                                            }
+                                        }
+                                    }}
+                                    className="p-2 rounded-full bg-secondary text-muted-foreground border border-transparent hover:border-white/10 active:scale-95 transition-all"
+                                    title="เริ่มใหม่"
+                                >
+                                    <RotateCcw className="h-4 w-4" />
+                                </button>
+                            </div>
+
+                            {/* Close Modal Button */}
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsMusicModalOpen(false)}
+                                    className="px-4 py-2 bg-secondary text-foreground text-xs font-bold rounded-lg hover:bg-white/5 transition-colors"
+                                >
+                                    ปิดหน้าต่าง
+                                </button>
+                            </div>
                         </div>
                     </Modal>
 
