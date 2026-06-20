@@ -6,11 +6,13 @@
 export interface AnnouncerSettings {
   enabled: boolean;
   rate: number; // Speed: 0.5 to 2.0
+  volume: number; // Volume: 0.0 to 1.0
 }
 
 export const DEFAULT_ANNOUNCER_SETTINGS: AnnouncerSettings = {
   enabled: false,
   rate: 1.0,
+  volume: 1.0,
 };
 
 /**
@@ -65,6 +67,7 @@ export function speakText(text: string, settings: AnnouncerSettings): Promise<vo
     const url = `/api/tts?text=${encodeURIComponent(cleanText)}`;
     const audio = new Audio(url);
     audio.playbackRate = settings.rate;
+    audio.volume = typeof settings.volume === 'number' ? settings.volume : 1.0;
 
     audio.onended = () => resolve();
     audio.onerror = (e) => {

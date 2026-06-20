@@ -118,7 +118,21 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 return res.json();
             })
             .then(data => {
-                if (data.success) setCurrentUser(data.user);
+                if (data.success && data.user) {
+                    setCurrentUser(data.user);
+                    if (typeof data.user.music_volume === "number") {
+                        setMusicVolume(data.user.music_volume);
+                        if (musicAudioRef.current) {
+                            musicAudioRef.current.volume = data.user.music_volume;
+                        }
+                    }
+                    if (typeof data.user.tts_volume === "number") {
+                        setAnnouncerSettings(prev => ({
+                            ...prev,
+                            volume: data.user.tts_volume
+                        }));
+                    }
+                }
             })
             .catch(err => console.error("Failed to fetch user profile", err));
     }, []);
@@ -148,6 +162,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [musicDuration, setMusicDuration] = useState(0);
     const [musicLoop, setMusicLoop] = useState(false);
     const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+    const [musicVolume, setMusicVolume] = useState<number>(0.5); // Default to 50%
 
     // New States for Enhancements
     const [matches, setMatches] = useState<Match[]>([]);
@@ -185,6 +200,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     console.error("Failed to parse announcer settings", e);
                 }
             }
+            const savedVolume = localStorage.getItem("beyx_music_volume");
+            if (savedVolume !== null) {
+                const vol = parseFloat(savedVolume);
+                if (!isNaN(vol)) {
+                    setMusicVolume(vol);
+                }
+            }
         }
     }, []);
 
@@ -213,6 +235,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             musicAudioRef.current = newAudio;
 
             newAudio.loop = musicLoop;
+            newAudio.volume = musicVolume; // Apply current volume level
 
             newAudio.addEventListener('timeupdate', () => {
                 setMusicCurrentTime(newAudio.currentTime);
@@ -291,9 +314,37 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     };
 
-    const saveAnnouncerSettings = (newSettings: AnnouncerSettings) => {
+    const handleMusicVolumeChange = async (vol: number) => {
+        setMusicVolume(vol);
+        localStorage.setItem("beyx_music_volume", vol.toString());
+        if (musicAudioRef.current) {
+            musicAudioRef.current.volume = vol;
+        }
+
+        try {
+            await fetch("/api/admin/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ music_volume: vol })
+            });
+        } catch (e) {
+            console.error("Failed to save music volume to DB", e);
+        }
+    };
+
+    const saveAnnouncerSettings = async (newSettings: AnnouncerSettings) => {
         setAnnouncerSettings(newSettings);
         localStorage.setItem("beyx_announcer_settings", JSON.stringify(newSettings));
+
+        try {
+            await fetch("/api/admin/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ tts_volume: newSettings.volume })
+            });
+        } catch (e) {
+            console.error("Failed to save announcer volume to DB", e);
+        }
     };
 
     // Bulk Register State
@@ -2119,25 +2170,61 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     </div>
                                                 )}
 
-                                                {/* Header Section */}
-                                                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between min-h-[24px] gap-3 mb-2">
-
-                                                    {/* Play/Lock Button (Top on mobile, Right on desktop) */}
-                                                    <div className="z-10 order-1 md:order-2 flex w-full md:w-auto justify-end">
-                                                        {isLockedByOther ? (
-                                                            <div className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-white/5 border border-white/5 text-[10px] font-bold text-muted-foreground cursor-not-allowed w-full md:w-auto" title={`Judged by ${lock.judgeName}`}>
+                                                {/* Top Action Buttons Row */}
+                                                <div className="z-10 flex w-full justify-end items-center gap-2">
+                                                    {isLockedByOther ? (
+                                                        <div className="flex items-center justify-end gap-2 w-full">
+                                                            {announcerSettings.enabled && lock.arena && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const p1 = match.player1?.name || "ผู้เล่น 1";
+                                                                        const p2 = match.player2?.name || "ผู้เล่น 2";
+                                                                        const text = `${p1.trim()} ปะทะ ${p2.trim()} ที่สนาม ${lock.arena}`;
+                                                                        speakText(text, announcerSettings);
+                                                                        toast.success("เรียกคิวอีกครั้งแล้ว");
+                                                                    }}
+                                                                    className="flex items-center justify-center gap-1.5 px-2.5 py-2 md:py-1.5 rounded-lg text-sm md:text-xs font-bold bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 active:scale-95 transition-all shadow-sm"
+                                                                    title="เรียกชื่อคิวผู้แข่งขันอีกครั้ง"
+                                                                >
+                                                                    <Volume2 className="h-4 w-4 md:h-3 md:w-3" />
+                                                                    <span>เรียกซ้ำ</span>
+                                                                </button>
+                                                            )}
+                                                            <div className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-white/5 border border-white/5 text-[10px] font-bold text-muted-foreground cursor-not-allowed" title={`Judged by ${lock.judgeName}`}>
                                                                 <Lock className="h-3 w-3" />
                                                                 <span className="max-w-[100px] truncate">{lock.judgeName}</span>
                                                                 {lock.arena && <span className="ml-1 text-purple-400">#{lock.arena}</span>}
                                                             </div>
-                                                        ) : (
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center justify-end gap-2 w-full">
+                                                            {isLockedByMe && announcerSettings.enabled && lock.arena && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const p1 = match.player1?.name || "ผู้เล่น 1";
+                                                                        const p2 = match.player2?.name || "ผู้เล่น 2";
+                                                                        const text = `${p1.trim()} ปะทะ ${p2.trim()} ที่สนาม ${lock.arena}`;
+                                                                        speakText(text, announcerSettings);
+                                                                        toast.success("เรียกคิวอีกครั้งแล้ว");
+                                                                    }}
+                                                                    className="flex items-center justify-center gap-1.5 px-2.5 py-2 md:py-1.5 rounded-lg text-sm md:text-xs font-bold bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 active:scale-95 transition-all shadow-sm"
+                                                                    title="เรียกชื่อคิวผู้แข่งขันอีกครั้ง"
+                                                                >
+                                                                    <Volume2 className="h-4 w-4 md:h-3 md:w-3" />
+                                                                    <span>เรียกซ้ำ</span>
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     toggleMatchLock(match.id);
                                                                 }}
                                                                 className={cn(
-                                                                    "flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm w-full md:w-auto",
+                                                                    "flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm",
                                                                     isLockedByMe
                                                                         ? "bg-primary text-black border-primary hover:bg-primary/90"
                                                                         : "bg-secondary text-foreground border-white/10 hover:border-primary/50 hover:text-primary"
@@ -2157,11 +2244,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                     </>
                                                                 )}
                                                             </button>
-                                                        )}
-                                                    </div>
+                                                        </div>
+                                                    )}
+                                                </div>
 
-                                                    {/* Round Info (Bottom on mobile, Left on desktop) */}
-                                                    <div className="flex flex-row flex-wrap items-center gap-2 order-2 md:order-1 flex-1">
+                                                {/* Header Section (Round Info) */}
+                                                <div className="flex items-center justify-between min-h-[24px] gap-3 mb-2">
+                                                    <div className="flex flex-row flex-wrap items-center gap-2 flex-1">
                                                         <div className="flex items-center gap-2">
                                                             {isLockedByMe && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
                                                             {match.suggested_play_order ? (
@@ -3700,7 +3789,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             </div>
 
                             {/* Song Selector Cards */}
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {MUSIC_TRACKS.map(track => {
                                     const isSelected = selectedMusic === track.filename;
                                     return (
@@ -3730,11 +3819,37 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     max={musicDuration || 100}
                                     value={musicCurrentTime}
                                     onChange={(e) => handleSeekMusic(parseFloat(e.target.value))}
-                                    className="w-full h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:appearance-none [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary"
+                                    style={{
+                                        background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${musicDuration ? (musicCurrentTime / musicDuration) * 100 : 0}%, var(--secondary) ${musicDuration ? (musicCurrentTime / musicDuration) * 100 : 0}%, var(--secondary) 100%)`
+                                    }}
                                 />
                                 <div className="flex justify-between items-center text-[10px] text-muted-foreground font-mono">
                                     <span>{formatMusicTime(musicCurrentTime)}</span>
                                     <span>{formatMusicTime(musicDuration)}</span>
+                                </div>
+                            </div>
+
+                            {/* Volume Control */}
+                            <div className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-xs font-bold text-muted-foreground">ระดับเสียงเพลง (Volume)</label>
+                                    <span className="text-[10px] font-mono text-primary">{Math.round(musicVolume * 100)}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Volume2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                                    <input
+                                        type="range"
+                                        min="0.0"
+                                        max="1.0"
+                                        step="0.05"
+                                        value={musicVolume}
+                                        onChange={(e) => handleMusicVolumeChange(parseFloat(e.target.value))}
+                                        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:appearance-none [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary"
+                                        style={{
+                                            background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${musicVolume * 100}%, var(--secondary) ${musicVolume * 100}%, var(--secondary) 100%)`
+                                        }}
+                                    />
                                 </div>
                             </div>
 
@@ -3843,8 +3958,34 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     step="0.1"
                                     value={announcerSettings.rate}
                                     onChange={(e) => saveAnnouncerSettings({ ...announcerSettings, rate: parseFloat(e.target.value) })}
-                                    className="w-full h-1 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:appearance-none [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary"
+                                    style={{
+                                        background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((announcerSettings.rate - 0.5) / 1.5) * 100}%, var(--secondary) ${((announcerSettings.rate - 0.5) / 1.5) * 100}%, var(--secondary) 100%)`
+                                    }}
                                 />
+                            </div>
+
+                            {/* Volume Range Slider */}
+                            <div className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-xs font-bold text-muted-foreground">ระดับเสียงเรียก (Volume)</label>
+                                    <span className="text-[10px] font-mono text-primary">{Math.round((announcerSettings.volume !== undefined ? announcerSettings.volume : 1.0) * 100)}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Volume2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                                    <input
+                                        type="range"
+                                        min="0.0"
+                                        max="1.0"
+                                        step="0.05"
+                                        value={announcerSettings.volume !== undefined ? announcerSettings.volume : 1.0}
+                                        onChange={(e) => saveAnnouncerSettings({ ...announcerSettings, volume: parseFloat(e.target.value) })}
+                                        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:appearance-none [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary"
+                                        style={{
+                                            background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${(announcerSettings.volume !== undefined ? announcerSettings.volume : 1.0) * 100}%, var(--secondary) ${(announcerSettings.volume !== undefined ? announcerSettings.volume : 1.0) * 100}%, var(--secondary) 100%)`
+                                        }}
+                                    />
+                                </div>
                             </div>
 
                             {/* Text Test Area */}
@@ -3865,7 +4006,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             const text = input ? input.value : "ทดสอบเรียกเสียง";
                                             speakText(text, announcerSettings);
                                         }}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-black rounded-lg text-xs font-bold hover:opacity-90 active:scale-95 transition-all"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary rounded-lg text-xs font-bold hover:bg-primary/20 active:scale-95 transition-all cursor-pointer"
                                     >
                                         <Volume2 className="h-3.5 w-3.5" />
                                         ทดสอบ

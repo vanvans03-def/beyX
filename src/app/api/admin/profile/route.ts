@@ -8,7 +8,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabaseAdmin
         .from('users')
-        .select('username, shop_name, challonge_api_key')
+        .select('username, shop_name, challonge_api_key, music_volume, tts_volume')
         .eq('id', userId)
         .single();
 
@@ -26,7 +26,7 @@ export async function PATCH(req: Request) {
 
     try {
         const body = await req.json();
-        const { shop_name, challonge_api_key } = body;
+        const { shop_name, challonge_api_key, music_volume, tts_volume } = body;
 
         const updates: any = {};
         if (shop_name !== undefined) {
@@ -37,6 +37,8 @@ export async function PATCH(req: Request) {
             updates.shop_name = shop_name;
         }
         if (challonge_api_key !== undefined) updates.challonge_api_key = challonge_api_key;
+        if (music_volume !== undefined) updates.music_volume = music_volume;
+        if (tts_volume !== undefined) updates.tts_volume = tts_volume;
 
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: "No fields to update" }, { status: 400 });
