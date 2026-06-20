@@ -9,7 +9,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2, ArrowLeftRight, Globe, Music, Disc, Pause, Repeat, RotateCcw } from "lucide-react";
+import { Loader2, RefreshCw, Copy, CheckCircle, XCircle, AlertCircle, ArrowLeft, Trash2, Users, Trophy, Clock, Edit, Search, Download, Share2, ImageIcon, ArrowUp, ArrowDown, Eye, Check, Play, Lock, Unlock, Gavel, Shuffle, MonitorPlay, Volume2, ArrowLeftRight, Globe, Music, Disc, Pause, Repeat, RotateCcw, ChevronDown } from "lucide-react";
 import imageMap from "@/data/image-map.json";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -55,6 +55,7 @@ const supabaseClient = createClient();
 
 const MUSIC_TRACKS = [
     { name: "Godong Song", filename: "godong-song.mp3" },
+    { name: "Godong Song V2", filename: "godong-song-v2.mp3" },
     { name: "Kuy Song", filename: "kuy-song.mp3" }
 ];
 
@@ -3788,27 +3789,24 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </div>
                             </div>
 
-                            {/* Song Selector Cards */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {MUSIC_TRACKS.map(track => {
-                                    const isSelected = selectedMusic === track.filename;
-                                    return (
-                                        <button
-                                            key={track.filename}
-                                            type="button"
-                                            onClick={() => handleSelectMusic(track.filename)}
-                                            className={cn(
-                                                "flex items-center justify-start gap-2.5 p-3 rounded-xl border transition-all text-left",
-                                                isSelected
-                                                    ? "bg-primary/15 border-primary text-primary shadow-[0_0_15px_rgba(34,197,94,0.15)] font-bold"
-                                                    : "bg-secondary/40 border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
-                                            )}
-                                        >
-                                            <Music className={cn("h-4 w-4 shrink-0", isSelected && "animate-bounce")} />
-                                            <span className="text-xs truncate">{track.name}</span>
-                                        </button>
-                                    );
-                                })}
+                            {/* Song Selector Dropdown */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-muted-foreground">เลือกเพลงกรรมการ</label>
+                                <div className="relative flex items-center">
+                                    <Music className="absolute left-3.5 h-4 w-4 text-primary pointer-events-none" />
+                                    <select
+                                        value={selectedMusic}
+                                        onChange={(e) => handleSelectMusic(e.target.value)}
+                                        className="w-full bg-secondary/40 border border-white/10 text-foreground text-xs rounded-xl py-3 pl-10 pr-10 outline-none focus:border-primary/50 appearance-none cursor-pointer font-bold transition-all hover:bg-secondary/60"
+                                    >
+                                        {MUSIC_TRACKS.map(track => (
+                                            <option key={track.filename} value={track.filename} className="bg-neutral-950 text-foreground">
+                                                {track.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-3.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                                </div>
                             </div>
 
                             {/* Progress Bar (Scrubber) */}
