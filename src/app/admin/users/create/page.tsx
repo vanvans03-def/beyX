@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, UserPlus, Key, Lock, User, Store } from 'lucide-react';
+import { Loader2, UserPlus, Key, Lock, User, Store, Globe } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function CreateUserPage() {
     const router = useRouter();
+    const { t, lang, toggleLang } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         username: '',
@@ -21,7 +23,9 @@ export default function CreateUserPage() {
 
         const shopNameRegex = /^[a-zA-Z0-9\u0E00-\u0E7F_-]+$/;
         if (!shopNameRegex.test(formData.shopName)) {
-            toast.error("ชื่อร้านต้องไม่มีเว้นวรรค และไม่มีตัวอักษรพิเศษ (อนุญาตเฉพาะตัวอักษร ตัวเลข - และ _ เท่านั้น)");
+            toast.error(lang === 'TH' 
+                ? "ชื่อร้านต้องไม่มีเว้นวรรค และไม่มีตัวอักษรพิเศษ (อนุญาตเฉพาะตัวอักษร ตัวเลข - และ _ เท่านั้น)" 
+                : "Shop name must not contain spaces or special characters (only letters, numbers, - and _ allowed)");
             setLoading(false);
             return;
         }
@@ -36,10 +40,10 @@ export default function CreateUserPage() {
             const data = await res.json();
 
             if (res.ok && data.success) {
-                toast.success(`User ${formData.username} created successfully!`);
-                router.push('/admin'); // Redirect to dashboard
+                toast.success(t('admin.users.create.success', { name: formData.username }));
+                router.push('/admin/users'); // Redirect to user list
             } else {
-                toast.error(data.error || 'Failed to create user');
+                toast.error(data.error || t('admin.users.create.failed'));
             }
         } catch (error) {
             toast.error("Something went wrong");
@@ -54,17 +58,27 @@ export default function CreateUserPage() {
             <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
             <div className="w-full max-w-2xl space-y-8 relative z-10">
-                <div className="flex items-center gap-6">
-                    <button
-                        onClick={() => router.back()}
-                        className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center border border-white/10 transition-colors"
-                    >
-                        <UserPlus className="w-6 h-6 text-gray-400" />
-                    </button>
-                    <div>
-                        <h1 className="text-3xl font-extrabold tracking-tight text-white">Add New Shop</h1>
-                        <p className="text-gray-400">Create a new admin account for a tournament organizer</p>
+                <div className="flex items-center justify-between gap-6">
+                    <div className="flex items-center gap-6">
+                        <button
+                            onClick={() => router.back()}
+                            className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center border border-white/10 transition-colors cursor-pointer"
+                        >
+                            <UserPlus className="w-6 h-6 text-gray-400" />
+                        </button>
+                        <div>
+                            <h1 className="text-3xl font-extrabold tracking-tight text-white">{t('admin.users.create.title')}</h1>
+                            <p className="text-gray-400 text-sm">{t('admin.users.create.desc')}</p>
+                        </div>
                     </div>
+                    
+                    <button 
+                        onClick={toggleLang} 
+                        className="p-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center gap-2 text-xs font-bold cursor-pointer shrink-0"
+                    >
+                        <Globe className="h-4 w-4 text-primary" />
+                        <span>{lang === 'TH' ? 'English' : 'ไทย'}</span>
+                    </button>
                 </div>
 
                 <div className="glass-card p-8 rounded-2xl border border-white/10 bg-white/5 shadow-2xl">
@@ -72,28 +86,28 @@ export default function CreateUserPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                    <User className="w-4 h-4 text-primary" /> Username
+                                    <User className="w-4 h-4 text-primary" /> {t('admin.users.create.username')}
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.username}
                                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                                     className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                                    placeholder="e.g. mbk_shop"
+                                    placeholder={lang === 'TH' ? 'เช่น mbk_shop' : 'e.g. mbk_shop'}
                                     required
                                 />
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                    <Store className="w-4 h-4 text-primary" /> Shop Name
+                                    <Store className="w-4 h-4 text-primary" /> {t('admin.users.create.shop_name')}
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.shopName}
                                     onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
                                     className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                                    placeholder="e.g. MBK Center Shop"
+                                    placeholder={lang === 'TH' ? 'เช่น MBK Center Shop' : 'e.g. MBK Center Shop'}
                                     required
                                 />
                             </div>
@@ -101,7 +115,7 @@ export default function CreateUserPage() {
 
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                <Lock className="w-4 h-4 text-primary" /> Password
+                                <Lock className="w-4 h-4 text-primary" /> {t('admin.users.create.password')}
                             </label>
                             <input
                                 type="password"
@@ -115,7 +129,7 @@ export default function CreateUserPage() {
 
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                <Key className="w-4 h-4 text-primary" /> Challonge API Key
+                                <Key className="w-4 h-4 text-primary" /> {t('admin.users.create.challonge_key')}
                             </label>
                             <input
                                 type="text"
@@ -126,7 +140,7 @@ export default function CreateUserPage() {
                                 required
                             />
                             <p className="text-xs text-gray-500">
-                                Found in Challonge Settings &gt; Developer API
+                                {t('admin.users.create.challonge_helper')}
                             </p>
                         </div>
 
@@ -134,22 +148,22 @@ export default function CreateUserPage() {
                             <button
                                 type="button"
                                 onClick={() => router.back()}
-                                className="flex-1 bg-white/5 hover:bg-white/10 text-white font-medium py-3 rounded-xl transition-all border border-white/10 uppercase tracking-wide"
+                                className="flex-1 bg-white/5 hover:bg-white/10 text-white font-medium py-3 rounded-xl transition-all border border-white/10 uppercase tracking-wide cursor-pointer text-sm"
                             >
-                                Cancel
+                                {t('admin.users.create.btn.cancel')}
                             </button>
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="flex-1 bg-primary hover:bg-primary/90 text-black font-bold py-3 rounded-xl transition-all shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-wide"
+                                className="flex-1 bg-primary hover:bg-primary/90 text-black font-bold py-3 rounded-xl transition-all shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-wide cursor-pointer text-sm"
                             >
                                 {loading ? (
                                     <>
                                         <Loader2 className="w-4 h-4 animate-spin" />
-                                        Creating...
+                                        {t('admin.users.create.btn.loading')}
                                     </>
                                 ) : (
-                                    "Create Account"
+                                    t('admin.users.create.btn.create')
                                 )}
                             </button>
                         </div>

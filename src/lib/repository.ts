@@ -7,7 +7,7 @@ export type Tournament = {
     name: string;
     status: 'OPEN' | 'CLOSED' | 'STARTED' | 'COMPLETED';
     created_at: Date;
-    type: 'U10' | 'U10South' | 'NoMoreMeta' | 'Open';
+    type: 'U10' | 'U10Custom' | 'NoMoreMeta' | 'Open';
     ban_list: string[];
     challonge_url?: string;
     user_id?: string; // Added for ownership check
@@ -208,7 +208,7 @@ export async function getTournamentByShortId(shopName: string, shortId: string):
 export async function createTournament(
     name: string, 
     userId: string, 
-    type: 'U10' | 'U10South' | 'NoMoreMeta' | 'Open' = 'U10', 
+    type: 'U10' | 'U10Custom' | 'NoMoreMeta' | 'Open' = 'U10', 
     ban_list: string[] = [],
     provider: 'CHALLONGE' | 'INTERNAL' = 'CHALLONGE',
     bracket_type: 'SINGLE' | 'DOUBLE' = 'SINGLE'

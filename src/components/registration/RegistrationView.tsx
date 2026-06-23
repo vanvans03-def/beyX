@@ -9,6 +9,7 @@ import { Modal } from "../ui/Modal";
 import appConfig from "@/data/app-config.json";
 import { VisualSelector } from "@/components/ui/VisualSelector";
 import { CXAttachmentSelector } from "@/components/ui/CXAttachmentSelector";
+import { CustomPartsModal } from "./CustomPartsModal";
 import { BladeSlot } from "./BladeSlot";
 import gameData from "@/data/game-data.json";
 import gameDataStandard from "@/data/game-data-standard.json";
@@ -57,11 +58,14 @@ export function RegistrationView({
         triggerFetchExistingPlayers, // Use the trigger wrapper
         showPlayerList,
         existingPlayers,
-        closePlayerList
+        closePlayerList,
+        beybladesList,
+        dynamicBanList,
+        cxEnabled
     } = hook;
 
-    // State for CX attachment selection
-    const [selectingAttachment, setSelectingAttachment] = useState<{
+    // State for Custom Parts selection
+    const [customizingSlot, setCustomizingSlot] = useState<{
         profileIndex: number;
         type: 'main';
         slotIndex: number;
@@ -90,17 +94,6 @@ export function RegistrationView({
 
         // First, select the Bey
         handleSelect(val);
-
-        // Then, if it's a CX Bey and mode is U10South, show attachment selector
-        const profile = profiles[selectingState.profileIndex];
-        if (profile.mode === "Under10South" && isCXBey(val)) {
-            setSelectingAttachment({
-                profileIndex: selectingState.profileIndex,
-                type: selectingState.type,
-                slotIndex: selectingState.slotIndex,
-                beyName: val
-            });
-        }
     };
 
     return (
@@ -170,11 +163,11 @@ export function RegistrationView({
                         <span className={cn(
                             "px-3 py-1 rounded-full text-xs font-bold border",
                             tournamentType === 'U10' ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
-                                tournamentType === 'U10South' ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" :
+                                tournamentType === 'U10Custom' ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" :
                                     tournamentType === 'NoMoreMeta' ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
                                         "bg-green-500/20 text-green-400 border-green-500/30"
                         )}>
-                            TOURNAMENT FORMAT: {tournamentType === 'NoMoreMeta' ? 'NMM' : tournamentType === 'U10' ? 'U10' : tournamentType === 'U10South' ? 'U10 SOUTH' : 'OPEN'}
+                            TOURNAMENT FORMAT: {tournamentType === 'NoMoreMeta' ? 'NMM' : tournamentType === 'U10' ? 'U10' : tournamentType === 'U10Custom' ? 'U10 (CUSTOM POINT)' : 'OPEN'}
                         </span>
                     </div>
                 )}
@@ -263,12 +256,12 @@ export function RegistrationView({
                                     <Trash2 className="h-4 w-4" />
                                 </button>
                             </div>
-                            {(activeProfile.mode === "Under10" || activeProfile.mode === "Under10South") && (
+                            {(activeProfile.mode === "Under10" || activeProfile.mode === "Under10Custom") && (
                                 <span className={cn(
                                     "text-sm font-bold px-2 py-0.5 rounded",
-                                    (validateDeck(activeProfile.mainBeys, activeProfile.mode, activeProfile.mainBeyAttachments).points || 0) <= 10 ? "bg-primary/20 text-primary" : "bg-destructive/20 text-destructive"
+                                    (validateDeck(activeProfile.mainBeys, activeProfile.mode, activeProfile.mainBeyLockChips, activeProfile.mainBeyAssistBlades, activeProfile.mainBeyRachets, activeProfile.mainBeyBits).points || 0) <= 10 ? "bg-primary/20 text-primary" : "bg-destructive/20 text-destructive"
                                 )}>
-                                    {(validateDeck(activeProfile.mainBeys, activeProfile.mode, activeProfile.mainBeyAttachments).points || 0)}/10 pts
+                                    {(validateDeck(activeProfile.mainBeys, activeProfile.mode, activeProfile.mainBeyLockChips, activeProfile.mainBeyAssistBlades, activeProfile.mainBeyRachets, activeProfile.mainBeyBits).points || 0)}/10 pts
                                 </span>
                             )}
                         </div>
@@ -303,7 +296,6 @@ export function RegistrationView({
                                 setShowUpdateConfirm(false);
                             }}
                         />
-
                         <div className="space-y-2">
                             {activeProfile.mainBeys.map((bey, i) => (
                                 <BladeSlot
@@ -318,20 +310,24 @@ export function RegistrationView({
                                         setSelectingState({ profileIndex: activeTab, type: 'main', slotIndex: i })
                                     }}
                                     t={t}
-                                    attachment={activeProfile.mainBeyAttachments[i]}
+                                    lockChip={activeProfile.mainBeyLockChips?.[i] || null}
+                                    assistBlade={activeProfile.mainBeyAssistBlades?.[i] || null}
+                                    rachet={activeProfile.mainBeyRachets?.[i] || null}
+                                    bit={activeProfile.mainBeyBits?.[i] || null}
                                     isModified={activeProfile.status === 'submitted' && (
                                         activeProfile.mainBeys[i] !== activeProfile.originalMainBeys?.[i] ||
-                                        activeProfile.mainBeyAttachments[i] !== activeProfile.originalMainBeyAttachments?.[i]
+                                        (activeProfile.mainBeyLockChips?.[i] || null) !== (activeProfile.originalMainBeyLockChips?.[i] || null) ||
+                                        (activeProfile.mainBeyAssistBlades?.[i] || null) !== (activeProfile.originalMainBeyAssistBlades?.[i] || null) ||
+                                        (activeProfile.mainBeyRachets?.[i] || null) !== (activeProfile.originalMainBeyRachets?.[i] || null) ||
+                                        (activeProfile.mainBeyBits?.[i] || null) !== (activeProfile.originalMainBeyBits?.[i] || null)
                                     )}
-                                    onAttachmentPress={() => {
+                                    onCustomizePress={() => {
                                         if (tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || (!!challongeUrl && tournamentStatus !== 'STARTED')) return;
-                                        setSelectingAttachment({
-                                            profileIndex: activeTab,
-                                            type: 'main',
-                                            slotIndex: i,
-                                            beyName: bey
-                                        });
+                                        setCustomizingSlot({ profileIndex: activeTab, type: 'main', slotIndex: i, beyName: bey });
                                     }}
+                                    beybladesList={beybladesList}
+                                    dynamicBanList={dynamicBanList}
+                                    cxEnabled={cxEnabled}
                                 />
                             ))}
                         </div>
@@ -387,7 +383,10 @@ export function RegistrationView({
                                 profiles[activeTab].mainBeys.some((bey, i) => 
                                     profiles[activeTab].status === 'submitted' && (
                                         bey !== profiles[activeTab].originalMainBeys?.[i] || 
-                                        profiles[activeTab].mainBeyAttachments[i] !== profiles[activeTab].originalMainBeyAttachments?.[i]
+                                        profiles[activeTab].mainBeyLockChips[i] !== profiles[activeTab].originalMainBeyLockChips?.[i] ||
+                                        profiles[activeTab].mainBeyAssistBlades[i] !== profiles[activeTab].originalMainBeyAssistBlades?.[i] ||
+                                        profiles[activeTab].mainBeyRachets[i] !== profiles[activeTab].originalMainBeyRachets?.[i] ||
+                                        profiles[activeTab].mainBeyBits[i] !== profiles[activeTab].originalMainBeyBits?.[i]
                                     )
                                 ) 
                                     ? "bg-primary text-black shadow-lg shadow-primary/25 hover:bg-primary/90" 
@@ -398,7 +397,10 @@ export function RegistrationView({
                                 profiles[activeTab].mainBeys.some((bey, i) => 
                                     profiles[activeTab].status === 'submitted' && (
                                         bey !== profiles[activeTab].originalMainBeys?.[i] || 
-                                        profiles[activeTab].mainBeyAttachments[i] !== profiles[activeTab].originalMainBeyAttachments?.[i]
+                                        profiles[activeTab].mainBeyLockChips[i] !== profiles[activeTab].originalMainBeyLockChips?.[i] ||
+                                        profiles[activeTab].mainBeyAssistBlades[i] !== profiles[activeTab].originalMainBeyAssistBlades?.[i] ||
+                                        profiles[activeTab].mainBeyRachets[i] !== profiles[activeTab].originalMainBeyRachets?.[i] ||
+                                        profiles[activeTab].mainBeyBits[i] !== profiles[activeTab].originalMainBeyBits?.[i]
                                     )
                                 ) 
                                     ? "Save Changes (บันทึกการแก้ไข)" 
@@ -415,41 +417,42 @@ export function RegistrationView({
 
 
             {selectingState && (() => {
-                const activeP = profiles[selectingState.profileIndex];
+                const state = selectingState;
+                const activeP = profiles[state.profileIndex];
                 let maxPoint: number | undefined = undefined;
 
-                // Determine which point data to use based on mode
-                let pointData = gameData;
-                if (activeP.mode === 'Under10') {
-                    pointData = gameDataStandard;
-                } else if (activeP.mode === 'Under10South') {
-                    pointData = gameDataSouth;
-                }
+                let allBeys: { name: string; point: number; image_url?: string; is_banned?: boolean; blocked?: boolean }[] = [];
 
-                // Create allBeys from the correct point data
-                const allBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
-                    names.map((name) => ({ name, point: parseInt(point) }))
-                );
-                allBeys.sort((a, b) => a.name.localeCompare(b.name));
-
-                if (activeP.mode === 'Under10' || activeP.mode === 'Under10South') {
-                    const modeAllBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
+                if (beybladesList && beybladesList.length > 0) {
+                    allBeys = beybladesList
+                        .filter((b: any) => !b.type || ['BX', 'CX', 'UX'].includes(b.type))
+                        .map((b: any) => ({
+                            name: b.name,
+                            point: b.points_standard,
+                            image_url: b.image_url,
+                            is_banned: b.is_banned
+                        }));
+                } else {
+                    let pointData = gameData;
+                    if (activeP.mode === 'Under10') {
+                        pointData = gameDataStandard;
+                    } else if (activeP.mode === 'Under10Custom') {
+                        pointData = gameDataSouth;
+                    }
+                    allBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
                         names.map((name) => ({ name, point: parseInt(point) }))
                     );
+                }
+                allBeys.sort((a, b) => a.name.localeCompare(b.name));
 
-                    const currentDeckAttachments = activeP.mainBeyAttachments;
-
+                if (activeP.mode === 'Under10' || activeP.mode === 'Under10Custom') {
                     const totalUsedPoints = currentSelectorDeck.reduce((sum, name, idx) => {
-                        if (idx === selectingState.slotIndex) return sum; // Skip current slot being edited
+                        if (idx === state.slotIndex) return sum; // Skip current slot being edited
 
-                        const b = modeAllBeys.find(b => b.name === name);
+                        const b = allBeys.find(x => x.name === name);
                         const beyPoint = b?.point || 0;
 
-                        let attachmentPoint = 0;
-                        const att = currentDeckAttachments[idx];
-                        if (att === "Heavy" || att === "Wheel") attachmentPoint = 1;
-
-                        return sum + beyPoint + attachmentPoint;
+                        return sum + beyPoint;
                     }, 0);
 
                     maxPoint = 10 - totalUsedPoints;
@@ -458,13 +461,16 @@ export function RegistrationView({
                 return (
                     <VisualSelector
                         label={t('reg.deck.main')}
-                        value={activeP.mainBeys[selectingState.slotIndex]}
+                        value={activeP.mainBeys[state.slotIndex]}
                         onChange={handleBeySelect}
                         onClose={() => setSelectingState(null)}
                         maxPoint={maxPoint}
                         options={allBeys.map(bey => {
-                            const isSelectedInCurrentDeck = currentSelectorDeck.includes(bey.name) && bey.name !== activeP.mainBeys[selectingState.slotIndex];
-                            const isBanned = (activeP.mode === 'NoMoreMeta') && (banList || gameData.banList).includes(bey.name);
+                            const isSelectedInCurrentDeck = currentSelectorDeck.includes(bey.name) && bey.name !== activeP.mainBeys[state.slotIndex];
+                            
+                            const fallbackBans = banList || gameData.banList;
+                            const effectiveBans = (beybladesList && beybladesList.length > 0) ? dynamicBanList : fallbackBans;
+                            const isBanned = (activeP.mode === 'NoMoreMeta') && (effectiveBans.includes(bey.name) || bey.is_banned);
 
                             return {
                                 ...bey,
@@ -521,24 +527,61 @@ export function RegistrationView({
                 </div>
             )}
 
-            {/* CX Attachment Selector */}
-            {selectingAttachment && (
-                <CXAttachmentSelector
-                    currentAttachment={profiles[selectingAttachment.profileIndex].mainBeyAttachments[selectingAttachment.slotIndex]}
-                    usedAttachments={profiles[selectingAttachment.profileIndex].mainBeyAttachments.filter((_, idx) => idx !== selectingAttachment.slotIndex)}
-                    onSelect={(attachment) => {
-                        handleAttachmentSelect(
-                            selectingAttachment.profileIndex,
-                            'main',
-                            0, // deckIndex
-                            selectingAttachment.slotIndex,
-                            attachment
-                        );
-                        setSelectingAttachment(null);
-                    }}
-                    onClose={() => setSelectingAttachment(null)}
-                />
-            )}
+            {/* Custom Parts Modal */}
+            {customizingSlot && (() => {
+                const state = customizingSlot;
+                const activeP = profiles[state.profileIndex];
+                const isCX = !!(state.beyName && (beybladesList.find(x => x.name === state.beyName)?.type === 'CX' || beySeries.series.CX.includes(state.beyName)));
+
+                // Gather all attachments used on OTHER blades in the deck
+                const usedAtts: string[] = [];
+                for (let i = 0; i < 3; i++) {
+                    if (i === state.slotIndex) continue; // Skip current blade slot
+                    
+                    const otherBey = activeP.mainBeys[i];
+                    const isOtherCX = !!(otherBey && (beybladesList.find(x => x.name === otherBey)?.type === 'CX' || beySeries.series.CX.includes(otherBey)));
+
+                    if (isOtherCX) {
+                        const lc = activeP.mainBeyLockChips[i];
+                        if (lc) usedAtts.push(lc);
+                        
+                        const ab = activeP.mainBeyAssistBlades[i];
+                        if (ab) usedAtts.push(ab);
+                    }
+
+                    const rc = activeP.mainBeyRachets[i];
+                    if (rc) usedAtts.push(rc);
+
+                    const bt = activeP.mainBeyBits[i];
+                    if (bt) usedAtts.push(bt);
+                }
+
+                return (
+                    <CustomPartsModal
+                        beyName={state.beyName}
+                        isCX={isCX}
+                        mode={activeP.mode}
+                        currentLockChip={activeP.mainBeyLockChips[state.slotIndex]}
+                        currentAssistBlade={activeP.mainBeyAssistBlades[state.slotIndex]}
+                        currentRachet={activeP.mainBeyRachets[state.slotIndex]}
+                        currentBit={activeP.mainBeyBits[state.slotIndex]}
+                        usedAttachments={usedAtts}
+                        beybladesList={beybladesList}
+                        onSelectPart={(partType, name) => {
+                            handleAttachmentSelect(
+                                state.profileIndex,
+                                'main',
+                                0, // deckIndex
+                                state.slotIndex,
+                                name,
+                                partType
+                            );
+                        }}
+                        onClose={() => setCustomizingSlot(null)}
+                        lang={lang}
+                    />
+                );
+            })()}
         </div>
     );
 }

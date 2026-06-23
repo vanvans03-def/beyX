@@ -14,6 +14,7 @@
     "test:new": "node scripts/run-tests.js new"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1073.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.90.1",
     "@vercel/blob": "^2.0.0",
@@ -36,6 +37,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-zoom-pan-pinch": "^3.7.0",
+    "sharp": "^0.35.2",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "uuid": "^13.0.0"

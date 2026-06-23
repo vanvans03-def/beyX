@@ -7,17 +7,23 @@ import { ImageWithLoading } from "@/components/ui/ImageWithLoading";
 import cxAttachments from "@/data/cx-attachments.json";
 
 interface CXAttachmentSelectorProps {
+    title?: string;
+    description?: string;
     onSelect: (attachment: string | null) => void;
     onClose: () => void;
     currentAttachment?: string | null;
     usedAttachments?: (string | null)[];
+    options?: { name: string | null; displayName: string; points: number; image: string | null; }[];
 }
 
 export function CXAttachmentSelector({
+    title = "ส่วนเสริมพิเศษ CX",
+    description = "เลือกส่วนเสริมพิเศษสำหรับ CX Blade",
     onSelect,
     onClose,
     currentAttachment,
-    usedAttachments = []
+    usedAttachments = [],
+    options = []
 }: CXAttachmentSelectorProps) {
     const [selected, setSelected] = useState<string | null>(currentAttachment || null);
 
@@ -26,12 +32,6 @@ export function CXAttachmentSelector({
         onSelect(attachment);
         onClose();
     };
-
-    const options = [
-        { name: null, displayName: "None", points: 0, image: null },
-        { name: "Heavy", displayName: cxAttachments.attachments.Heavy.displayName, points: cxAttachments.attachments.Heavy.points, image: cxAttachments.attachments.Heavy.image },
-        { name: "Wheel", displayName: cxAttachments.attachments.Wheel.displayName, points: cxAttachments.attachments.Wheel.points, image: cxAttachments.attachments.Wheel.image }
-    ];
 
     return (
         <div
@@ -44,8 +44,8 @@ export function CXAttachmentSelector({
                 {/* Header */}
                 <div className="flex items-center justify-between flex-none">
                     <div>
-                        <h3 className="text-xl font-bold text-white">ส่วนเสริมพิเศษ CX</h3>
-                        <p className="text-sm text-zinc-400">เลือกส่วนเสริมพิเศษสำหรับ CX Blade</p>
+                        <h3 className="text-xl font-bold text-white">{title}</h3>
+                        <p className="text-sm text-zinc-400">{description}</p>
                     </div>
                     <button
                         onClick={onClose}

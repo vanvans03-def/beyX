@@ -8,7 +8,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabaseAdmin
         .from('users')
-        .select('username, shop_name, challonge_api_key, music_volume, tts_volume')
+        .select('username, shop_name, email, challonge_api_key, music_volume, tts_volume, role, event_mode_enabled, music_enabled, tts_enabled, challonge_enabled, internal_bracket_enabled')
         .eq('id', userId)
         .single();
 
@@ -26,7 +26,7 @@ export async function PATCH(req: Request) {
 
     try {
         const body = await req.json();
-        const { shop_name, challonge_api_key, music_volume, tts_volume } = body;
+        const { shop_name, email, challonge_api_key, music_volume, tts_volume } = body;
 
         const updates: any = {};
         if (shop_name !== undefined) {
@@ -35,6 +35,17 @@ export async function PATCH(req: Request) {
                 return NextResponse.json({ error: "ชื่อร้านต้องไม่มีเว้นวรรค และไม่มีตัวอักษรพิเศษ (อนุญาตเฉพาะตัวอักษร ตัวเลข - และ _ เท่านั้น)" }, { status: 400 });
             }
             updates.shop_name = shop_name;
+        }
+        if (email !== undefined) {
+            if (email && email.trim() !== '') {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง" }, { status: 400 });
+                }
+                updates.email = email.trim().toLowerCase();
+            } else {
+                updates.email = null;
+            }
         }
         if (challonge_api_key !== undefined) updates.challonge_api_key = challonge_api_key;
         if (music_volume !== undefined) updates.music_volume = music_volume;

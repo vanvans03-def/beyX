@@ -1,6 +1,27 @@
 import { NextResponse } from "next/server";
 import { getEvents, createEvent, deleteEvent, updateEvent } from "@/lib/repository";
+import { supabaseAdmin } from "@/lib/supabase";
 
+async function checkEventMode(req: Request) {
+    const userId = req.headers.get('x-user-id');
+    if (!userId) return { allowed: false, status: 401, error: "Unauthorized" };
+
+    const { data: user, error } = await supabaseAdmin
+        .from('users')
+        .select('event_mode_enabled, role')
+        .eq('id', userId)
+        .single();
+
+    if (error || !user) {
+        return { allowed: false, status: 500, error: error?.message || "User not found" };
+    }
+
+    if (user.role !== 'superadmin' && user.event_mode_enabled === false) {
+        return { allowed: false, status: 403, error: "ฟังก์ชันจัดการอีเว้นท์ถูกปิดใช้งานโดย Super Admin" };
+    }
+
+    return { allowed: true, userId };
+}
 
 export async function GET() {
     try {
@@ -23,6 +44,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
     try {
+        const check = await checkEventMode(req);
+        if (!check.allowed) return NextResponse.json({ success: false, error: check.error }, { status: check.status });
+
         const body = await req.json();
         // Validation handled in frontend mostly, but basic checks:
         if (!body.title || !body.date) throw new Error("Title and Date required");
@@ -45,6 +69,9 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
     try {
+        const check = await checkEventMode(req);
+        if (!check.allowed) return NextResponse.json({ success: false, error: check.error }, { status: check.status });
+
         const body = await req.json();
         const { id, ...data } = body;
 
@@ -63,6 +90,9 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
     try {
+        const check = await checkEventMode(req);
+        if (!check.allowed) return NextResponse.json({ success: false, error: check.error }, { status: check.status });
+
         const { searchParams } = new URL(req.url);
         const id = searchParams.get("id");
         if (!id) throw new Error("ID required");

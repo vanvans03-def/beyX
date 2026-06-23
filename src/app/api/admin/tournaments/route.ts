@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createTournament, getTournaments, getTournament, updateTournamentStatus, getUserApiKey } from "@/lib/repository";
 import { finalizeTournament } from "@/lib/challonge";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,13 @@ export async function GET(req: Request) {
                 return NextResponse.json({ success: false, message: "Unauthorized access to tournament" }, { status: 403 });
             }
 
+            // Fetch owner's cx_enabled setting
+            const { data: ownerUser } = await supabaseAdmin
+                .from('users')
+                .select('cx_enabled')
+                .eq('id', data.user_id)
+                .single();
+
             const mapped = {
                 id: data.id,
                 name: data.name,
@@ -29,10 +37,12 @@ export async function GET(req: Request) {
                 created_at: data.created_at.toISOString(),
                 type: data.type,
                 ban_list: data.ban_list,
+                BanList: data.ban_list, // Backwards compatibility mapping
                 challonge_url: data.challonge_url,
                 arena_count: data.arena_count || 0,
                 provider: data.provider || 'CHALLONGE',
-                bracket_type: data.bracket_type || 'SINGLE'
+                bracket_type: data.bracket_type || 'SINGLE',
+                cx_enabled: ownerUser?.cx_enabled ?? true
             };
             return NextResponse.json({ success: true, data: mapped });
         } else {
@@ -45,6 +55,7 @@ export async function GET(req: Request) {
                 created_at: d.created_at.toISOString(),
                 type: d.type,
                 ban_list: d.ban_list,
+                BanList: d.ban_list, // Backwards compatibility mapping
                 challonge_url: d.challonge_url,
                 arena_count: d.arena_count || 0,
                 provider: d.provider || 'CHALLONGE',
@@ -61,6 +72,20 @@ export async function POST(req: Request) {
     try {
         const userId = req.headers.get('x-user-id');
         if (!userId) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+
+        const { data: user, error: userError } = await supabaseAdmin
+            .from('users')
+            .select('event_mode_enabled, role')
+            .eq('id', userId)
+            .single();
+
+        if (userError || !user) {
+            return NextResponse.json({ success: false, error: "Failed to verify account permissions." }, { status: 500 });
+        }
+
+        if (user.role !== 'superadmin' && user.event_mode_enabled === false) {
+            return NextResponse.json({ success: false, error: "ฟังก์ชันการสร้างทัวร์นาเมนต์ถูกปิดใช้งานโดย Super Admin" }, { status: 403 });
+        }
 
         const body = await req.json();
         if (!body.name) throw new Error("Name is required");
@@ -82,6 +107,7 @@ export async function POST(req: Request) {
             created_at: newT.created_at.toISOString(),
             type: newT.type,
             ban_list: newT.ban_list,
+            BanList: newT.ban_list, // Compatibility mapping
             challonge_url: newT.challonge_url,
             provider: newT.provider,
             bracket_type: newT.bracket_type

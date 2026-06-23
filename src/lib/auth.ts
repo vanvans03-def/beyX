@@ -15,9 +15,9 @@ export type SessionPayload = {
     exp: number; // Expiry
 }
 
-export async function createSession(userId: string, username: string) {
+export async function createSession(userId: string, username: string, role: string = 'user') {
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 1 day
-    const token = await new SignJWT({ userId, username, role: 'user' })
+    const token = await new SignJWT({ userId, username, role })
         .setProtectedHeader({ alg: ALG })
         .setIssuedAt()
         .setExpirationTime('24h')

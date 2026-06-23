@@ -16,12 +16,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
         }
 
-        // Fetch user from DB (Case-Insensitive)
-        const { data: user, error } = await supabaseAdmin
-            .from('users')
-            .select('*')
-            .ilike('username', username)
-            .single();
+        // Fetch user from DB (Case-Insensitive, support username or email)
+        const isEmail = username.includes('@');
+        let query = supabaseAdmin.from('users').select('*');
+        if (isEmail) {
+            query = query.eq('email', username.trim().toLowerCase());
+        } else {
+            query = query.ilike('username', username.trim());
+        }
+        
+        const { data: user, error } = await query.maybeSingle();
 
         if (error || !user) {
             console.error("User fetch error:", error);
@@ -40,7 +44,7 @@ export async function POST(request: Request) {
         }
 
         // Create Session
-        await createSession(user.id, user.username);
+        await createSession(user.id, user.username, user.role || 'user');
         console.log("Session created for:", username);
 
         return NextResponse.json({ success: true, redirectTo: '/admin' });

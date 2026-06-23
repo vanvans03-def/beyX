@@ -8,7 +8,7 @@ interface MultiVisualSelectorProps {
     label: string;
     initialSelected: string[];
     onConfirm: (selected: string[]) => void;
-    options: { name: string; point: number; blocked?: boolean }[];
+    options: { name: string; point: number; blocked?: boolean; imageUrl?: string }[];
     onClose: () => void;
 }
 
@@ -116,7 +116,7 @@ function MultiVisualSelectorComponent({
             )}>
                 {filteredOptions.map((opt) => {
                     // @ts-ignore
-                    const imgPath = imageMap[opt.name];
+                    const imgPath = opt.imageUrl || imageMap[opt.name];
                     const isSelected = selected.has(opt.name);
 
                     return (

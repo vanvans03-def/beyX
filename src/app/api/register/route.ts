@@ -4,51 +4,171 @@ import gameData from "@/data/game-data.json";
 import gameDataStandard from "@/data/game-data-standard.json";
 import gameDataSouth from "@/data/game-data-south.json";
 import { supabaseAdmin } from "@/lib/supabase";
+import beySeries from "@/data/bey-series.json";
 
 export const dynamic = 'force-dynamic';
 
-// Validation Logic (Duplicated from Frontend for security, usually shared via lib/types but keeping simple here)
-function validatePayload(body: any) {
-    const { playerName, mode, mainBeys, totalPoints } = body;
+// Database-driven Validation Logic
+function validatePayloadDb(body: any, resolvedBeys: any[], resolvedBans: string[], cxEnabled: boolean = true) {
+    const { playerName, mode, mainBeys } = body;
     if (!playerName || !mode || !Array.isArray(mainBeys) || mainBeys.length !== 3) {
         return { valid: false, message: "Invalid payload structure" };
     }
 
-    // Parse names (strip custom suffixes like "|Heavy")
+    // Parse names (strip custom suffixes)
     const cleanBeys = mainBeys.map((name: string) => name ? name.split('|')[0] : '');
 
-    // Check Bans if NoMoreMeta
-    if (mode === "NoMoreMeta") {
-        const banned = cleanBeys.filter((name: string) => gameData.banList.includes(name));
-        if (banned.length > 0) {
-            return { valid: false, message: `Contains Banned Beys: ${banned.join(", ")}` };
+    // Check uniqueness of attachments across the entire deck
+    const usedAttachments: string[] = [];
+    for (let idx = 0; idx < mainBeys.length; idx++) {
+        const combo = mainBeys[idx];
+        if (!combo) continue;
+        const parts = combo.split('|');
+        const beyName = parts[0];
+        
+        const isCX = beyName && (resolvedBeys.find(b => b.name === beyName)?.type === 'CX' || beySeries.series.CX.includes(beyName));
+
+        if (parts.length >= 4) {
+            // New format: Blade|LockChip|AssistBlade|Rachet|Bit
+            const lc = parts[1];
+            const ab = parts[2];
+            const rc = parts[3];
+            const bt = parts[4];
+
+            if (lc && isCX) usedAttachments.push(lc);
+            if (ab && isCX) usedAttachments.push(ab);
+            if (rc) usedAttachments.push(rc);
+            if (bt) usedAttachments.push(bt);
+        } else {
+            // Legacy format: Blade|SpecialCX|Normal
+            const spec = parts[1];
+            const norm = parts[2];
+
+            if (spec && isCX) usedAttachments.push(spec);
+            if (norm) usedAttachments.push(norm);
         }
     }
 
-    // Check Points if Under10 or Under10South
-    if (mode === "Under10" || mode === "Under10South") {
-        // Use appropriate point mapping based on mode
-        const pointData = mode === "Under10South" ? gameDataSouth : gameDataStandard;
-        // Re-calculate points to be sure
-        const pointsMap: Record<string, number> = {};
-        Object.entries(pointData.points).forEach(([pt, names]) => {
-            names.forEach(name => pointsMap[name] = parseInt(pt));
-        });
+    const duplicates = usedAttachments.filter((item, index) => usedAttachments.indexOf(item) !== index);
+    if (duplicates.length > 0) {
+        return { valid: false, message: `Duplicate attachment found in deck: ${duplicates[0]}` };
+    }
 
-        let calculatedPoints = cleanBeys.reduce((sum: number, name: string) => sum + (pointsMap[name] || 0), 0);
+    // Check Bans for Beyblade and Attachments
+    if (mode === "NoMoreMeta") {
+        for (let idx = 0; idx < mainBeys.length; idx++) {
+            const combo = mainBeys[idx];
+            if (!combo) continue;
+            const parts = combo.split('|');
+            const beyName = parts[0];
 
-        // Add attachment points for U10South
-        if (mode === "Under10South") {
-            // We have to look at original strings for attachments
-            mainBeys.forEach((rawName: string) => {
-                if (rawName.includes('|')) {
-                    const parts = rawName.split('|');
-                    if (parts[1] === 'Heavy' || parts[1] === 'Wheel') {
-                        calculatedPoints += 1;
+            // 1. Check Beyblade Ban
+            if (resolvedBans.includes(beyName)) {
+                return { valid: false, message: `Contains Banned Beyblade: ${beyName}` };
+            }
+
+            // 2. Check Attachments Ban
+            if (parts.length >= 4) {
+                const lc = parts[1];
+                const ab = parts[2];
+                const rc = parts[3];
+                const bt = parts[4];
+
+                if (lc) {
+                    const lcObj = resolvedBeys.find(b => b.name === lc && b.type === 'LOCK_CHIP');
+                    if (lcObj?.is_banned) return { valid: false, message: `Contains Banned Lock Chip: ${lc}` };
+                }
+                if (ab) {
+                    const abObj = resolvedBeys.find(b => b.name === ab && b.type === 'ASSIST_BLADE');
+                    if (abObj?.is_banned) return { valid: false, message: `Contains Banned Assist Blade: ${ab}` };
+                }
+                if (rc) {
+                    const rcObj = resolvedBeys.find(b => b.name === rc && b.type === 'RACHET');
+                    if (rcObj?.is_banned) return { valid: false, message: `Contains Banned Rachet: ${rc}` };
+                }
+                if (bt) {
+                    const btObj = resolvedBeys.find(b => b.name === bt && b.type === 'BIT');
+                    if (btObj?.is_banned) return { valid: false, message: `Contains Banned Bit: ${bt}` };
+                }
+            } else {
+                // Legacy format
+                const specAtt = parts[1];
+                const normAtt = parts[2];
+
+                if (specAtt) {
+                    const specAttObj = resolvedBeys.find(b => b.name === specAtt && (b.type === 'CX_SPECIAL' || b.type === 'LOCK_CHIP' || b.type === 'ASSIST_BLADE'));
+                    if (specAttObj?.is_banned) {
+                        return { valid: false, message: `Contains Banned CX Attachment: ${specAtt}` };
                     }
                 }
-            });
+
+                if (normAtt) {
+                    const normAttObj = resolvedBeys.find(b => b.name === normAtt && (b.type === 'NORMAL_ATTACHMENT' || b.type === 'RACHET' || b.type === 'BIT'));
+                    if (normAttObj?.is_banned) {
+                        return { valid: false, message: `Contains Banned Attachment: ${normAtt}` };
+                    }
+                }
+            }
         }
+    }
+
+    // Check Points if Under10 or Under10Custom
+    if (mode === "Under10" || mode === "Under10Custom") {
+        const pointsMap: Record<string, number> = {};
+        resolvedBeys.forEach(b => {
+            pointsMap[b.name] = b.points_standard;
+        });
+
+        let calculatedPoints = cleanBeys.reduce((sum: number, name: string, idx: number) => {
+            let pt = pointsMap[name] || 0;
+            
+            if (mode === "Under10Custom" && mainBeys[idx] && mainBeys[idx].includes('|')) {
+                const parts = mainBeys[idx].split('|');
+                const isCX = name && (resolvedBeys.find(b => b.name === name)?.type === 'CX' || beySeries.series.CX.includes(name));
+
+                if (parts.length >= 4) {
+                    const lc = parts[1];
+                    const ab = parts[2];
+                    const rc = parts[3];
+                    const bt = parts[4];
+
+                    if (lc && cxEnabled && isCX) {
+                        const lcObj = resolvedBeys.find(b => b.name === lc && b.type === 'LOCK_CHIP');
+                        if (lcObj) pt += lcObj.points_standard;
+                    }
+                    if (ab && cxEnabled && isCX) {
+                        const abObj = resolvedBeys.find(b => b.name === ab && b.type === 'ASSIST_BLADE');
+                        if (abObj) pt += abObj.points_standard;
+                    }
+                    if (rc) {
+                        const rcObj = resolvedBeys.find(b => b.name === rc && b.type === 'RACHET');
+                        if (rcObj) pt += rcObj.points_standard;
+                    }
+                    if (bt) {
+                        const btObj = resolvedBeys.find(b => b.name === bt && b.type === 'BIT');
+                        if (btObj) pt += btObj.points_standard;
+                    }
+                } else {
+                    const specAttachment = parts[1];
+                    const normAttachment = parts[2];
+
+                    if (specAttachment && cxEnabled && isCX) {
+                        const specAttObj = resolvedBeys.find(b => b.name === specAttachment && (b.type === 'CX_SPECIAL' || b.type === 'LOCK_CHIP' || b.type === 'ASSIST_BLADE'));
+                        if (specAttObj) {
+                            pt += specAttObj.points_standard;
+                        }
+                    }
+
+                    if (normAttachment) {
+                        const normAttObj = resolvedBeys.find(b => b.name === normAttachment && (b.type === 'NORMAL_ATTACHMENT' || b.type === 'RACHET' || b.type === 'BIT'));
+                        if (normAttObj) {
+                            pt += normAttObj.points_standard;
+                        }
+                    }
+                }
+            }
+            return sum + pt;
+        }, 0);
 
         if (calculatedPoints > 10) {
             return { valid: false, message: `Total Points ${calculatedPoints} exceeds limit.` };
@@ -64,8 +184,6 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Pr
         return await fn();
     } catch (error: any) {
         if (retries > 0) {
-            // Check for Rate Limit (429) or Server Error (5xx)
-            // Google Sheets API errors: 429 = RESOURCE_EXHAUSTED
             const isRateLimit = error.response?.status === 429 || error.code === 429 || error.message?.includes("429");
             const isServerErr = error.response?.status >= 500;
 
@@ -82,23 +200,6 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Pr
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-
-        // 1. Validate
-        const uniqueMain = new Set(body.mainBeys);
-        if ((uniqueMain.size !== 3) && body.mode !== "Unlimited" && body.mode !== "Standard") { // Basic uniqueness check
-            // Actually Frontend enforces 3 unique. Server should too.
-            if (uniqueMain.size !== 3) {
-                return NextResponse.json({ success: false, message: "Main Deck must use 3 unique Blades." }, { status: 400 });
-            }
-        }
-
-        const validation = validatePayload(body);
-        if (!validation.valid) {
-            return NextResponse.json({ success: false, message: validation.message }, { status: 400 });
-        }
-
-        // 2. Prepare Data
-        // Column Mapping: RoundID    const { 
         const {
             deviceUUID,
             playerName,
@@ -111,16 +212,66 @@ export async function POST(request: Request) {
 
         if (!tournamentId) throw new Error("Missing Tournament ID");
 
-        // Server-side validation
-        // Fetch Tournament Status to prevent race conditions
+        // 1. Fetch Tournament Status and owner user_id to prevent race conditions
         const { data: tournament, error: tournamentError } = await supabaseAdmin
             .from('tournaments')
-            .select('status, challonge_url')
+            .select('status, challonge_url, user_id, type')
             .eq('id', tournamentId)
             .single();
 
         if (tournamentError || !tournament) {
             return NextResponse.json({ success: false, message: "Tournament not found" }, { status: 404 });
+        }
+
+        // 2. Fetch Beyblade Catalog and Overrides to resolve points / bans
+        const { data: beyblades, error: bErr } = await supabaseAdmin
+            .from('beyblades')
+            .select('*');
+
+        if (bErr || !beyblades) throw new Error("Could not fetch Beyblade catalog");
+
+        // Fetch tournament owner's cx_enabled setting
+        const { data: ownerUser } = await supabaseAdmin
+            .from('users')
+            .select('cx_enabled')
+            .eq('id', tournament.user_id)
+            .single();
+
+        const cxEnabled = ownerUser?.cx_enabled ?? true;
+
+        const { data: overrides, error: oErr } = await supabaseAdmin
+            .from('user_beyblade_points')
+            .select('*')
+            .eq('user_id', tournament.user_id);
+
+        const isCustomPointMode = tournament.type === 'U10Custom';
+
+        // Resolve merged points
+        const resolved = beyblades.map((b: any) => {
+            const o = overrides?.find((up: any) => up.beyblade_id === b.id);
+            return {
+                name: b.name,
+                type: b.type || 'BX',
+                points_standard: isCustomPointMode && o?.points_standard !== undefined && o?.points_standard !== null 
+                    ? o.points_standard 
+                    : b.points_standard,
+                is_banned: o?.is_banned !== undefined && o?.is_banned !== null ? o.is_banned : b.is_banned
+            };
+        });
+
+        const resolvedBans = resolved.filter(b => b.is_banned).map(b => b.name);
+
+        // 3. Validate Unique Beys in Deck
+        const uniqueMain = new Set(mainBeys);
+        if ((uniqueMain.size !== 3) && mode !== "Unlimited" && mode !== "Standard") {
+            if (uniqueMain.size !== 3) {
+                return NextResponse.json({ success: false, message: "Main Deck must use 3 unique Blades." }, { status: 400 });
+            }
+        }
+
+        const validation = validatePayloadDb(body, resolved, resolvedBans, cxEnabled);
+        if (!validation.valid) {
+            return NextResponse.json({ success: false, message: validation.message }, { status: 400 });
         }
 
         if (tournament.status === 'COMPLETED' || tournament.status === 'CLOSED') {

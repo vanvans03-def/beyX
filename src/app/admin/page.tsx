@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw, KeyRound } from "lucide-react";
+import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw, KeyRound, Users, Shield, Award } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -30,13 +30,28 @@ export default function AdminPage() {
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [events, setEvents] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<'tournaments' | 'events'>('tournaments');
-    const [userProfile, setUserProfile] = useState<{ username: string, shop_name: string, challonge_api_key?: string } | null>(null);
+    const [userProfile, setUserProfile] = useState<{
+        username: string;
+        shop_name: string;
+        email?: string;
+        challonge_api_key?: string;
+        role?: string;
+        event_mode_enabled?: boolean;
+        music_enabled?: boolean;
+        tts_enabled?: boolean;
+        challonge_enabled?: boolean;
+        internal_bracket_enabled?: boolean;
+    } | null>(null);
     const [isEditingShop, setIsEditingShop] = useState(false);
     const [shopNameInput, setShopNameInput] = useState("");
 
     // API Key Edit State
     const [isEditingKey, setIsEditingKey] = useState(false);
     const [apiKeyInput, setApiKeyInput] = useState("");
+
+    // Email Edit State
+    const [isEditingEmail, setIsEditingEmail] = useState(false);
+    const [emailInput, setEmailInput] = useState("");
 
     // Event Form State
     const [newEvent, setNewEvent] = useState({
@@ -54,7 +69,7 @@ export default function AdminPage() {
     const [newTournamentName, setNewTournamentName] = useState("");
 
     // New Creation State
-    const [newType, setNewType] = useState<"U10" | "U10South" | "NoMoreMeta" | "Open" | "Standard">("Standard");
+    const [newType, setNewType] = useState<"U10" | "U10Custom" | "NoMoreMeta" | "Open" | "Standard">("Standard");
     const [isCustomBanList, setIsCustomBanList] = useState(false);
     const [newProvider, setNewProvider] = useState<'CHALLONGE' | 'INTERNAL'>("CHALLONGE");
     const [newBracketType, setNewBracketType] = useState<'SINGLE' | 'DOUBLE'>("SINGLE");
@@ -63,10 +78,21 @@ export default function AdminPage() {
     const defaultBanList = gameData.banList;
     const [customBanListInput, setCustomBanListInput] = useState(defaultBanList.join(", "));
 
+    const [beybladesList, setBeybladesList] = useState<any[]>([]);
+
     // Derive all beys for selector
-    const allBeys = useMemo(() => Object.entries(gameData.points).flatMap(([point, names]) =>
-        names.map(name => ({ name, point: Number(point) }))
-    ), []);
+    const allBeys = useMemo(() => {
+        if (beybladesList && beybladesList.length > 0) {
+            return beybladesList.map((b: any) => ({
+                name: b.name,
+                point: b.custom_points_standard !== null && b.custom_points_standard !== undefined ? b.custom_points_standard : b.points_standard,
+                imageUrl: b.image_url
+            }));
+        }
+        return Object.entries(gameData.points).flatMap(([point, names]) =>
+            names.map(name => ({ name, point: Number(point) }))
+        );
+    }, [beybladesList]);
 
     // Memoize selected list to prevent re-renders in MultiVisualSelector
     // Note: This relies on customBanListInput which is a string.
@@ -107,6 +133,19 @@ export default function AdminPage() {
     useEffect(() => {
         fetchTournaments();
         fetchProfile();
+        
+        // Fetch global/custom beyblades catalog
+        fetch("/api/admin/profile/beyblades")
+            .then(res => {
+                if (res.ok) return res.json();
+                throw new Error("Failed to fetch beyblades");
+            })
+            .then(data => {
+                if (data.success && data.beyblades) {
+                    setBeybladesList(data.beyblades);
+                }
+            })
+            .catch(err => console.error("Error fetching beyblades list for ban config:", err));
     }, []);
 
     const fetchProfile = async () => {
@@ -117,6 +156,7 @@ export default function AdminPage() {
                 setUserProfile(json.user);
                 setShopNameInput(json.user.shop_name || json.user.username);
                 setApiKeyInput(json.user.challonge_api_key || "");
+                setEmailInput(json.user.email || "");
             }
         } catch (e) {
             console.error("Failed to fetch profile", e);
@@ -149,6 +189,27 @@ export default function AdminPage() {
             }
         } catch (e) {
             toast.error("Failed to update shop name");
+        }
+    };
+
+    const handleUpdateEmail = async () => {
+        const trimmed = emailInput.trim();
+        try {
+            const res = await fetch("/api/admin/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: trimmed || null })
+            });
+            if (res.ok) {
+                setUserProfile(prev => prev ? { ...prev, email: trimmed || undefined } : null);
+                setIsEditingEmail(false);
+                toast.success("Email updated successfully");
+            } else {
+                const json = await res.json();
+                toast.error(json.error || "Failed to update email");
+            }
+        } catch (e) {
+            toast.error("Failed to update email");
         }
     };
 
@@ -234,6 +295,10 @@ export default function AdminPage() {
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (userProfile?.event_mode_enabled === false) {
+            toast.error("ฟังก์ชันการสร้างทัวร์นาเมนต์ถูกปิดใช้งานโดย Super Admin");
+            return;
+        }
         if (!newTournamentName.trim()) {
             setCreateError("Please enter a tournament name.");
             return;
@@ -340,6 +405,10 @@ export default function AdminPage() {
 
     const handleSaveEvent = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (userProfile?.event_mode_enabled === false) {
+            toast.error("ฟังก์ชันการจัดการอีเว้นท์ถูกปิดใช้งานโดย Super Admin");
+            return;
+        }
         setUploading(true);
         try {
             let imageUrl = undefined; // Undefined means don't update image
@@ -593,6 +662,31 @@ export default function AdminPage() {
                                             )}
                                         </div>
 
+                                        {/* Email Edit */}
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            {isEditingEmail ? (
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="email"
+                                                        value={emailInput}
+                                                        onChange={e => setEmailInput(e.target.value)}
+                                                        className="bg-black/20 border border-white/10 rounded px-2 py-0.5 text-white text-xs outline-none focus:border-primary w-[180px]"
+                                                        placeholder="email@example.com"
+                                                    />
+                                                    <button onClick={handleUpdateEmail} className="text-green-400 hover:text-green-300"><Check className="w-3.5 h-3.5" /></button>
+                                                    <button onClick={() => setIsEditingEmail(false)} className="text-red-400 hover:text-red-300"><X className="w-3.5 h-3.5" /></button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <Globe className="w-3.5 h-3.5" />
+                                                    <span>Email: {userProfile.email || "Not Set (Link Google)"}</span>
+                                                    <button onClick={() => setIsEditingEmail(true)} className="text-gray-500 hover:text-white transition-colors underline">
+                                                        Edit Email
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+
                                         {/* Change Password Link */}
                                         <div className="flex items-center gap-2 text-xs text-gray-500">
                                             <KeyRound className="w-3 h-3" />
@@ -645,15 +739,33 @@ export default function AdminPage() {
                             </div>
                         )}
 
-                        <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-end">
-                            <Link
-                                href="/admin/users/create"
-                                className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5 whitespace-nowrap"
-                            >
-                                <UserPlus className="w-4 h-4" />
-                                <span className="hidden sm:inline">Add Shop</span>
-                                <span className="sm:hidden">Shop</span>
-                            </Link>
+                        <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-end flex-wrap">
+                            {userProfile?.role === 'superadmin' ? (
+                                <>
+                                    <Link
+                                        href="/admin/users"
+                                        className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5 whitespace-nowrap cursor-pointer"
+                                    >
+                                        <Users className="w-4 h-4 text-primary" />
+                                        <span>Users</span>
+                                    </Link>
+                                    <Link
+                                        href="/admin/beyblades"
+                                        className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5 whitespace-nowrap cursor-pointer"
+                                    >
+                                        <Shield className="w-4 h-4 text-primary" />
+                                        <span>Catalog</span>
+                                    </Link>
+                                </>
+                            ) : (
+                                <Link
+                                    href="/admin/profile/beyblades"
+                                    className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5 whitespace-nowrap cursor-pointer"
+                                >
+                                    <Award className="w-4 h-4 text-primary" />
+                                    <span>Custom Points</span>
+                                </Link>
+                            )}
 
 
 
@@ -676,58 +788,82 @@ export default function AdminPage() {
                     {activeTab === 'tournaments' ? (
                         <>
                             {/* Create New Tournament */}
-                            <div className="glass-card p-6 rounded-xl space-y-4">
+                            {userProfile?.event_mode_enabled === false ? (
+                                <div className="glass-card p-6 rounded-xl border border-destructive/20 bg-destructive/10 text-center space-y-2">
+                                    <Shield className="w-12 h-12 text-destructive mx-auto" />
+                                    <h2 className="text-lg font-bold text-destructive">Event System Disabled</h2>
+                                    <p className="text-sm text-gray-400">การสร้างทัวร์นาเมนต์ถูกปิดใช้งานโดยผู้ดูแลระบบสูงสุด (Super Admin)</p>
+                                </div>
+                            ) : (
+                                <div className="glass-card p-6 rounded-xl space-y-4">
                                 <h2 className="text-lg font-bold">{t('admin.create.title')}</h2>
                                 <form onSubmit={handleCreate} className="space-y-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                                         {/* Name Input */}
-                                        <input
-                                            type="text"
-                                            placeholder={t('admin.create.placeholder')}
-                                            value={newTournamentName}
-                                            onChange={(e) => {
-                                                setNewTournamentName(e.target.value);
-                                                if (e.target.value.trim()) setCreateError("");
-                                            }}
-                                            className={cn(
-                                                "w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border",
-                                                createError ? "border-red-500/50 focus:border-red-500" : "border-transparent"
-                                            )}
-                                        />
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">
+                                                {lang === 'TH' ? 'ชื่อทัวร์นาเมนต์' : 'Tournament Name'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder={t('admin.create.placeholder')}
+                                                value={newTournamentName}
+                                                onChange={(e) => {
+                                                    setNewTournamentName(e.target.value);
+                                                    if (e.target.value.trim()) setCreateError("");
+                                                }}
+                                                className={cn(
+                                                    "w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border text-sm h-10",
+                                                    createError ? "border-red-500/50 focus:border-red-500" : "border-transparent"
+                                                )}
+                                            />
+                                        </div>
 
                                         {/* Rules & Points */}
                                         <div className="space-y-1">
                                             <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Rules & Points</label>
-                                            <select
-                                                value={newType}
-                                                onChange={(e) => setNewType(e.target.value as any)}
-                                                className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border appearance-none"
-                                            >
-                                                <option value="Standard">{t('type.Standard')}</option>
-                                                <option value="U10South">3 Bey 10 Point (สายใต้)</option>
-                                                <option value="NoMoreMeta">{t('type.NoMoreMeta')}</option>
-                                                <option value="U10">{t('type.U10')}</option>
-                                            </select>
+                                            <div className="relative">
+                                                <select
+                                                    value={newType}
+                                                    onChange={(e) => setNewType(e.target.value as any)}
+                                                    className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 pr-10 outline-none transition-colors border text-sm h-10 cursor-pointer appearance-none"
+                                                >
+                                                    <option value="Standard">{t('type.Standard')}</option>
+                                                    <option value="U10Custom">3 Bey 10 Point (Custom Points)</option>
+                                                    <option value="NoMoreMeta">{t('type.NoMoreMeta')}</option>
+                                                    <option value="U10">{t('type.U10')}</option>
+                                                </select>
+                                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
+                                                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                                                    </svg>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {/* Provider & Bracket Type */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Tournament System */}
                                         <div className="space-y-1">
                                             <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Tournament System</label>
-                                            <select
-                                                value={newProvider}
-                                                onChange={(e) => setNewProvider(e.target.value as any)}
-                                                className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 outline-none transition-colors border appearance-none"
-                                            >
-                                                <option value="CHALLONGE">Challonge (External)</option>
-                                                <option value="INTERNAL">BeyX Bracket (Internal)</option>
-                                            </select>
+                                            <div className="relative">
+                                                <select
+                                                    value={newProvider}
+                                                    onChange={(e) => setNewProvider(e.target.value as any)}
+                                                    className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 pr-10 outline-none transition-colors border text-sm h-10 cursor-pointer appearance-none"
+                                                >
+                                                    <option value="CHALLONGE">Challonge (External)</option>
+                                                    <option value="INTERNAL">BeyX Bracket (Internal)</option>
+                                                </select>
+                                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
+                                                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                                                    </svg>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Custom Ban List Toggle */}
-                                    {(newType === 'NoMoreMeta' || newType === 'Open') && (
+                                    {(newType === 'NoMoreMeta') && (
                                         <div className="space-y-2 p-3 bg-secondary/30 rounded-lg border border-white/5">
                                             <div className="flex items-center gap-2">
                                                 <input
@@ -775,6 +911,7 @@ export default function AdminPage() {
                                     {createError && <p className="text-sm text-red-500 font-bold px-1 text-center md:text-right">{createError}</p>}
                                 </form>
                             </div>
+                            )}
 
                             {/* Tournament List */}
                             <div className="space-y-4">
@@ -991,7 +1128,14 @@ export default function AdminPage() {
                         // EVENTS TAB
                         <div className="space-y-8">
                             {/* Create Event */}
-                            <div className="glass-card p-6 rounded-xl space-y-4">
+                            {userProfile?.event_mode_enabled === false ? (
+                                <div className="glass-card p-6 rounded-xl border border-destructive/20 bg-destructive/10 text-center space-y-2">
+                                    <Shield className="w-12 h-12 text-destructive mx-auto" />
+                                    <h2 className="text-lg font-bold text-destructive">Event System Disabled</h2>
+                                    <p className="text-sm text-gray-400">การสร้างอีเว้นท์ถูกปิดใช้งานโดยผู้ดูแลระบบสูงสุด (Super Admin)</p>
+                                </div>
+                            ) : (
+                                <div className="glass-card p-6 rounded-xl space-y-4">
                                 <h2 className="text-lg font-bold">
                                     {editingEventId ? "Edit Event" : "New Announcement / Event"}
                                 </h2>
@@ -1100,6 +1244,7 @@ export default function AdminPage() {
                                     </div>
                                 </form>
                             </div>
+                            )}
 
                             {/* List */}
                             <div className="space-y-4">

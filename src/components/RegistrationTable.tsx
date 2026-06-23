@@ -32,17 +32,19 @@ type Props = {
     sameDeviceConflicts?: number[];
     swapSelection?: number[];
     onSwapSelect?: (index: number) => void;
+    beybladesList?: any[];
+    cxEnabled?: boolean;
 };
 
 // Extracted validation logic
-const validateRow = (row: Registration, tournamentType?: string) => {
+const validateRow = (row: Registration, tournamentType?: string, beybladesList?: any[], cxEnabled?: boolean) => {
     const mainBeys = [row.main_bey1, row.main_bey2, row.main_bey3];
 
     // Check Tournament Type Mismatch
     if (tournamentType) {
         let isMatch = false;
         if (tournamentType === 'U10' && row.mode === 'Under10') isMatch = true;
-        else if (tournamentType === 'U10South' && row.mode === 'Under10South') isMatch = true;
+        else if (tournamentType === 'U10Custom' && row.mode === 'Under10Custom') isMatch = true;
         else if (tournamentType === 'NoMoreMeta' && row.mode === 'NoMoreMeta') isMatch = true;
         else if ((tournamentType === 'Open' || tournamentType === 'Standard') && (row.mode === 'Standard' || row.mode === 'Open')) isMatch = true;
 
@@ -55,30 +57,128 @@ const validateRow = (row: Registration, tournamentType?: string) => {
         // Strip attachments for validation
         const cleanDeck = deck.map(d => d ? d.split('|')[0] : '');
 
-        if (row.mode === "Under10" || row.mode === "Under10South") {
-            // Use appropriate point mapping based on mode
-            const pointData = row.mode === "Under10South" ? gameDataSouth : gameDataStandard;
-            const pointsMap: Record<string, number> = {};
-            Object.entries(pointData.points).forEach(([pt, names]) => {
-                names.forEach(name => pointsMap[name] = parseInt(pt));
-            });
-            let pts = cleanDeck.reduce((sum, name) => sum + (pointsMap[name] || 0), 0);
+        if (row.mode === "Under10" || row.mode === "Under10Custom") {
+            let pts = 0;
+            cleanDeck.forEach((name, idx) => {
+                if (!name) return;
+                let pt = 0;
+                if (beybladesList && beybladesList.length > 0) {
+                    const b = beybladesList.find(x => x.name === name);
+                    pt = b ? b.points_standard : 0;
+                } else {
+                    const pointData = row.mode === "Under10Custom" ? gameDataSouth : gameDataStandard;
+                    const pointsMap: Record<string, number> = {};
+                    Object.entries(pointData.points).forEach(([pVal, names]) => {
+                        names.forEach(n => pointsMap[n] = parseInt(pVal));
+                    });
+                    pt = pointsMap[name] || 0;
+                }
 
-            // Add points for attachments if U10South
-            if (row.mode === "Under10South") {
-                deck.forEach(d => {
-                    const parts = d.split('|');
-                    if (parts.length > 1 && (parts[1] === 'Heavy' || parts[1] === 'Wheel')) {
-                        pts += 1;
+                // Add points for attachments if Under10Custom
+                if (row.mode === "Under10Custom" && deck[idx] && deck[idx].includes('|')) {
+                    const parts = deck[idx].split('|');
+                    let isCX = false;
+                    if (beybladesList && beybladesList.length > 0) {
+                        isCX = beybladesList.find(x => x.name === name)?.type === 'CX';
+                    } else {
+                        // Fallback CX list
+                        isCX = name && (gameDataStandard as any).series?.CX?.includes(name);
                     }
-                });
-            }
+
+                    const isCxEnabled = cxEnabled ?? true;
+
+                    if (parts.length >= 4) {
+                        const lc = parts[1];
+                        const ab = parts[2];
+                        const rc = parts[3];
+                        const bt = parts[4];
+
+                        if (lc && isCxEnabled && isCX) {
+                            if (beybladesList && beybladesList.length > 0) {
+                                const attObj = beybladesList.find(x => x.name === lc && x.type === 'LOCK_CHIP');
+                                if (attObj) {
+                                    pt += attObj.points_standard;
+                                }
+                            } else {
+                                if (lc === 'Heavy' || lc === 'Wheel') {
+                                    pt += 1;
+                                }
+                            }
+                        }
+                        if (ab && isCxEnabled && isCX) {
+                            if (beybladesList && beybladesList.length > 0) {
+                                const attObj = beybladesList.find(x => x.name === ab && x.type === 'ASSIST_BLADE');
+                                if (attObj) {
+                                    pt += attObj.points_standard;
+                                }
+                            } else {
+                                if (ab === 'Valkyrie' || ab === 'Emperor') {
+                                    pt += 1;
+                                }
+                            }
+                        }
+                        if (rc) {
+                            if (beybladesList && beybladesList.length > 0) {
+                                const attObj = beybladesList.find(x => x.name === rc && x.type === 'RACHET');
+                                if (attObj) {
+                                    pt += attObj.points_standard;
+                                }
+                            }
+                        }
+                        if (bt) {
+                            if (beybladesList && beybladesList.length > 0) {
+                                const attObj = beybladesList.find(x => x.name === bt && x.type === 'BIT');
+                                if (attObj) {
+                                    pt += attObj.points_standard;
+                                }
+                            }
+                        }
+                    } else {
+                        // Legacy format: Blade|SpecialCX|Normal
+                        const specAttachment = parts[1];
+                        const normAttachment = parts[2];
+
+                        if (specAttachment && isCxEnabled && isCX) {
+                            if (beybladesList && beybladesList.length > 0) {
+                                const attObj = beybladesList.find(x => x.name === specAttachment && (x.type === 'CX_SPECIAL' || x.type === 'LOCK_CHIP' || x.type === 'ASSIST_BLADE'));
+                                if (attObj) {
+                                    pt += attObj.points_standard;
+                                }
+                            } else {
+                                if (specAttachment === 'Heavy' || specAttachment === 'Wheel' || specAttachment === 'Valkyrie' || specAttachment === 'Emperor') {
+                                    pt += 1;
+                                }
+                            }
+                        }
+
+                        if (normAttachment) {
+                            if (beybladesList && beybladesList.length > 0) {
+                                const attObj = beybladesList.find(x => x.name === normAttachment && (x.type === 'NORMAL_ATTACHMENT' || x.type === 'RACHET' || x.type === 'BIT'));
+                                if (attObj) {
+                                    pt += attObj.points_standard;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                pts += pt;
+            });
 
             if (pts > 10) return { valid: false, msg: `${pts}/10` };
             return { valid: true, msg: "OK" };
-        } else {
-            const banned = cleanDeck.filter(name => gameData.banList.includes(name));
+        } else if (row.mode === "NoMoreMeta") {
+            // Check bans
+            let banned: string[] = [];
+            if (beybladesList && beybladesList.length > 0) {
+                const bannedNames = beybladesList.filter(x => x.is_banned).map(x => x.name);
+                banned = cleanDeck.filter(name => bannedNames.includes(name));
+            } else {
+                banned = cleanDeck.filter(name => gameData.banList.includes(name));
+            }
             if (banned.length > 0) return { valid: false, msg: "Banned" };
+            return { valid: true, msg: "OK" };
+        } else {
             return { valid: true, msg: "OK" };
         }
     };
@@ -92,7 +192,7 @@ const validateRow = (row: Registration, tournamentType?: string) => {
 // Wrap in memo to prevent re-renders when parent state changes (like modals)
 import { useTranslation } from "@/hooks/useTranslation";
 
-const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, onEditSession, onEditName, isEditNameDisabled, tournamentType, sameDeviceConflicts = [], swapSelection = [], onSwapSelect }: Props) {
+const RegistrationTable = memo(function RegistrationTable({ data, loading, searchQuery, onDelete, onEditSession, onEditName, isEditNameDisabled, tournamentType, sameDeviceConflicts = [], swapSelection = [], onSwapSelect, beybladesList = [], cxEnabled = true }: Props) {
     const { t } = useTranslation();
 
     // Memoize the processed data to avoid re-parsing JSON and re-validating on every render
@@ -124,7 +224,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
         });
 
         return filtered.map((row) => {
-            const validation = validateRow(row, tournamentType);
+            const validation = validateRow(row, tournamentType, beybladesList, cxEnabled);
             const isMulti = (deviceCounts[row.device_uuid] || 0) > 1;
 
             // Generate color for multi-device (use pre-calculated theme color, fallback to HSL)
@@ -153,7 +253,7 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                 originalIdx
             };
         });
-    }, [data, searchQuery, tournamentType, sameDeviceConflicts, swapSelection]);
+    }, [data, searchQuery, tournamentType, sameDeviceConflicts, swapSelection, beybladesList, cxEnabled]);
 
     return (
         <div className="overflow-x-auto rounded-lg border border-white/10 glass-card">
@@ -213,12 +313,12 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                             </td>
                             <td className="p-4 whitespace-nowrap">
                                 <span className={`px-2 py-1 rounded text-[10px] font-bold ${row.mode === "Under10" ? "bg-blue-500/20 text-blue-400" :
-                                    row.mode === "Under10South" ? "bg-cyan-500/20 text-cyan-400" :
+                                    row.mode === "Under10Custom" ? "bg-cyan-500/20 text-cyan-400" :
                                         row.mode === "Standard" || row.mode === "Open" ? "bg-green-500/20 text-green-400" :
                                             "bg-purple-500/20 text-purple-400"
                                     }`}>
                                     {row.mode === "Under10" ? "U10" :
-                                        row.mode === "Under10South" ? "U10S" :
+                                        row.mode === "Under10Custom" ? "U10 (Custom)" :
                                             row.mode === "Standard" || row.mode === "Open" ? "OPEN" : "NMM"}
                                 </span>
                             </td>
@@ -227,11 +327,13 @@ const RegistrationTable = memo(function RegistrationTable({ data, loading, searc
                                     {[row.main_bey1, row.main_bey2, row.main_bey3].map((b, idx) => {
                                         const parts = b ? b.split('|') : [''];
                                         const name = parts[0];
-                                        const attachment = parts[1];
+                                        const attachments = parts.slice(1).filter(Boolean);
                                         return (
                                             <span key={idx} className="bg-secondary px-1.5 py-0.5 rounded border border-border/50 whitespace-nowrap flex items-center gap-1">
                                                 {name}
-                                                {attachment && <span className="text-[9px] text-muted-foreground bg-black/20 px-1 rounded">{attachment}</span>}
+                                                {attachments.map((att, attIdx) => (
+                                                    <span key={attIdx} className="text-[9px] text-muted-foreground bg-black/20 px-1 rounded">{att}</span>
+                                                ))}
                                             </span>
                                         );
                                     })}

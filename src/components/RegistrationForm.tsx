@@ -21,7 +21,7 @@ export default function RegistrationForm(props: {
         );
     }
 
-    if (props.tournamentType === 'U10' || props.tournamentType === 'U10South') {
+    if (props.tournamentType === 'U10' || props.tournamentType === 'U10Custom') {
         return <RegistrationFormU10 {...props} />;
     }
 

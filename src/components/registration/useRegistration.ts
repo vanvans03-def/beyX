@@ -8,7 +8,7 @@ import gameDataSouth from "@/data/game-data-south.json";
 import cxAttachments from "@/data/cx-attachments.json";
 import beySeries from "@/data/bey-series.json";
 
-export type RegistrationMode = "Under10" | "Under10South" | "NoMoreMeta" | "Standard";
+export type RegistrationMode = "Under10" | "Under10Custom" | "NoMoreMeta" | "Standard";
 
 export type Profile = {
     internalId: number;
@@ -16,12 +16,18 @@ export type Profile = {
     name: string;
     mode: RegistrationMode;
     mainBeys: string[];
-    mainBeyAttachments: (string | null)[]; // CX attachments for main deck (Heavy, Wheel, or null)
+    mainBeyLockChips: (string | null)[]; // Lock Chips
+    mainBeyAssistBlades: (string | null)[]; // Assist Blades
+    mainBeyRachets: (string | null)[]; // Rachets
+    mainBeyBits: (string | null)[]; // Bits
     status: 'draft' | 'submitted';
     errorMsg?: string;
     validationPoints?: number;
     originalMainBeys?: string[];
-    originalMainBeyAttachments?: (string | null)[];
+    originalMainBeyLockChips?: (string | null)[];
+    originalMainBeyAssistBlades?: (string | null)[];
+    originalMainBeyRachets?: (string | null)[];
+    originalMainBeyBits?: (string | null)[];
 };
 
 const allBeys = Object.entries(gameData.points).flatMap(([point, names]) =>
@@ -30,7 +36,7 @@ const allBeys = Object.entries(gameData.points).flatMap(([point, names]) =>
 
 const getModeFromType = (type?: string): RegistrationMode => {
     if (type === 'U10') return 'Under10';
-    if (type === 'U10South') return 'Under10South';
+    if (type === 'U10Custom') return 'Under10Custom';
     if (type === 'NoMoreMeta') return 'NoMoreMeta';
     if (type === 'Standard' || type === 'Open') return 'Standard';
     return 'Under10';
@@ -61,6 +67,27 @@ export function useRegistration({
     const [success, setSuccess] = useState(false);
     const [editToken, setEditToken] = useState<string | null>(null);
 
+    // Dynamic config states
+    const [beybladesList, setBeybladesList] = useState<{ name: string; points_standard: number; is_banned: boolean; image_url: string; type?: string }[]>([]);
+    const [dynamicBanList, setDynamicBanList] = useState<string[]>([]);
+    const [cxEnabled, setCxEnabled] = useState(true);
+
+    useEffect(() => {
+        if (!tournamentId) return;
+        fetch(`/api/register/config?tournamentId=${tournamentId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    setBeybladesList(data.beyblades);
+                    setDynamicBanList(data.banList);
+                    if (data.cxEnabled !== undefined) {
+                        setCxEnabled(data.cxEnabled);
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to load registration configuration:", err));
+    }, [tournamentId]);
+
     // View Players Modal State
     const [showPlayerList, setShowPlayerList] = useState(false);
     const [existingPlayers, setExistingPlayers] = useState<string[]>([]);
@@ -74,7 +101,10 @@ export function useRegistration({
             name: "",
             mode: getModeFromType(tournamentType),
             mainBeys: ["", "", ""],
-            mainBeyAttachments: [null, null, null],
+            mainBeyLockChips: [null, null, null],
+            mainBeyAssistBlades: [null, null, null],
+            mainBeyRachets: [null, null, null],
+            mainBeyBits: [null, null, null],
             status: 'draft'
         }
     ]);
@@ -152,30 +182,85 @@ export function useRegistration({
                         const loadedProfiles = json.data.map((r: any, idx: number) => {
                             // Parse Main Deck
                             const mainBeys: string[] = [];
-                            const mainAttachments: (string | null)[] = [];
+                            const mainLockChips: (string | null)[] = [];
+                            const mainAssistBlades: (string | null)[] = [];
+                            const mainRachets: (string | null)[] = [];
+                            const mainBits: (string | null)[] = [];
+
                             (r.main_deck || []).forEach((item: string) => {
                                 if (item && item.includes('|')) {
                                     const parts = item.split('|');
                                     mainBeys.push(parts[0]);
-                                    mainAttachments.push(parts[1] || null);
+                                    
+                                    if (parts.length >= 4) {
+                                        // New format: Blade|LockChip|AssistBlade|Rachet|Bit
+                                        mainLockChips.push(parts[1] || null);
+                                        mainAssistBlades.push(parts[2] || null);
+                                        mainRachets.push(parts[3] || null);
+                                        mainBits.push(parts[4] || null);
+                                    } else {
+                                        // Legacy format: Blade|SpecialCX|Normal
+                                        const spec = parts[1] || null;
+                                        const norm = parts[2] || null;
+
+                                        let lockChip: string | null = null;
+                                        let assistBlade: string | null = null;
+                                        let rachet: string | null = null;
+                                        let bit: string | null = null;
+
+                                        if (spec) {
+                                            if (spec === 'Heavy' || spec === 'Wheel') {
+                                                lockChip = spec;
+                                            } else if (spec === 'Valkyrie' || spec === 'Emperor') {
+                                                assistBlade = spec;
+                                            }
+                                        }
+
+                                        if (norm) {
+                                            const dbItem = beybladesList.find(x => x.name === norm);
+                                            if (dbItem?.type === 'BIT') {
+                                                bit = norm;
+                                            } else {
+                                                rachet = norm;
+                                            }
+                                        }
+
+                                        mainLockChips.push(lockChip);
+                                        mainAssistBlades.push(assistBlade);
+                                        mainRachets.push(rachet);
+                                        mainBits.push(bit);
+                                    }
                                 } else {
                                     mainBeys.push(item || "");
-                                    mainAttachments.push(null);
+                                    mainLockChips.push(null);
+                                    mainAssistBlades.push(null);
+                                    mainRachets.push(null);
+                                    mainBits.push(null);
                                 }
                             });
+
                             // Ensure length 3
                             while (mainBeys.length < 3) mainBeys.push("");
-                            while (mainAttachments.length < 3) mainAttachments.push(null);
+                            while (mainLockChips.length < 3) mainLockChips.push(null);
+                            while (mainAssistBlades.length < 3) mainAssistBlades.push(null);
+                            while (mainRachets.length < 3) mainRachets.push(null);
+                            while (mainBits.length < 3) mainBits.push(null);
 
                             return {
                                 internalId: idx + 1,
                                 id: r.id,
                                 name: r.player_name,
-                                mode: r.mode,
+                                mode: r.mode === 'Under10South' ? 'Under10Custom' : r.mode,
                                 mainBeys: mainBeys,
-                                mainBeyAttachments: mainAttachments,
-                                originalMainBeys: [...mainBeys], // Store original values
-                                originalMainBeyAttachments: [...mainAttachments], // Store original values
+                                mainBeyLockChips: mainLockChips,
+                                mainBeyAssistBlades: mainAssistBlades,
+                                mainBeyRachets: mainRachets,
+                                mainBeyBits: mainBits,
+                                originalMainBeys: [...mainBeys],
+                                originalMainBeyLockChips: [...mainLockChips],
+                                originalMainBeyAssistBlades: [...mainAssistBlades],
+                                originalMainBeyRachets: [...mainRachets],
+                                originalMainBeyBits: [...mainBits],
                                 status: 'submitted'
                             };
                         });
@@ -194,33 +279,123 @@ export function useRegistration({
         });
     };
 
-    const validateDeck = (deck: string[], mode: RegistrationMode, attachments?: (string | null)[]) => {
+    const validateDeck = (
+        deck: string[],
+        mode: RegistrationMode,
+        lockChips?: (string | null)[],
+        assistBlades?: (string | null)[],
+        rachets?: (string | null)[],
+        bits?: (string | null)[]
+    ) => {
         let currentPoints = 0;
 
-        // Calculate points if U10/U10South (even if incomplete)
-        if (mode === "Under10" || mode === "Under10South") {
-            const pointData = mode === "Under10South" ? gameDataSouth : gameDataStandard;
-            const modeAllBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
-                names.map((name) => ({ name, point: parseInt(point) }))
-            );
-
-            const total = deck.reduce((sum, name) => {
+        // Calculate points if U10 (even if incomplete)
+        if (mode === "Under10" || mode === "Under10Custom") {
+            const total = deck.reduce((sum, name, idx) => {
                 if (!name) return sum;
-                const b = modeAllBeys.find(x => x.name === name);
-                return sum + (b?.point || 0);
+                let pt = 0;
+                if (beybladesList.length > 0) {
+                    const b = beybladesList.find(x => x.name === name);
+                    pt = b ? b.points_standard : 0;
+                } else {
+                    const pointData = mode === "Under10Custom" ? gameDataSouth : gameDataStandard;
+                    const modeAllBeys = Object.entries(pointData.points).flatMap(([point, names]) =>
+                        names.map((name) => ({ name, point: parseInt(point) }))
+                    );
+                    const b = modeAllBeys.find(x => x.name === name);
+                    pt = b?.point || 0;
+                }
+
+                const isCX = name && (beybladesList.find(x => x.name === name)?.type === 'CX' || beySeries.series.CX.includes(name));
+
+                // Add points from Special CX Lock Chip (if enabled and client/blade is CX)
+                if (mode === "Under10Custom" && cxEnabled && isCX && lockChips && lockChips[idx]) {
+                    const att = lockChips[idx];
+                    if (beybladesList.length > 0) {
+                        const attObj = beybladesList.find(x => x.name === att && x.type === 'LOCK_CHIP');
+                        if (attObj) {
+                            pt += attObj.points_standard;
+                        }
+                    } else {
+                        if (att === 'Heavy' || att === 'Wheel') {
+                            pt += 1;
+                        }
+                    }
+                }
+
+                // Add points from Special CX Assist Blade (if enabled and client/blade is CX)
+                if (mode === "Under10Custom" && cxEnabled && isCX && assistBlades && assistBlades[idx]) {
+                    const att = assistBlades[idx];
+                    if (beybladesList.length > 0) {
+                        const attObj = beybladesList.find(x => x.name === att && x.type === 'ASSIST_BLADE');
+                        if (attObj) {
+                            pt += attObj.points_standard;
+                        }
+                    } else {
+                        if (att === 'Valkyrie' || att === 'Emperor') {
+                            pt += 1;
+                        }
+                    }
+                }
+
+                // Add points from Rachet
+                if (mode === "Under10Custom" && rachets && rachets[idx]) {
+                    const att = rachets[idx];
+                    if (beybladesList.length > 0) {
+                        const attObj = beybladesList.find(x => x.name === att && x.type === 'RACHET');
+                        if (attObj) {
+                            pt += attObj.points_standard;
+                        }
+                    }
+                }
+
+                // Add points from Bit
+                if (mode === "Under10Custom" && bits && bits[idx]) {
+                    const att = bits[idx];
+                    if (beybladesList.length > 0) {
+                        const attObj = beybladesList.find(x => x.name === att && x.type === 'BIT');
+                        if (attObj) {
+                            pt += attObj.points_standard;
+                        }
+                    }
+                }
+
+                return sum + pt;
             }, 0);
 
-            // Add CX attachment points for U10South mode only
-            let attachmentPoints = 0;
-            if (mode === "Under10South" && attachments) {
-                attachmentPoints = attachments.reduce((sum, attachment) => {
-                    if (attachment && (attachment === "Heavy" || attachment === "Wheel")) {
-                        return sum + 1; // Each attachment adds +1 point
-                    }
-                    return sum;
-                }, 0);
+            currentPoints = total;
+        }
+
+        // Uniqueness check for attachments across all 3 blades in the deck
+        const usedAttachments: string[] = [];
+        for (let idx = 0; idx < deck.length; idx++) {
+            const name = deck[idx];
+            if (!name) continue;
+
+            const isCX = name && (beybladesList.find(x => x.name === name)?.type === 'CX' || beySeries.series.CX.includes(name));
+
+            if (isCX) {
+                const lc = lockChips?.[idx];
+                if (lc) usedAttachments.push(lc);
+
+                const ab = assistBlades?.[idx];
+                if (ab) usedAttachments.push(ab);
             }
-            currentPoints = total + attachmentPoints;
+
+            const rc = rachets?.[idx];
+            if (rc) usedAttachments.push(rc);
+
+            const bt = bits?.[idx];
+            if (bt) usedAttachments.push(bt);
+        }
+
+        const duplicates = usedAttachments.filter((item, index) => usedAttachments.indexOf(item) !== index);
+        if (duplicates.length > 0) {
+            return { 
+                valid: false, 
+                message: t('reg.validation.duplicate_attachment', { name: duplicates[0] }) || `ชิ้นส่วนเสริม ${duplicates[0]} ถูกใช้งานซ้ำในเด็ค`, 
+                points: currentPoints 
+            };
         }
 
         if (mode === "Standard") return { valid: true, message: "", points: 0 };
@@ -231,13 +406,13 @@ export function useRegistration({
         if (new Set(deck).size !== 3) return { valid: false, message: t('reg.validation.duplicate'), points: currentPoints };
 
         // 3. Point Limit
-        if ((mode === "Under10" || mode === "Under10South") && currentPoints > 10) {
+        if ((mode === "Under10" || mode === "Under10Custom") && currentPoints > 10) {
             return { valid: false, message: t('reg.validation.points', { pts: currentPoints }), points: currentPoints };
         }
 
         if (mode === "NoMoreMeta") {
-            // Check banned
-            const effectiveBanList = (banList && banList.length > 0) ? banList : gameData.banList;
+            const fallbackBans = (banList && banList.length > 0) ? banList : gameData.banList;
+            const effectiveBanList = (beybladesList.length > 0) ? dynamicBanList : fallbackBans;
             const banned = deck.filter(name => effectiveBanList.includes(name));
             if (banned.length > 0) return { valid: false, message: t('reg.validation.banned'), points: currentPoints };
         }
@@ -246,7 +421,7 @@ export function useRegistration({
     };
 
     const validateProfile = (p: Profile) => {
-        const mainVal = validateDeck(p.mainBeys, p.mode, p.mainBeyAttachments);
+        const mainVal = validateDeck(p.mainBeys, p.mode, p.mainBeyLockChips, p.mainBeyAssistBlades, p.mainBeyRachets, p.mainBeyBits);
         if (!mainVal.valid) return { valid: false, section: t('reg.deck.main'), message: mainVal.message, points: mainVal.points };
 
         return { valid: true, section: "", message: "", points: mainVal.points };
@@ -257,7 +432,7 @@ export function useRegistration({
             if (p.status === 'submitted') return p;
             if (!p.name.trim()) return { ...p, errorMsg: 'Please enter player name', validationPoints: undefined };
 
-            const mainVal = validateDeck(p.mainBeys, p.mode, p.mainBeyAttachments);
+            const mainVal = validateDeck(p.mainBeys, p.mode, p.mainBeyLockChips, p.mainBeyAssistBlades, p.mainBeyRachets, p.mainBeyBits);
             if (!mainVal.valid) return { ...p, errorMsg: mainVal.message, validationPoints: mainVal.points };
 
             return { ...p, errorMsg: undefined, validationPoints: mainVal.points };
@@ -276,22 +451,56 @@ export function useRegistration({
             const newBeys = [...profile.mainBeys];
             newBeys[selectingState.slotIndex] = val;
 
-            // Reset attachment for this slot
-            const newAttachments = [...profile.mainBeyAttachments];
-            newAttachments[selectingState.slotIndex] = null;
+            const newLockChips = [...(profile.mainBeyLockChips || [null, null, null])];
+            newLockChips[selectingState.slotIndex] = null;
 
-            updateProfile(pIndex, { mainBeys: newBeys, mainBeyAttachments: newAttachments });
+            const newAssistBlades = [...(profile.mainBeyAssistBlades || [null, null, null])];
+            newAssistBlades[selectingState.slotIndex] = null;
+
+            const newRachets = [...(profile.mainBeyRachets || [null, null, null])];
+            newRachets[selectingState.slotIndex] = null;
+
+            const newBits = [...(profile.mainBeyBits || [null, null, null])];
+            newBits[selectingState.slotIndex] = null;
+
+            updateProfile(pIndex, { 
+                mainBeys: newBeys, 
+                mainBeyLockChips: newLockChips,
+                mainBeyAssistBlades: newAssistBlades,
+                mainBeyRachets: newRachets,
+                mainBeyBits: newBits
+            });
         }
         setSelectingState(null);
     };
 
-    const handleAttachmentSelect = (pIndex: number, type: 'main', deckIndex: number, slotIndex: number, attachment: string | null) => {
+    const handleAttachmentSelect = (
+        pIndex: number, 
+        type: 'main', 
+        deckIndex: number, 
+        slotIndex: number, 
+        attachment: string | null,
+        attType: 'lock_chip' | 'assist_blade' | 'rachet' | 'bit'
+    ) => {
         const profile = profiles[pIndex];
+        if (!profile || type !== 'main') return;
 
-        if (type === 'main') {
-            const newAttachments = [...profile.mainBeyAttachments];
-            newAttachments[slotIndex] = attachment;
-            updateProfile(pIndex, { mainBeyAttachments: newAttachments });
+        if (attType === 'lock_chip') {
+            const newArr = [...(profile.mainBeyLockChips || [null, null, null])];
+            newArr[slotIndex] = attachment;
+            updateProfile(pIndex, { mainBeyLockChips: newArr });
+        } else if (attType === 'assist_blade') {
+            const newArr = [...(profile.mainBeyAssistBlades || [null, null, null])];
+            newArr[slotIndex] = attachment;
+            updateProfile(pIndex, { mainBeyAssistBlades: newArr });
+        } else if (attType === 'rachet') {
+            const newArr = [...(profile.mainBeyRachets || [null, null, null])];
+            newArr[slotIndex] = attachment;
+            updateProfile(pIndex, { mainBeyRachets: newArr });
+        } else if (attType === 'bit') {
+            const newArr = [...(profile.mainBeyBits || [null, null, null])];
+            newArr[slotIndex] = attachment;
+            updateProfile(pIndex, { mainBeyBits: newArr });
         }
     };
 
@@ -302,7 +511,10 @@ export function useRegistration({
         if (type === 'main') {
             updateProfile(pIndex, {
                 mainBeys: ["", "", ""],
-                mainBeyAttachments: [null, null, null]
+                mainBeyLockChips: [null, null, null],
+                mainBeyAssistBlades: [null, null, null],
+                mainBeyRachets: [null, null, null],
+                mainBeyBits: [null, null, null]
             });
         }
     };
@@ -313,7 +525,10 @@ export function useRegistration({
             name: "",
             mode: getModeFromType(tournamentType),
             mainBeys: ["", "", ""],
-            mainBeyAttachments: [null, null, null],
+            mainBeyLockChips: [null, null, null],
+            mainBeyAssistBlades: [null, null, null],
+            mainBeyRachets: [null, null, null],
+            mainBeyBits: [null, null, null],
             status: 'draft'
         }]);
         setActiveTab(profiles.length);
@@ -379,7 +594,7 @@ export function useRegistration({
             } else if (tournamentType && p.mode !== tournamentType && !(tournamentType === 'Open' && p.mode === 'Standard')) {
                 let isValidType = false;
                 if (tournamentType === 'U10' && p.mode === 'Under10') isValidType = true;
-                else if (tournamentType === 'U10South' && p.mode === 'Under10South') isValidType = true;
+                else if (tournamentType === 'U10Custom' && p.mode === 'Under10Custom') isValidType = true;
                 else if (tournamentType === 'NoMoreMeta' && p.mode === 'NoMoreMeta') isValidType = true;
                 else if ((tournamentType === 'Open' || tournamentType === 'Standard') && p.mode === 'Standard') isValidType = true;
 
@@ -412,12 +627,19 @@ export function useRegistration({
         try {
             const results = await Promise.allSettled(activeProfiles.map(async (p) => {
                 const validation = validateProfile(p);
-                const payload = {
+                 const payload = {
                     deviceUUID,
                     playerName: p.name,
                     mode: p.mode,
                     mainBeys: p.mainBeys.map((bey, idx) => {
-                        return (bey && p.mainBeyAttachments[idx]) ? `${bey}|${p.mainBeyAttachments[idx]}` : bey;
+                        const lc = p.mainBeyLockChips[idx] || "";
+                        const ab = p.mainBeyAssistBlades[idx] || "";
+                        const rc = p.mainBeyRachets[idx] || "";
+                        const bt = p.mainBeyBits[idx] || "";
+                        if (lc || ab || rc || bt) {
+                            return `${bey}|${lc}|${ab}|${rc}|${bt}`;
+                        }
+                        return bey;
                     }),
                     totalPoints: validation.points || 0,
                     tournamentId,
@@ -434,7 +656,6 @@ export function useRegistration({
                 try {
                     data = await res.json();
                 } catch (e) {
-                    // If JSON parse fails (e.g. 500 HTML), throw generic error
                     throw new Error(t('reg.error.failed'));
                 }
 
@@ -453,8 +674,11 @@ export function useRegistration({
                         update: { 
                             status: 'submitted', 
                             errorMsg: "",
-                            originalMainBeys: [...originalProfile.mainBeys], // Refresh original values on success
-                            originalMainBeyAttachments: [...originalProfile.mainBeyAttachments] // Refresh original values on success
+                            originalMainBeys: [...originalProfile.mainBeys],
+                            originalMainBeyLockChips: [...(originalProfile.mainBeyLockChips || [null, null, null])],
+                            originalMainBeyAssistBlades: [...(originalProfile.mainBeyAssistBlades || [null, null, null])],
+                            originalMainBeyRachets: [...(originalProfile.mainBeyRachets || [null, null, null])],
+                            originalMainBeyBits: [...(originalProfile.mainBeyBits || [null, null, null])]
                         }
                     });
                     submissionCount++;
@@ -515,6 +739,9 @@ export function useRegistration({
         t,
         lang,
         toggleLang,
+        beybladesList,
+        dynamicBanList,
+        cxEnabled,
 
         // Actions
         setActiveTab,

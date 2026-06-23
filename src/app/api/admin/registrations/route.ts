@@ -31,7 +31,7 @@ export async function GET(req: Request) {
             timestamp: (r.timestamp && !isNaN(r.timestamp.getTime())) ? r.timestamp.toISOString() : new Date().toISOString(),
             device_uuid: r.device_uuid,
             player_name: r.player_name,
-            mode: r.mode,
+            mode: r.mode === 'Under10South' ? 'Under10Custom' : r.mode,
             main_bey1: r.main_deck[0] || "",
             main_bey2: r.main_deck[1] || "",
             main_bey3: r.main_deck[2] || "",

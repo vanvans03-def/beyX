@@ -22,7 +22,7 @@ export default function RegistrationFormU10({
 }: Props) {
     const hook = useRegistration({
         tournamentId,
-        tournamentType: (tournamentType as "U10" | "U10South") || "U10",
+        tournamentType: (tournamentType as "U10" | "U10Custom") || "U10",
         banList,
         tournamentStatus,
         challongeUrl

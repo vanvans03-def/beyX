@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import gameData from "@/data/game-data.json";
 import gameDataSouth from "@/data/game-data-south.json";
@@ -142,12 +142,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [matchSearchQuery, setMatchSearchQuery] = useState("");
 
     const cardRef = useRef<HTMLDivElement>(null);
+    const cardNoQrRef = useRef<HTMLDivElement>(null);
     const banListRef = useRef<HTMLDivElement>(null);
     const activeMatchesRef = useRef<HTMLDivElement>(null);
 
     const [generating, setGenerating] = useState(false);
+    const [generatingNoQR, setGeneratingNoQR] = useState(false);
     const [generatingBanList, setGeneratingBanList] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [previewImageNoQR, setPreviewImageNoQR] = useState<string | null>(null);
     const [banListImage, setBanListImage] = useState<string | null>(null);
     const [bracketUrl, setBracketUrl] = useState<string>("");
     const [generatingBracket, setGeneratingBracket] = useState(false);
@@ -446,6 +449,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }, [hoveredCombo]);
 
     const [origin, setOrigin] = useState("");
+    const [beybladesList, setBeybladesList] = useState<any[]>([]);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -483,70 +487,52 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         return () => window.removeEventListener('click', handleClickOutside);
     }, [historyTooltip]);
 
+    const captureRef = async (ref: React.RefObject<HTMLDivElement | null>): Promise<string> => {
+        await document.fonts.ready;
+        const imageElements = Array.from(ref.current!.getElementsByTagName("img"));
+        await Promise.all(
+            imageElements.map(async (img) => {
+                if (img.src && !img.complete) {
+                    await new Promise((resolve) => {
+                        img.onload = resolve;
+                        img.onerror = resolve;
+                        setTimeout(resolve, 2000);
+                    });
+                }
+                try { await img.decode(); } catch (e) { console.warn("Image decode failed", e); }
+            })
+        );
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        return toPng(ref.current!, { backgroundColor: '#030303', pixelRatio: 1.5, cacheBust: true });
+    };
+
     const handleGeneratePreview = async () => {
         setGenerating(true);
-
-        // Wait a bit for any layouts to settle
         await new Promise((resolve) => setTimeout(resolve, 500));
-
-        if (cardRef.current === null) {
-            console.error("Card ref is null after waiting");
-            setGenerating(false);
-            return;
-        }
-
+        if (cardRef.current === null) { setGenerating(false); return; }
         try {
-            await document.fonts.ready;
-
-            const imageElements = Array.from(cardRef.current.getElementsByTagName("img"));
-            console.log(`Found ${imageElements.length} images`);
-
-            // Force wait for all images to decode/paint
-            await Promise.all(
-                imageElements.map(async (img) => {
-                    if (img.src && !img.complete) {
-                        await new Promise((resolve) => {
-                            img.onload = resolve;
-                            img.onerror = resolve;
-                            setTimeout(resolve, 2000); // Timeout
-                        });
-                    }
-                    try {
-                        // Crucial for iOS/Safari: Ensure image is decoded into memory
-                        await img.decode();
-                    } catch (e) {
-                        console.warn("Image decode failed", e);
-                    }
-                })
-            );
-
-            console.log('Images ready, waiting for paint...');
-            console.log('Images ready, waiting for paint...');
-            await new Promise((resolve) => setTimeout(resolve, 4000)); // Increased wait time for better rendering (iOS safe)
-
-            console.log('Capturing with html-to-image...');
-
-            // Use html-to-image
-            const dataUrl = await toPng(cardRef.current, {
-                backgroundColor: '#030303',
-                pixelRatio: 1.5, // Reduced from 2 for performance
-                cacheBust: true
-            });
-
-            console.log('✓ Image generated successfully');
+            const dataUrl = await captureRef(cardRef);
             setPreviewImage(dataUrl);
-
         } catch (err) {
             console.error('Image generation error:', err);
-            setModalConfig({
-                isOpen: true,
-                title: "Error",
-                desc: t('admin.error.gen_image'),
-                type: "alert",
-                variant: "destructive"
-            });
+            setModalConfig({ isOpen: true, title: "Error", desc: t('admin.error.gen_image'), type: "alert", variant: "destructive" });
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const handleGenerateNoQR = async () => {
+        setGeneratingNoQR(true);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (cardNoQrRef.current === null) { setGeneratingNoQR(false); return; }
+        try {
+            const dataUrl = await captureRef(cardNoQrRef);
+            setPreviewImageNoQR(dataUrl);
+        } catch (err) {
+            console.error('Image generation (no QR) error:', err);
+            setModalConfig({ isOpen: true, title: "Error", desc: t('admin.error.gen_image'), type: "alert", variant: "destructive" });
+        } finally {
+            setGeneratingNoQR(false);
         }
     };
 
@@ -652,6 +638,43 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             console.error('Download failed:', downloadError);
             // Last resort: open in new tab
             window.open(previewImage, '_blank');
+        }
+    };
+
+    const handleSaveImageNoQR = async () => {
+        if (!previewImageNoQR) return;
+
+        try {
+            const response = await fetch(previewImageNoQR);
+            const blob = await response.blob();
+
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'invite-no-qr.jpg', { type: 'image/jpeg' })] })) {
+                const file = new File([blob], `invite-no-qr-${tournament?.name || 'tournament'}.jpg`, { type: 'image/jpeg' });
+                await navigator.share({
+                    files: [file],
+                    title: t('admin.share.invite_title') || 'Tournament Invite',
+                    text: t('admin.share.invite_text', { name: tournament?.name || 'our tournament' })
+                });
+                return;
+            }
+        } catch (shareError) {
+            console.log('Share API not available or failed, falling back to download:', shareError);
+        }
+
+        try {
+            const link = document.createElement('a');
+            link.download = `invite-no-qr-${tournament?.name || 'tournament'}.jpg`;
+            link.href = previewImageNoQR;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+
+            setTimeout(() => {
+                document.body.removeChild(link);
+            }, 100);
+        } catch (downloadError) {
+            console.error('Download failed:', downloadError);
+            window.open(previewImageNoQR, '_blank');
         }
     };
 
@@ -1431,9 +1454,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         if (!id) return;
         if (!silent) setLoading(true);
         try {
-            const [regRes, tourRes] = await Promise.all([
+            const [regRes, tourRes, beyRes] = await Promise.all([
                 fetch(`/api/admin/registrations?tournamentId=${id}`),
-                fetch(`/api/admin/tournaments?id=${id}`)
+                fetch(`/api/admin/tournaments?id=${id}`),
+                fetch('/api/admin/profile/beyblades').catch(err => {
+                    console.error("Failed to fetch profile beyblades:", err);
+                    return null;
+                })
             ]);
 
 
@@ -1451,6 +1478,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
             const regJson = await regRes.json();
             const tourJson = await tourRes.json();
+
+            if (beyRes && beyRes.ok) {
+                try {
+                    const beyJson = await beyRes.json();
+                    if (beyJson.success && beyJson.beyblades) {
+                        setBeybladesList(beyJson.beyblades);
+                    }
+                } catch (beyErr) {
+                    console.error("Failed to parse profile beyblades:", beyErr);
+                }
+            }
 
             if (regJson.success) {
                 const sorted = regJson.data.sort((a: any, b: any) =>
@@ -1865,6 +1903,96 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             };
         }
     }, [isScoreboardOpen]);
+
+    const cardDisplayItems = useMemo(() => {
+        const isSpecialMode = tournament?.type === 'U10' || tournament?.type === 'U10Custom' || tournament?.type === 'NoMoreMeta';
+        if (!isSpecialMode) {
+            if (!tournament?.BanList) return [];
+            return tournament.BanList.map((name: string) => {
+                const dbBey = beybladesList.find((x: any) => x.name === name);
+                return {
+                    name,
+                    points: dbBey ? (dbBey.custom_points_standard !== null && dbBey.custom_points_standard !== undefined ? dbBey.custom_points_standard : dbBey.points_standard) : 0,
+                    imageUrl: dbBey?.image_url || (imageMap as any)[name] || '',
+                    isBanned: true,
+                    partType: 'BX' as string
+                };
+            });
+        }
+
+        let items: { name: string; points: number; imageUrl: string; isBanned: boolean; partType: string }[] = [];
+        const isCustom = tournament?.type === 'U10Custom';
+        
+        if (beybladesList && beybladesList.length > 0) {
+            items = beybladesList.map((b: any) => {
+                    const isBanned = (tournament?.type === 'NoMoreMeta') && 
+                        ((tournament?.BanList || []).includes(b.name) || b.custom_is_banned === true || (b.custom_is_banned === null && b.is_banned));
+                    
+                    const points = isCustom && b.custom_points_standard !== null && b.custom_points_standard !== undefined
+                        ? b.custom_points_standard
+                        : b.points_standard;
+
+                    return {
+                        name: b.name,
+                        points,
+                        imageUrl: b.image_url || (imageMap as any)[b.name] || '',
+                        isBanned: !!isBanned,
+                        partType: b.type || 'BX'
+                    };
+                });
+        } else {
+            let pointData = gameData;
+            if (tournament?.type === 'U10') {
+                pointData = gameDataStandard;
+            } else if (tournament?.type === 'U10Custom') {
+                pointData = gameDataSouth;
+            }
+            const fallbackBans = (tournament?.type === 'NoMoreMeta') ? (tournament?.BanList || pointData.banList || []) : [];
+            items = Object.entries(pointData.points).flatMap(([pointVal, names]) =>
+                (names as string[]).map((name) => ({
+                    name,
+                    points: parseInt(pointVal),
+                    imageUrl: (imageMap as any)[name] || '',
+                    isBanned: fallbackBans.includes(name),
+                    partType: 'BX'
+                }))
+            );
+        }
+
+        // For U10/U10Custom: sort by points descending (higher points first)
+        if (tournament?.type === 'U10' || tournament?.type === 'U10Custom') {
+            return items.sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+        }
+
+        if (tournament?.type === 'NoMoreMeta') {
+            return items.filter((x) => x.isBanned).sort((a, b) => a.name.localeCompare(b.name));
+        }
+
+        return items.sort((a, b) => a.name.localeCompare(b.name));
+    }, [tournament, beybladesList]);
+
+    // Separate blades vs special parts (CX/UX) for U10/U10Custom card layout
+    const cardBladeItems = useMemo(() =>
+        cardDisplayItems.filter((x: any) => ['BX', 'CX', 'UX'].includes(x.partType)),
+        [cardDisplayItems]
+    );
+    const cardSpecialItems = useMemo(() => {
+        const specials = cardDisplayItems.filter((x: any) => !['BX', 'CX', 'UX'].includes(x.partType));
+        const typePriority = (type: string) => {
+            const t = (type || '').toUpperCase();
+            if (t === 'LOCK_CHIP') return 1;
+            if (t === 'ASSIST_BLADE') return 2;
+            if (t === 'RATCHET') return 3;
+            if (t === 'BIT') return 4;
+            return 5;
+        };
+        return specials.sort((a: any, b: any) => {
+            const pA = typePriority(a.partType);
+            const pB = typePriority(b.partType);
+            if (pA !== pB) return pA - pB;
+            return b.points - a.points || a.name.localeCompare(b.name);
+        });
+    }, [cardDisplayItems]);
 
     return (
         <>
@@ -2752,23 +2880,34 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 const bey = parts[0];
                                                                 const attachment = parts[1];
 
-                                                                const point = tournament?.type === 'U10' ? (() => {
-                                                                    const pointData = tournament.type === 'U10' ? (
-                                                                        hoveredCombo.data.mode === "Under10South" ? gameDataSouth : gameDataStandard
-                                                                    ) : null;
-
-                                                                    if (pointData) {
+                                                                const point = (tournament?.type === 'U10' || tournament?.type === 'U10Custom') ? (() => {
+                                                                    if (beybladesList && beybladesList.length > 0) {
+                                                                        const b = beybladesList.find(x => x.name === bey);
+                                                                        const pts = tournament?.type === 'U10Custom' && b?.custom_points_standard !== null && b?.custom_points_standard !== undefined
+                                                                            ? b.custom_points_standard
+                                                                            : (b ? b.points_standard : 0);
+                                                                        
+                                                                        const isCX = b?.type === 'CX';
+                                                                        if (tournament?.type === 'U10Custom' && attachment && isCX) {
+                                                                            if (attachment === 'Heavy' || attachment === 'Wheel') {
+                                                                                return pts + 1;
+                                                                            }
+                                                                        }
+                                                                        return pts;
+                                                                    } else {
+                                                                        const isCustom = tournament.type === 'U10Custom';
+                                                                        const pointData = isCustom ? gameDataSouth : gameDataStandard;
                                                                         const ptsMap: Record<string, number> = {};
-                                                                        Object.entries(pointData.points).forEach(([pt, names]) => {
-                                                                            (names as string[]).forEach(name => ptsMap[name] = parseInt(pt));
+                                                                        Object.entries(pointData.points).forEach(([ptVal, names]) => {
+                                                                            (names as string[]).forEach(name => ptsMap[name] = parseInt(ptVal));
                                                                         });
                                                                         const p = ptsMap[bey] || 0;
-                                                                        if (hoveredCombo.data.mode === "Under10South") {
-                                                                            if (attachment === "Heavy" || attachment === "Wheel") return p + 1;
+                                                                        if (isCustom) {
+                                                                            const isCX = bey && (gameDataStandard as any).series?.CX?.includes(bey);
+                                                                            if (isCX && (attachment === "Heavy" || attachment === "Wheel")) return p + 1;
                                                                         }
                                                                         return p;
                                                                     }
-                                                                    return null;
                                                                 })() : null;
                                                                 if (point !== null) totalScore += point;
 
@@ -2799,7 +2938,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                     </div>
                                                                 );
                                                             })}
-                                                            {tournament?.type === 'U10' && (
+                                                            {(tournament?.type === 'U10' || tournament?.type === 'U10Custom') && (
                                                                 <div className="flex justify-between items-center pt-2 mt-1 border-t border-white/10">
                                                                     <span className="text-xs text-muted-foreground font-bold">Total</span>
                                                                     <span className={`text-sm font-black ${totalScore > 10 ? 'text-destructive' : 'text-green-400'}`}>
@@ -2849,15 +2988,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 {tournament?.BanList && tournament.BanList.length > 0 ? (
                                     <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[320px] overflow-y-auto p-1 custom-scrollbar">
                                         {tournament.BanList.map((bey: string, i: number) => {
-                                            // @ts-ignore
-                                            const hasImg = !!imageMap[bey];
+                                            const dbBey = beybladesList.find((x: any) => x.name === bey);
+                                            const imgUrl = dbBey?.image_url || (imageMap as any)[bey] || '';
                                             return (
                                                 <div key={i} className="group relative flex flex-col items-center gap-2 p-3 bg-secondary/30 rounded-xl border border-white/5 hover:border-destructive/50 transition-colors" title={bey}>
                                                     <div className="relative w-full aspect-square">
-                                                        {hasImg ? (
-                                                            // @ts-ignore
+                                                        {imgUrl ? (
                                                             <img
-                                                                src={(imageMap as any)[bey]}
+                                                                src={imgUrl}
                                                                 alt={bey}
                                                                 className="w-full h-full object-contain grayscale-[0.5] opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all"
                                                                 loading="eager"
@@ -2888,9 +3026,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     {t('detail.share_link')} & Invite Card
                                 </h3>
                                 <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+                                    {/* Invite Card with QR */}
                                     <button
                                         onClick={handleGeneratePreview}
-                                        disabled={generating}
+                                        disabled={generating || generatingNoQR}
                                         className="text-xs flex items-center gap-1 bg-gradient-to-r from-primary to-blue-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {generating ? (
@@ -2901,10 +3040,30 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         ) : (
                                             <>
                                                 <ImageIcon className="h-3 w-3" />
-                                                {t('admin.btn.invite')}
+                                                การ์ดเชิญ (QR)
                                             </>
                                         )}
                                     </button>
+                                    {/* Image-only card (no QR) - for U10/U10Custom */}
+                                    {(tournament?.type === 'U10' || tournament?.type === 'U10Custom') && (
+                                        <button
+                                            onClick={handleGenerateNoQR}
+                                            disabled={generating || generatingNoQR}
+                                            className="text-xs flex items-center gap-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-3 py-1.5 rounded-lg font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {generatingNoQR ? (
+                                                <>
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                    กำลังสร้าง...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <ImageIcon className="h-3 w-3" />
+                                                    การ์ดเบย์เบลด
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
                                     {tournament?.BanList && tournament.BanList.length > 0 && (
                                         <button
                                             onClick={handleExportBanList}
@@ -2964,7 +3123,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </div>
                             </div>
 
-                            {/* HIDDEN RENDER CONTAINER FOR INVITE CARD - Unified Layout */}
+                            {/* HIDDEN RENDER CONTAINER FOR INVITE CARD */}
                             {(generating || generatingBanList) && (
                                 <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
                                     <div
@@ -2979,11 +3138,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         </div>
 
                                         {/* Content Grid */}
-                                        {/* Content Grid */}
-                                        {tournament?.BanList && tournament.BanList.length > 0 ? (
+                                        {cardDisplayItems.length > 0 ? (
                                             <div style={{ position: 'relative', zIndex: 10, display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', width: '100%', height: 'auto', alignItems: 'stretch' }}>
 
-                                                {/* Left Side: Tournament Info & Ban List */}
+                                                {/* Left Side: Tournament Info & Items */}
                                                 <div style={{ padding: 40, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                                                     <div style={{ marginBottom: 24 }}>
                                                         <p className="text-xl font-bold tracking-[0.5em] uppercase mb-2" style={{ color: '#00ff94', fontSize: '0.9rem' }}>
@@ -2997,7 +3155,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                                 display: 'inline-block',
                                                                 fontSize: '0.8rem',
                                                                 fontWeight: 800,
-                                                                color: tournament.type === 'U10' ? '#60a5fa' : tournament.type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
+                                                                color: (tournament.type === 'U10' || tournament.type === 'U10Custom') ? '#60a5fa' : tournament.type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
                                                                 textTransform: 'uppercase',
                                                                 letterSpacing: '0.1em',
                                                                 padding: '4px 8px',
@@ -3010,49 +3168,115 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                         )}
                                                     </div>
 
-                                                    {/* Ban List Mini-Grid */}
-                                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
-                                                            <AlertCircle style={{ width: 16, height: 16, color: '#ef4444' }} />
-                                                            <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('admin.invite.restricted_parts')} ({tournament?.BanList?.length || 0})</span>
-                                                        </div>
-
-                                                        <div style={{
-                                                            display: 'grid',
-                                                            gridTemplateColumns: `repeat(${tournament.BanList.length > 30 ? 7 : tournament.BanList.length > 20 ? 6 : 5}, 1fr)`,
-                                                            gap: 8,
-                                                            alignContent: 'start'
-                                                        }}>
-                                                            {tournament.BanList.map((bey: string, i: number) => {
-                                                                // @ts-ignore
-                                                                const hasImg = !!imageMap[bey];
-                                                                return (
+                                                    {/* For U10 / U10Custom / NoMoreMeta: show unified grid */}
+                                                    {(tournament?.type === 'U10' || tournament?.type === 'U10Custom' || tournament?.type === 'NoMoreMeta') ? (
+                                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                                            {/* Blades section */}
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.8 }}>
+                                                                <div style={{ width: 14, height: 14, color: '#60a5fa' }} />
+                                                                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                                    Blades ({cardBladeItems.length}) {tournament.type !== 'NoMoreMeta' && '— sorted by points'}
+                                                                </span>
+                                                            </div>
+                                                            <div style={{
+                                                                display: 'grid',
+                                                                gridTemplateColumns: `repeat(${cardBladeItems.length > 60 ? 9 : cardBladeItems.length > 40 ? 8 : cardBladeItems.length > 20 ? 7 : 5}, 1fr)`,
+                                                                gap: 8,
+                                                                alignContent: 'start'
+                                                            }}>
+                                                                {cardBladeItems.map((item: any, i: number) => (
                                                                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                                                                        <div style={{
-                                                                            width: '100%',
-                                                                            aspectRatio: '1/1',
-                                                                            backgroundColor: 'rgba(255,255,255,0.05)',
-                                                                            borderRadius: 8,
-                                                                            display: 'flex',
-                                                                            alignItems: 'center',
-                                                                            justifyContent: 'center',
-                                                                            padding: 4,
-                                                                            border: '1px solid rgba(255,255,255,0.1)'
-                                                                        }}>
-                                                                            {hasImg ? (
-                                                                                // @ts-ignore
-                                                                                <img src={imageMap[bey]} alt={bey} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                                                            ) : (
-                                                                                <span style={{ fontSize: 8, opacity: 0.5 }}>IMG</span>
+                                                                        <div style={{ width: '100%', aspectRatio: '1/1', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
+                                                                            {item.imageUrl ? <img src={item.imageUrl} alt={item.name} style={{ position: 'absolute', top: 4, left: 4, width: 'calc(100% - 8px)', height: 'calc(100% - 8px)', objectFit: 'contain' }} /> : <span style={{ fontSize: 8, opacity: 0.5 }}>IMG</span>}
+                                                                            {tournament.type !== 'NoMoreMeta' && (
+                                                                                <div style={{ position: 'absolute', top: 2, right: 2, zIndex: 10 }}>
+                                                                                    <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.95)', color: 'black', fontWeight: 900, fontSize: 7, padding: '1px 3px', borderRadius: 3 }}>{item.points}p</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {item.isBanned && (
+                                                                                <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
+                                                                                    <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.95)', color: 'white', fontWeight: 900, fontSize: 7, padding: '1px 4px', borderRadius: 3, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>แบน</span>
+                                                                                </div>
                                                                             )}
                                                                         </div>
-                                                                        <span style={{ fontSize: 7, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{bey}</span>
+                                                                        <span style={{ fontSize: 7, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{item.name}</span>
                                                                     </div>
-                                                                );
-                                                            })}
-
+                                                                ))}
+                                                            </div>
+                                                            {/* Special parts section */}
+                                                            {cardSpecialItems.length > 0 && (
+                                                                <>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.8, marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                                                                        <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#34d399' }}>
+                                                                            Special Parts ({cardSpecialItems.length})
+                                                                        </span>
+                                                                    </div>
+                                                                    <div style={{
+                                                                        display: 'grid',
+                                                                        gridTemplateColumns: `repeat(${cardBladeItems.length > 60 ? 9 : cardBladeItems.length > 40 ? 8 : cardBladeItems.length > 20 ? 7 : 5}, 1fr)`,
+                                                                        gap: 8,
+                                                                        alignContent: 'start'
+                                                                    }}>
+                                                                        {cardSpecialItems.map((item: any, i: number) => (
+                                                                            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                                                                <div style={{ width: '100%', aspectRatio: '1/1', backgroundColor: 'rgba(52,211,153,0.08)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, border: '1px solid rgba(52,211,153,0.2)', position: 'relative' }}>
+                                                                                    {item.imageUrl ? <img src={item.imageUrl} alt={item.name} style={{ position: 'absolute', top: 4, left: 4, width: 'calc(100% - 8px)', height: 'calc(100% - 8px)', objectFit: 'contain' }} /> : <span style={{ fontSize: 8, opacity: 0.5 }}>IMG</span>}
+                                                                                    {tournament.type !== 'NoMoreMeta' && (
+                                                                                        <div style={{ position: 'absolute', top: 2, right: 2, zIndex: 10 }}>
+                                                                                            <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.95)', color: 'black', fontWeight: 900, fontSize: 7, padding: '1px 3px', borderRadius: 3 }}>+{item.points}p</span>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {item.isBanned && (
+                                                                                        <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
+                                                                                            <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.95)', color: 'white', fontWeight: 900, fontSize: 7, padding: '1px 4px', borderRadius: 3, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>แบน</span>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                <span style={{ fontSize: 7, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{item.name}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </>
+                                                            )}
                                                         </div>
-                                                    </div>
+                                                    ) : (
+                                                        /* For Open / Standard with Ban List: show restricted/banned parts only */
+                                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
+                                                                <AlertCircle style={{ width: 16, height: 16, color: '#ef4444' }} />
+                                                                <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                                    Restricted Parts ({(tournament?.BanList || []).length})
+                                                                </span>
+                                                            </div>
+                                                            <div style={{
+                                                                display: 'grid',
+                                                                gridTemplateColumns: `repeat(${(tournament?.BanList || []).length > 60 ? 9 : (tournament?.BanList || []).length > 40 ? 8 : (tournament?.BanList || []).length > 20 ? 7 : 5}, 1fr)`,
+                                                                gap: 8,
+                                                                alignContent: 'start'
+                                                            }}>
+                                                                {(tournament?.BanList || []).map((bey: string, i: number) => {
+                                                                    const imgUrl = (imageMap as any)[bey] || '';
+                                                                    return (
+                                                                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                                                            <div style={{ width: '100%', aspectRatio: '1/1', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
+                                                                                {imgUrl ? (
+                                                                                    <img src={imgUrl} alt={bey} style={{ position: 'absolute', top: 4, left: 4, width: 'calc(100% - 8px)', height: 'calc(100% - 8px)', objectFit: 'contain' }} />
+                                                                                ) : (
+                                                                                    <span style={{ fontSize: 8, opacity: 0.5 }}>IMG</span>
+                                                                                )}
+                                                                                <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
+                                                                                    <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.95)', color: 'white', fontWeight: 900, fontSize: 7, padding: '1px 4px', borderRadius: 3, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                                                                                        แบน
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                            <span style={{ fontSize: 7, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{bey}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
 
                                                     {/* Footer */}
                                                     <div style={{ marginTop: 'auto', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
@@ -3084,7 +3308,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
                                             </div>
                                         ) : (
-                                            // NO BAN LIST - CENTERED LAYOUT
+                                            /* NO ITEMS - CENTERED QR ONLY LAYOUT */
                                             <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', gap: 40, padding: 60 }}>
                                                 <div style={{ textAlign: 'center' }}>
                                                     <p className="text-xl font-bold tracking-[0.5em] uppercase mb-4" style={{ color: '#00ff94', fontSize: '1.2rem' }}>
@@ -3098,7 +3322,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                             display: 'inline-block',
                                                             fontSize: '1.2rem',
                                                             fontWeight: 800,
-                                                            color: tournament.type === 'U10' ? '#60a5fa' : tournament.type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
+                                                            color: (tournament.type === 'U10' || tournament.type === 'U10Custom') ? '#60a5fa' : tournament.type === 'NoMoreMeta' ? '#c084fc' : '#9ca3af',
                                                             textTransform: 'uppercase',
                                                             letterSpacing: '0.1em',
                                                             padding: '6px 16px',
@@ -3137,6 +3361,157 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                 </div>
                                             </div>
                                         )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* HIDDEN RENDER CONTAINER FOR NO-QR CARD (Image only) */}
+                            {generatingNoQR && (tournament?.type === 'U10' || tournament?.type === 'U10Custom' || tournament?.type === 'NoMoreMeta') && (
+                                <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
+                                    <div
+                                        ref={cardNoQrRef}
+                                        style={{ width: 1200, minHeight: 630, height: 'fit-content', backgroundColor: 'black', color: 'white', position: 'relative', padding: 48 }}
+                                    >
+                                        {/* Background */}
+                                        <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
+                                            <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
+                                            {tournament?.type === 'NoMoreMeta' ? (
+                                                <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }} />
+                                            ) : (
+                                                <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.05)' }} />
+                                            )}
+                                        </div>
+
+                                        <div style={{ position: 'relative', zIndex: 10 }}>
+                                            {/* Header */}
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 16 }}>
+                                                <div>
+                                                    <p style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', color: '#00ff94', marginBottom: 4 }}>Tournament Invite</p>
+                                                    <h2 style={{ fontSize: '1.8rem', fontWeight: 900, fontStyle: 'italic', background: 'linear-gradient(to bottom, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', color: 'transparent' }}>
+                                                        {tournament?.name || "BEYBLADE X"}
+                                                    </h2>
+                                                </div>
+                                                <span style={{
+                                                    fontSize: '0.9rem', fontWeight: 800,
+                                                    color: (tournament.type === 'U10' || tournament.type === 'U10Custom') ? '#60a5fa' : '#c084fc',
+                                                    textTransform: 'uppercase', letterSpacing: '0.1em',
+                                                    padding: '6px 16px', borderRadius: 6,
+                                                    backgroundColor: 'rgba(255,255,255,0.05)',
+                                                    border: '1px solid rgba(255,255,255,0.1)'
+                                                }}>
+                                                    {tournament?.type} FORMAT
+                                                </span>
+                                            </div>
+
+                                            {/* Unified list for U10 / U10Custom / NoMoreMeta */}
+                                            {(tournament?.type === 'U10' || tournament?.type === 'U10Custom' || tournament?.type === 'NoMoreMeta') ? (
+                                                <>
+                                                    {/* Blades */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.8 }}>
+                                                        <div style={{ width: 16, height: 16, color: '#60a5fa' }} />
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                            Blades ({cardBladeItems.length}) {tournament.type !== 'NoMoreMeta' && '— sorted by points'}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: `repeat(${cardBladeItems.length > 60 ? 12 : cardBladeItems.length > 40 ? 10 : cardBladeItems.length > 20 ? 8 : 6}, 1fr)`,
+                                                        gap: 10,
+                                                        alignContent: 'start'
+                                                    }}>
+                                                        {cardBladeItems.map((item: any, i: number) => (
+                                                            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                                                <div style={{ width: '100%', aspectRatio: '1/1', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
+                                                                    {item.imageUrl ? <img src={item.imageUrl} alt={item.name} style={{ position: 'absolute', top: 4, left: 4, width: 'calc(100% - 8px)', height: 'calc(100% - 8px)', objectFit: 'contain' }} /> : <span style={{ fontSize: 10, opacity: 0.5 }}>IMG</span>}
+                                                                    {tournament.type !== 'NoMoreMeta' && (
+                                                                        <div style={{ position: 'absolute', top: 2, right: 2, zIndex: 10 }}>
+                                                                            <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.95)', color: 'black', fontWeight: 900, fontSize: 8, padding: '1px 4px', borderRadius: 3 }}>{item.points}p</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {item.isBanned && (
+                                                                        <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
+                                                                            <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.95)', color: 'white', fontWeight: 900, fontSize: 8, padding: '1px 5px', borderRadius: 3, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>แบน</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <span style={{ fontSize: 8, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{item.name}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    {/* Special Parts section */}
+                                                    {cardSpecialItems.length > 0 && (
+                                                        <>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, marginBottom: 12, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)', opacity: 0.8 }}>
+                                                                <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#34d399' }}>
+                                                                    Special Parts ({cardSpecialItems.length})
+                                                                </span>
+                                                            </div>
+                                                            <div style={{
+                                                                display: 'grid',
+                                                                gridTemplateColumns: `repeat(${cardBladeItems.length > 60 ? 12 : cardBladeItems.length > 40 ? 10 : cardBladeItems.length > 20 ? 8 : 6}, 1fr)`,
+                                                                gap: 10,
+                                                                alignContent: 'start'
+                                                            }}>
+                                                                {cardSpecialItems.map((item: any, i: number) => (
+                                                                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                                                        <div style={{ width: '100%', aspectRatio: '1/1', backgroundColor: 'rgba(52,211,153,0.08)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, border: '1px solid rgba(52,211,153,0.2)', position: 'relative' }}>
+                                                                            {item.imageUrl ? <img src={item.imageUrl} alt={item.name} style={{ position: 'absolute', top: 4, left: 4, width: 'calc(100% - 8px)', height: 'calc(100% - 8px)', objectFit: 'contain' }} /> : <span style={{ fontSize: 10, opacity: 0.5 }}>IMG</span>}
+                                                                            {tournament.type !== 'NoMoreMeta' && (
+                                                                                <div style={{ position: 'absolute', top: 2, right: 2, zIndex: 10 }}>
+                                                                                    <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.95)', color: 'black', fontWeight: 900, fontSize: 8, padding: '1px 4px', borderRadius: 3 }}>+{item.points}p</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {item.isBanned && (
+                                                                                <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
+                                                                                    <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.95)', color: 'white', fontWeight: 900, fontSize: 8, padding: '1px 5px', borderRadius: 3, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>แบน</span>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <span style={{ fontSize: 8, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{item.name}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                /* For Open / Standard with Ban List: show restricted/banned parts only */
+                                                <>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, opacity: 0.8 }}>
+                                                        <AlertCircle style={{ width: 18, height: 18, color: '#ef4444' }} />
+                                                        <span style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                            Restricted Parts — {(tournament?.BanList || []).length} Parts Banned
+                                                        </span>
+                                                    </div>
+                                                    <div style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: `repeat(${(tournament?.BanList || []).length > 60 ? 12 : (tournament?.BanList || []).length > 40 ? 10 : (tournament?.BanList || []).length > 20 ? 8 : 6}, 1fr)`,
+                                                        gap: 10,
+                                                        alignContent: 'start'
+                                                    }}>
+                                                        {(tournament?.BanList || []).map((bey: string, i: number) => {
+                                                            const imgUrl = (imageMap as any)[bey] || '';
+                                                            return (
+                                                                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                                                    <div style={{ width: '100%', aspectRatio: '1/1', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
+                                                                        {imgUrl ? <img src={imgUrl} alt={bey} style={{ position: 'absolute', top: 4, left: 4, width: 'calc(100% - 8px)', height: 'calc(100% - 8px)', objectFit: 'contain' }} /> : <span style={{ fontSize: 10, opacity: 0.5 }}>IMG</span>}
+                                                                        <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
+                                                                            <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.95)', color: 'white', fontWeight: 900, fontSize: 8, padding: '1px 5px', borderRadius: 3, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>แบน</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <span style={{ fontSize: 8, textAlign: 'center', opacity: 0.7, width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{bey}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            {/* Footer */}
+                                            <div style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', opacity: 0.5 }}>
+                                                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Powered by สายใต้ยิม</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -3435,6 +3810,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         sameDeviceConflicts={isListShuffled ? sameDeviceConflicts : []}
                         swapSelection={isSwapMode ? swapSelection : []}
                         onSwapSelect={isSwapMode ? handleSwapSelect : undefined}
+                        beybladesList={beybladesList}
                     />
 
 
@@ -3659,6 +4035,41 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </button>
                                 <button
                                     onClick={handleSaveImage}
+                                    className="px-6 py-2 rounded-lg text-sm font-bold text-black bg-primary hover:bg-primary/90 transition-colors shadow-lg shadow-black/20 flex items-center gap-2"
+                                >
+                                    <Download className="h-4 w-4" />
+                                    {t('admin.modal.download')}
+                                </button>
+                            </div>
+                        </div>
+                    </Modal>
+
+                    {/* NO-QR IMAGE PREVIEW MODAL */}
+                    <Modal
+                        isOpen={!!previewImageNoQR}
+                        onClose={() => setPreviewImageNoQR(null)}
+                        title="การ์ดเบย์เบลด (ไม่มี QR)"
+                        type="custom"
+                    >
+                        <div className="flex flex-col gap-6">
+                            <div className="relative w-full aspect-[1.91/1] bg-black/50 rounded-lg overflow-hidden border border-white/10">
+                                {previewImageNoQR && (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={previewImageNoQR} alt="Preview No QR" className="w-full h-full object-contain" />
+                                )}
+                            </div>
+                            <p className="text-xs text-center text-muted-foreground">
+                                หากภาพถูกต้อง กดดาวน์โหลดด้านล่างเพื่อบันทึกรูปภาพ
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setPreviewImageNoQR(null)}
+                                    className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors"
+                                >
+                                    {t('admin.modal.close')}
+                                </button>
+                                <button
+                                    onClick={handleSaveImageNoQR}
                                     className="px-6 py-2 rounded-lg text-sm font-bold text-black bg-primary hover:bg-primary/90 transition-colors shadow-lg shadow-black/20 flex items-center gap-2"
                                 >
                                     <Download className="h-4 w-4" />
