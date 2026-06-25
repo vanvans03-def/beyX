@@ -51,6 +51,30 @@ type Match = {
     updated_at?: string;
 };
 
+type CardItem = {
+    name: string;
+    points: number;
+    imageUrl: string;
+    isBanned: boolean;
+    partType: string;
+};
+
+const captureImageSrc = (src?: string) => {
+    if (!src) return "";
+    if (src.startsWith("/") || src.startsWith("data:") || src.startsWith("blob:")) return src;
+
+    try {
+        const url = new URL(src);
+        if (url.protocol === "https:") {
+            return `/api/image-proxy?url=${encodeURIComponent(url.href)}`;
+        }
+    } catch {
+        return src;
+    }
+
+    return src;
+};
+
 const supabaseClient = createClient();
 
 const MUSIC_TRACKS = [
@@ -450,6 +474,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const [origin, setOrigin] = useState("");
     const [beybladesList, setBeybladesList] = useState<any[]>([]);
+    const getCaptureImageUrl = useCallback((name: string) => {
+        const dbBey = beybladesList.find((x: any) => x.name === name);
+        return captureImageSrc(dbBey?.image_url || (imageMap as any)[name] || "");
+    }, [beybladesList]);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -464,6 +492,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     // Helper to clean URL for component prop if needed, though current component handles suffix
     const removeModuleSuffix = (url: string) => url.replace(/\/module$/, '');
+    const transparentImagePlaceholder = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 
     const handleShowHistory = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -503,7 +532,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             })
         );
         await new Promise((resolve) => setTimeout(resolve, 4000));
-        return toPng(ref.current!, { backgroundColor: '#030303', pixelRatio: 1.5, cacheBust: true });
+        return toPng(ref.current!, {
+            backgroundColor: '#030303',
+            pixelRatio: 1.5,
+            cacheBust: true,
+            includeQueryParams: true,
+            imagePlaceholder: transparentImagePlaceholder,
+        });
     };
 
     const handleGeneratePreview = async () => {
@@ -579,7 +614,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             const dataUrl = await toPng(banListRef.current, {
                 backgroundColor: '#030303',
                 pixelRatio: 1.5, // Reduced from 2 for performance
-                cacheBust: true
+                cacheBust: true,
+                includeQueryParams: true,
+                imagePlaceholder: transparentImagePlaceholder,
             });
 
             console.log('✓ Ban list image generated successfully');
@@ -1823,8 +1860,26 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         r.player_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    const banListItems = useMemo(() => {
+        const names = new Set<string>(tournament?.BanList || []);
+
+        if (tournament?.type === 'NoMoreMeta' && beybladesList?.length) {
+            beybladesList.forEach((b: any) => {
+                const isBanned = b.custom_is_banned === true || (b.custom_is_banned == null && b.is_banned);
+                if (isBanned) names.add(b.name);
+            });
+        }
+
+        return Array.from(names)
+            .sort((a, b) => a.localeCompare(b))
+            .map((name) => ({
+                name,
+                imageUrl: getCaptureImageUrl(name),
+            }));
+    }, [tournament, beybladesList, getCaptureImageUrl]);
+
     // Dynamic Sizing Logic for Ban List
-    const banListCount = tournament?.BanList?.length || 0;
+    const banListCount = banListItems.length;
     let gridCols = "grid-cols-4";
     let gap = "gap-6";
     let fontSize = "text-xs";
@@ -1905,29 +1960,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }, [isScoreboardOpen]);
 
     const cardDisplayItems = useMemo(() => {
-        const isSpecialMode = tournament?.type === 'U10' || tournament?.type === 'U10Custom' || tournament?.type === 'NoMoreMeta';
-        if (!isSpecialMode) {
-            if (!tournament?.BanList) return [];
-            return tournament.BanList.map((name: string) => {
-                const dbBey = beybladesList.find((x: any) => x.name === name);
-                return {
-                    name,
-                    points: dbBey ? (dbBey.custom_points_standard !== null && dbBey.custom_points_standard !== undefined ? dbBey.custom_points_standard : dbBey.points_standard) : 0,
-                    imageUrl: dbBey?.image_url || (imageMap as any)[name] || '',
-                    isBanned: true,
-                    partType: 'BX' as string
-                };
-            });
-        }
+        const isScoreCardMode = tournament?.type === 'U10' || tournament?.type === 'U10Custom';
+        if (!isScoreCardMode) return [];
 
-        let items: { name: string; points: number; imageUrl: string; isBanned: boolean; partType: string }[] = [];
+        let items: CardItem[] = [];
         const isCustom = tournament?.type === 'U10Custom';
         
         if (beybladesList && beybladesList.length > 0) {
             items = beybladesList.map((b: any) => {
-                    const isBanned = (tournament?.type === 'NoMoreMeta') && 
-                        ((tournament?.BanList || []).includes(b.name) || b.custom_is_banned === true || (b.custom_is_banned === null && b.is_banned));
-                    
                     const points = isCustom && b.custom_points_standard !== null && b.custom_points_standard !== undefined
                         ? b.custom_points_standard
                         : b.points_standard;
@@ -1935,8 +1975,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     return {
                         name: b.name,
                         points,
-                        imageUrl: b.image_url || (imageMap as any)[b.name] || '',
-                        isBanned: !!isBanned,
+                        imageUrl: getCaptureImageUrl(b.name),
+                        isBanned: false,
                         partType: b.type || 'BX'
                     };
                 });
@@ -1947,29 +1987,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             } else if (tournament?.type === 'U10Custom') {
                 pointData = gameDataSouth;
             }
-            const fallbackBans = (tournament?.type === 'NoMoreMeta') ? (tournament?.BanList || pointData.banList || []) : [];
             items = Object.entries(pointData.points).flatMap(([pointVal, names]) =>
                 (names as string[]).map((name) => ({
                     name,
                     points: parseInt(pointVal),
-                    imageUrl: (imageMap as any)[name] || '',
-                    isBanned: fallbackBans.includes(name),
+                    imageUrl: getCaptureImageUrl(name),
+                    isBanned: false,
                     partType: 'BX'
                 }))
             );
         }
 
-        // For U10/U10Custom: sort by points descending (higher points first)
-        if (tournament?.type === 'U10' || tournament?.type === 'U10Custom') {
-            return items.sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-        }
-
-        if (tournament?.type === 'NoMoreMeta') {
-            return items.filter((x) => x.isBanned).sort((a, b) => a.name.localeCompare(b.name));
-        }
-
-        return items.sort((a, b) => a.name.localeCompare(b.name));
-    }, [tournament, beybladesList]);
+        return items.sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+    }, [tournament, beybladesList, getCaptureImageUrl]);
 
     // Separate blades vs special parts (CX/UX) for U10/U10Custom card layout
     const cardBladeItems = useMemo(() =>
@@ -2982,30 +3012,28 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
                                     <span>Banned Parts</span>
                                     <span className="text-xs bg-secondary px-2 py-0.5 rounded-full text-foreground">
-                                        {tournament?.BanList?.length || 0}
+                                        {banListItems.length}
                                     </span>
                                 </h4>
-                                {tournament?.BanList && tournament.BanList.length > 0 ? (
+                                {banListItems.length > 0 ? (
                                     <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[320px] overflow-y-auto p-1 custom-scrollbar">
-                                        {tournament.BanList.map((bey: string, i: number) => {
-                                            const dbBey = beybladesList.find((x: any) => x.name === bey);
-                                            const imgUrl = dbBey?.image_url || (imageMap as any)[bey] || '';
+                                        {banListItems.map((item, i: number) => {
                                             return (
-                                                <div key={i} className="group relative flex flex-col items-center gap-2 p-3 bg-secondary/30 rounded-xl border border-white/5 hover:border-destructive/50 transition-colors" title={bey}>
-                                                    <div className="relative w-full aspect-square">
-                                                        {imgUrl ? (
+                                                <div key={i} className="group relative flex flex-col items-center gap-2 p-3 h-[128px] bg-secondary/30 rounded-xl border border-white/5 hover:border-destructive/50 transition-colors overflow-hidden" title={item.name}>
+                                                    <div className="relative w-full h-[76px] flex items-center justify-center shrink-0">
+                                                        {item.imageUrl ? (
                                                             <img
-                                                                src={imgUrl}
-                                                                alt={bey}
-                                                                className="w-full h-full object-contain grayscale-[0.5] opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all"
+                                                                src={item.imageUrl}
+                                                                alt={item.name}
+                                                                className="max-w-full max-h-full object-contain grayscale-[0.5] opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all"
                                                                 loading="eager"
                                                             />
                                                         ) : (
                                                             <div className="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground bg-black/20 rounded">IMG</div>
                                                         )}
                                                     </div>
-                                                    <span className="text-[10px] text-muted-foreground font-mono truncate w-full text-center group-hover:text-foreground transition-colors leading-tight">
-                                                        {bey}
+                                                    <span className="text-[10px] text-muted-foreground font-mono truncate w-full text-center group-hover:text-foreground transition-colors leading-tight mt-auto">
+                                                        {item.name}
                                                     </span>
                                                 </div>
                                             );
@@ -3044,7 +3072,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             </>
                                         )}
                                     </button>
-                                    {/* Image-only card (no QR) - for U10/U10Custom */}
+                                    {/* Score card without QR - for U10/U10Custom only */}
                                     {(tournament?.type === 'U10' || tournament?.type === 'U10Custom') && (
                                         <button
                                             onClick={handleGenerateNoQR}
@@ -3064,7 +3092,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                             )}
                                         </button>
                                     )}
-                                    {tournament?.BanList && tournament.BanList.length > 0 && (
+                                    {banListItems.length > 0 && (
                                         <button
                                             onClick={handleExportBanList}
                                             disabled={generatingBanList}
@@ -3365,8 +3393,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 </div>
                             )}
 
-                            {/* HIDDEN RENDER CONTAINER FOR NO-QR CARD (Image only) */}
-                            {generatingNoQR && (tournament?.type === 'U10' || tournament?.type === 'U10Custom' || tournament?.type === 'NoMoreMeta') && (
+                            {/* HIDDEN RENDER CONTAINER FOR NO-QR SCORE CARD */}
+                            {generatingNoQR && (tournament?.type === 'U10' || tournament?.type === 'U10Custom') && (
                                 <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
                                     <div
                                         ref={cardNoQrRef}
@@ -3375,11 +3403,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         {/* Background */}
                                         <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
                                             <div className="absolute top-0 left-0 w-full h-full" style={{ background: 'radial-gradient(circle at 30% 20%, #222222 0%, #050505 100%)' }} />
-                                            {tournament?.type === 'NoMoreMeta' ? (
-                                                <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }} />
-                                            ) : (
-                                                <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.05)' }} />
-                                            )}
+                                            <div className="absolute top-[-50%] left-[-20%] w-[1000px] h-[1000px] rounded-full blur-[150px]" style={{ backgroundColor: 'rgba(0, 255, 148, 0.05)' }} />
                                         </div>
 
                                         <div style={{ position: 'relative', zIndex: 10 }}>
@@ -3517,7 +3541,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             )}
 
                             {/* Separate container for Ban List Export (kept as is) */}
-                            {(generatingBanList && tournament?.BanList && tournament.BanList.length > 0) && (
+                            {(generatingBanList && banListItems.length > 0) && (
                                 <div style={{ position: "fixed", top: 0, left: '-3000px', zIndex: -50, opacity: 1, pointerEvents: "none" }}>
                                     <div
                                         ref={banListRef}
@@ -3536,27 +3560,24 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     Restricted Parts
                                                 </h2>
                                                 <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#6b7280' }}>
-                                                    {tournament.BanList.length} PARTS BANNED
+                                                    {banListItems.length} PARTS BANNED
                                                 </span>
                                             </div>
 
                                             <div className={`grid ${gridCols} ${gap}`}>
-                                                {tournament.BanList.map((bey: string, i: number) => {
-                                                    // @ts-ignore
-                                                    const hasImg = !!imageMap[bey];
+                                                {banListItems.map((item, i: number) => {
                                                     return (
                                                         <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                                                             <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: 12, overflow: 'hidden', border: '1px solid', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                                                                {hasImg ? (
-                                                                    // @ts-ignore
-                                                                    <img src={imageMap[bey]} alt={bey} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: iconSize === 'p-2' ? 8 : 6, filter: 'grayscale(0.5) opacity(0.9)' }} loading="eager" />
+                                                                {item.imageUrl ? (
+                                                                    <img src={item.imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: iconSize === 'p-2' ? 8 : 6, filter: 'grayscale(0.5) opacity(0.9)' }} loading="eager" />
                                                                 ) : (
                                                                     <span style={{ fontSize: 10, color: '#4b5563', fontFamily: 'monospace' }}>IMG</span>
                                                                 )}
                                                                 <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.1)', mixBlendMode: 'overlay' }} />
                                                             </div>
                                                             <span style={{ fontSize: fontSize === 'text-xs' ? 12 : fontSize === 'text-[10px]' ? 10 : 9, fontWeight: 700, color: '#d1d5db', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                                {bey}
+                                                                {item.name}
                                                             </span>
                                                         </div>
                                                     );

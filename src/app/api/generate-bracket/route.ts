@@ -67,6 +67,8 @@ export async function POST(request: Request) {
                         player1_prereq_match_id: m.player1_prereq_match_id,
                         player2_prereq_match_id: m.player2_prereq_match_id,
                         loser_to_match_id: m.loser_to_match_id,
+                        player1_loser_feeder_id: m.player1_loser_feeder_id,
+                        player2_loser_feeder_id: m.player2_loser_feeder_id,
                         is_grand_final: m.is_grand_final,
                         is_reset_match: m.is_reset_match,
                         suggested_play_order: m.suggested_play_order,
