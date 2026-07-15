@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createTournament, getTournaments, getTournament, updateTournamentStatus, getUserApiKey } from "@/lib/repository";
-import { finalizeTournament } from "@/lib/challonge";
+import { finalizeTournament, getTournamentStandings } from "@/lib/challonge";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getInternalTopFour, recordTournamentResults } from "@/lib/player-rankings";
 
 export const dynamic = 'force-dynamic';
 
@@ -184,6 +185,18 @@ export async function PATCH(req: Request) {
                         }
                     }
                 }
+            }
+
+            const completedAt = new Date();
+            if (tournament.provider === 'INTERNAL') {
+                const standings = await getInternalTopFour(tournament.id);
+                await recordTournamentResults(tournament.id, 'INTERNAL', standings, completedAt);
+            } else if (tournament.challonge_url) {
+                const identifier = tournament.challonge_url.split('/').pop();
+                const apiKey = await getUserApiKey(userId);
+                if (!identifier || !apiKey) throw new Error('Unable to fetch final Challonge standings');
+                const standings = await getTournamentStandings(apiKey, identifier);
+                await recordTournamentResults(tournament.id, 'CHALLONGE', standings, completedAt);
             }
         }
 

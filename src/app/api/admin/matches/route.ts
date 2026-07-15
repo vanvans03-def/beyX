@@ -3,6 +3,7 @@ import { getMatches, updateMatch } from '@/lib/challonge';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getTournament, getUserApiKey, getMatchesFromDB } from "@/lib/repository";
 import { propagateWinners, type InternalMatch } from "@/lib/brackets";
+import { refreshPlayerWinRateTotals } from '@/lib/player-win-rate-totals';
 
 export const dynamic = 'force-dynamic';
 
@@ -221,6 +222,9 @@ export async function PUT(request: Request) {
             if (upsertErr) {
                 throw new Error(`Failed to save propagated matches: ${upsertErr.message}`);
             }
+
+            // Keep the public cache current, without recalculating every time its page opens.
+            await refreshPlayerWinRateTotals();
 
             return NextResponse.json({ success: true });
         }

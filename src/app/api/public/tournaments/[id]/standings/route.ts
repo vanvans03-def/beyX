@@ -34,10 +34,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             const standings: any[] = [];
             const processedIds = new Set<string>();
 
-            const playedWbMatches = (matches || [])
-                .filter((m: any) => m.round > 0 && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled') && !m.scores_csv?.includes('BYE'))
+            const completedMatches = (matches || [])
+                .filter((m: any) => m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled') && !m.scores_csv?.includes('BYE'));
+            const playedWbMatches = completedMatches
+                .filter((m: any) => m.round > 0)
                 .sort((a: any, b: any) => b.round - a.round);
-            const finalMatch = playedWbMatches[0];
+            const resetFinal = completedMatches
+                .filter((m: any) => m.is_reset_match)
+                .sort((a: any, b: any) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())[0];
+            const grandFinal = completedMatches
+                .filter((m: any) => m.is_grand_final)
+                .sort((a: any, b: any) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())[0];
+            const finalMatch = resetFinal || grandFinal || playedWbMatches[0];
 
             if (finalMatch) {
                 const winnerId = finalMatch.winner_id;

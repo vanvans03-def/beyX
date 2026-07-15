@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { ZoomIn, ZoomOut, RefreshCw, Maximize2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, RefreshCw, Search, X, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface InternalMatch {
     id: string;
@@ -27,6 +27,37 @@ interface Props {
     provider?: string;
 }
 
+type BadgePeriod = { rank: number; period: string };
+type PlayerRankingBadges = { monthly?: number; yearly?: number; winrate?: number; monthlyPeriods?: BadgePeriod[]; winratePeriods?: BadgePeriod[] };
+
+const normalizeBadgeName = (name: string) => name.normalize('NFKC').trim().toLocaleLowerCase('th-TH').replace(/\s+/g, ' ');
+
+function RankingBadges({ badges }: { badges?: PlayerRankingBadges }) {
+    if (!badges?.monthly && !badges?.yearly && !badges?.winrate) return null;
+    const BadgeImage = ({ rank, period, history }: { rank: number; period: 'M' | 'Y' | 'W'; history?: BadgePeriod[] }) => <img
+        src={`/images/badge/${period === 'W' ? `w${rank}` : `${rank}${period}`}-Photoroom.webp`}
+        alt={`${period === 'M' ? 'Monthly' : period === 'Y' ? 'Yearly' : 'Win Rate'} Top ${rank}`}
+        title={`${period === 'M' ? 'Monthly' : period === 'Y' ? 'Yearly' : 'Win Rate'} Top ${rank}${history?.length ? `\n${history.map(entry => `${entry.period}: Top ${entry.rank}`).join('\n')}` : ''}`}
+        width={18}
+        height={18}
+        loading="lazy"
+        decoding="async"
+        style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }}
+    />;
+    return <span style={{ display: 'inline-flex', gap: 2, flexShrink: 0, marginLeft: 3, alignItems: 'center' }}>
+        {badges.monthly && <BadgeImage rank={badges.monthly} period="M" history={badges.monthlyPeriods} />}
+        {badges.yearly && <BadgeImage rank={badges.yearly} period="Y" />}
+        {badges.winrate && <BadgeImage rank={badges.winrate} period="W" history={badges.winratePeriods} />}
+    </span>;
+}
+
+function BracketPlayerName({ name, badges, fallback }: { name?: string; badges?: PlayerRankingBadges; fallback: React.ReactNode }) {
+    return <span style={{ display: 'flex', minWidth: 0, flex: 1, alignItems: 'center', fontSize: 13, maxWidth: 158 }}>
+        {name ? <span title={name} style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span> : fallback}
+        <RankingBadges badges={badges} />
+    </span>;
+}
+
 const CARD_W = 200;
 const CARD_H = 62;
 const CONNECTOR_W = 56;
@@ -42,27 +73,45 @@ function cardTopY(slotIdx: number, roundIdx: number, UNIT: number): number {
 }
 
 // ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t }: {
+function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t, searchQuery, activeMatchId, badgesByName }: {
     match: InternalMatch;
     onReportWin?: (m: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
     matchNum?: number;
     loserOfNums?: [number | undefined, number | undefined];
     numMap?: Map<string, number>;
     t: any;
+    searchQuery: string;
+    activeMatchId?: string;
+    badgesByName: Record<string, PlayerRankingBadges>;
 }) {
     const isOpen = match.state?.toUpperCase() === 'OPEN';
     const isComplete = match.state?.toUpperCase() === 'COMPLETE';
     const isBye = match.scores_csv?.includes('BYE');
     const p1 = match.player1?.name;
     const p2 = match.player2?.name;
+    const p1Badges = p1 ? badgesByName[normalizeBadgeName(p1)] : undefined;
+    const p2Badges = p2 ? badgesByName[normalizeBadgeName(p2)] : undefined;
     const scores = match.scores_csv?.split('-') ?? [];
     const p1Won = isComplete && match.winner_id === match.player1_id && !!match.winner_id;
     const p2Won = isComplete && match.winner_id === match.player2_id && !!match.winner_id;
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    const p1MatchesSearch = !!normalizedQuery && !!p1?.toLocaleLowerCase().includes(normalizedQuery);
+    const p2MatchesSearch = !!normalizedQuery && !!p2?.toLocaleLowerCase().includes(normalizedQuery);
+    const isSearchMatch = p1MatchesSearch || p2MatchesSearch;
+    const isSearchTarget = isSearchMatch && match.id === activeMatchId;
 
     if (isBye) return null;
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'auto', userSelect: 'none' }}>
+        <div
+            data-bracket-match-id={match.id}
+            data-search-match={isSearchMatch ? 'true' : undefined}
+            style={{
+                display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'auto', userSelect: 'none',
+                filter: isSearchMatch ? 'drop-shadow(0 0 10px rgba(134, 239, 172, 0.38))' : undefined,
+                transition: 'filter 180ms ease',
+            }}
+        >
             {matchNum !== undefined && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', minWidth: 18, textAlign: 'right', flexShrink: 0 }}>
                     {matchNum}
@@ -73,10 +122,14 @@ function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t }: {
                 style={{
                     width: CARD_W, height: CARD_H,
                     display: 'flex', flexDirection: 'column',
-                    border: isOpen ? '1px solid #3f3f46' : '1px solid #27272a',
-                    borderRadius: 5, overflow: 'hidden',
+                    border: isSearchMatch ? '2px solid #86efac' : isComplete ? '1px solid #3f6212' : isOpen ? '1px solid #3f3f46' : '1px solid #27272a',
+                    borderRadius: 8, overflow: 'hidden',
                     cursor: 'default',
                     position: 'relative', flexShrink: 0,
+                    background: 'linear-gradient(135deg, #19191d 0%, #101012 100%)',
+                    boxShadow: isSearchMatch ? '0 0 0 2px rgba(134, 239, 172, 0.15), 0 0 20px rgba(134, 239, 172, 0.3)' : isComplete ? '0 3px 12px rgba(134, 239, 172, 0.08)' : '0 3px 12px rgba(0, 0, 0, 0.18)',
+                    transition: 'border-color 180ms ease, box-shadow 180ms ease',
+                    animation: isSearchMatch ? `bracketSearchGlow ${isSearchTarget ? '2s' : '2.8s'} ease-in-out infinite` : undefined,
                 }}
             >
                 {isOpen && (
@@ -87,11 +140,11 @@ function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t }: {
                     style={{
                         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '0 10px', borderBottom: '1px solid #27272a',
-                        backgroundColor: p1Won ? '#1e2d1e' : '#1c1c1e',
+                        background: p1Won ? 'linear-gradient(90deg, #202a23 0%, #1d211e 70%, #1c1c1e 100%)' : p1MatchesSearch ? 'linear-gradient(90deg, #203126 0%, #1c1c1e 85%)' : '#1c1c1e',
+                        boxShadow: p1Won ? 'inset 3px 0 0 #86efac' : p1MatchesSearch ? 'inset 3px 0 0 #86efac' : undefined,
                     }}
                 >
-                    <span style={{ fontSize: 13, color: p1Won ? '#10b981' : p2Won ? '#71717a' : '#e4e4e7', fontWeight: p1Won ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 144 }}>
-                        {p1 ? p1 : (
+                    <span style={{ display: 'flex', minWidth: 0, flex: 1, color: p2Won ? '#a1a1aa' : '#f4f4f5', fontWeight: p1Won ? 700 : 500 }}><BracketPlayerName name={p1} badges={p1Badges} fallback={
                             <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>
                                 {loserOfNums?.[0] !== undefined 
                                     ? t('bracket.loser_of' as any, { n: loserOfNums[0] }) 
@@ -99,20 +152,19 @@ function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t }: {
                                         ? t('bracket.winner_of' as any, { n: numMap.get(match.player1_prereq_match_id) })
                                         : 'TBD')}
                             </em>
-                        )}
-                    </span>
-                    {isComplete && <span style={{ fontSize: 13, fontWeight: 700, color: p1Won ? '#10b981' : '#71717a', minWidth: 18, textAlign: 'right' }}>{scores[0] ?? 0}</span>}
+                        } /></span>
+                    {isComplete && <span style={{ fontSize: 13, fontWeight: 700, color: p1Won ? '#f4f4f5' : '#71717a', minWidth: 18, textAlign: 'right' }}>{scores[0] ?? 0}</span>}
                 </div>
                 {/* P2 */}
                 <div
                     style={{
                         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '0 10px',
-                        backgroundColor: p2Won ? '#1e2d1e' : '#1c1c1e',
+                        background: p2Won ? 'linear-gradient(90deg, #202a23 0%, #1d211e 70%, #1c1c1e 100%)' : p2MatchesSearch ? 'linear-gradient(90deg, #203126 0%, #1c1c1e 85%)' : '#1c1c1e',
+                        boxShadow: p2Won ? 'inset 3px 0 0 #86efac' : p2MatchesSearch ? 'inset 3px 0 0 #86efac' : undefined,
                     }}
                 >
-                    <span style={{ fontSize: 13, color: p2Won ? '#10b981' : p1Won ? '#71717a' : '#e4e4e7', fontWeight: p2Won ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 144 }}>
-                        {p2 ? p2 : (
+                    <span style={{ display: 'flex', minWidth: 0, flex: 1, color: p1Won ? '#a1a1aa' : '#f4f4f5', fontWeight: p2Won ? 700 : 500 }}><BracketPlayerName name={p2} badges={p2Badges} fallback={
                             <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>
                                 {loserOfNums?.[1] !== undefined 
                                     ? t('bracket.loser_of' as any, { n: loserOfNums[1] }) 
@@ -120,9 +172,8 @@ function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t }: {
                                         ? t('bracket.winner_of' as any, { n: numMap.get(match.player2_prereq_match_id) })
                                         : 'TBD')}
                             </em>
-                        )}
-                    </span>
-                    {isComplete && <span style={{ fontSize: 13, fontWeight: 700, color: p2Won ? '#10b981' : '#71717a', minWidth: 18, textAlign: 'right' }}>{scores[1] ?? 0}</span>}
+                        } /></span>
+                    {isComplete && <span style={{ fontSize: 13, fontWeight: 700, color: p2Won ? '#f4f4f5' : '#71717a', minWidth: 18, textAlign: 'right' }}>{scores[1] ?? 0}</span>}
                 </div>
             </div>
         </div>
@@ -138,7 +189,10 @@ function BracketSection({
     numMap,
     allMatches,
     yMap,
-    t
+    t,
+    searchQuery,
+    activeMatchId,
+    badgesByName,
 }: {
     rounds: { label: string; matches: InternalMatch[]; isQualify: boolean }[];
     onReportWin?: (m: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
@@ -148,6 +202,9 @@ function BracketSection({
     allMatches: InternalMatch[];
     yMap: Map<string, number>;
     t: any;
+    searchQuery: string;
+    activeMatchId?: string;
+    badgesByName: Record<string, PlayerRankingBadges>;
 }) {
     const r1Count = rounds[0]?.matches.length ?? 0;
     const totalH = r1Count * UNIT + 40;
@@ -161,6 +218,13 @@ function BracketSection({
                     <React.Fragment key={ri}>
                         {prevRound && (
                             <svg width={CONNECTOR_W} height={totalH + 40} style={{ flexShrink: 0, overflow: 'visible', marginTop: 28 }}>
+                                <defs>
+                                    <linearGradient id={`bracket-connector-${ri}`} x1="0" x2="1" y1="0" y2="0">
+                                        <stop offset="0%" stopColor="#3f3f46" />
+                                        <stop offset="52%" stopColor="#71717a" />
+                                        <stop offset="100%" stopColor="#22c55e" />
+                                    </linearGradient>
+                                </defs>
                                 {round.matches.map(m => {
                                     const wbFeedersForMatch = allMatches.filter(wm => wm.loser_to_match_id === m.id);
                                     const isOnlyOneLBFeeder = wbFeedersForMatch.length === 1 && !m.player1_prereq_match_id && !m.player2_prereq_match_id;
@@ -171,41 +235,28 @@ function BracketSection({
                                     const cx = CONNECTOR_W / 2;
                                     const lines: React.ReactNode[] = [];
 
-                                    // หา feeders จาก prereq links (WB และ LB survivor)
-                                    const f1 = prevRound.matches.find(pm => pm.id === m.player1_prereq_match_id);
-                                    const f2 = prevRound.matches.find(pm => pm.id === m.player2_prereq_match_id);
-
-                                    // หา feeders จาก loser_to_match_id (WB loser dropping ลง LB)
-                                    const loserFeeders = prevRound.matches.filter(pm =>
+                                    // Resolve from the entire graph: a bye or lower-bracket drop can
+                                    // skip a visual column, so limiting this to prevRound hides a line.
+                                    const prerequisiteFeeders = [m.player1_prereq_match_id, m.player2_prereq_match_id]
+                                        .filter((id): id is string => Boolean(id))
+                                        .map(id => allMatches.find(candidate => candidate.id === id))
+                                        .filter((candidate): candidate is InternalMatch => Boolean(candidate));
+                                    const loserFeeders = allMatches.filter(pm =>
                                         pm.loser_to_match_id === m.id &&
                                         !pm.scores_csv?.includes('BYE') &&
                                         !(pm.state?.toUpperCase() === 'COMPLETE' && (!pm.player1_id || !pm.player2_id))
                                     );
-
-                                    const f1Hidden = f1 && (f1.scores_csv?.includes('BYE') || !yMap.has(f1.id));
-                                    const f2Hidden = f2 && (f2.scores_csv?.includes('BYE') || !yMap.has(f2.id));
-
-                                    const f1Y = f1 && !f1Hidden ? (yMap.get(f1.id) ?? null) : null;
-                                    const f2Y = f2 && !f2Hidden ? (yMap.get(f2.id) ?? null) : null;
-
-                                    // loser feeders Y positions
-                                    const loserFeederYs = loserFeeders
-                                        .map(lf => yMap.get(lf.id))
+                                    const feederYs = [...new Map([...prerequisiteFeeders, ...loserFeeders]
+                                        .filter(feeder => !feeder.scores_csv?.includes('BYE'))
+                                        .map(feeder => [feeder.id, yMap.get(feeder.id)]))
+                                        .values()]
                                         .filter((y): y is number => y !== undefined);
 
-                                    if (f1Y !== null && f2Y !== null) {
-                                        lines.push(<path key="f1" d={`M 0 ${f1Y} H ${cx} V ${myY}`} fill="none" stroke="#3a3a3d" strokeWidth="1.5" strokeLinejoin="round" />);
-                                        lines.push(<path key="f2" d={`M 0 ${f2Y} H ${cx} V ${myY}`} fill="none" stroke="#3a3a3d" strokeWidth="1.5" strokeLinejoin="round" />);
-                                        lines.push(<path key="mid" d={`M ${cx} ${myY} H ${CONNECTOR_W}`} fill="none" stroke="#3a3a3d" strokeWidth="1.5" />);
-                                    } else if (f1Y !== null) {
-                                        lines.push(<path key="f1only" d={`M 0 ${f1Y} H ${cx} V ${myY} H ${CONNECTOR_W}`} fill="none" stroke="#3a3a3d" strokeWidth="1.5" strokeLinejoin="round" />);
-                                    } else if (f2Y !== null) {
-                                        lines.push(<path key="f2only" d={`M 0 ${f2Y} H ${cx} V ${myY} H ${CONNECTOR_W}`} fill="none" stroke="#3a3a3d" strokeWidth="1.5" strokeLinejoin="round" />);
-                                    } else if (loserFeederYs.length > 0) {
-                                        // LB Culling R1: เส้นจาก WB losers
-                                        loserFeederYs.forEach((ly, idx) => {
-                                            lines.push(<path key={`lf${idx}`} d={`M 0 ${ly} H ${cx} V ${myY} H ${CONNECTOR_W}`} fill="none" stroke="#3a3a3d" strokeWidth="1.5" strokeLinejoin="round" />);
-                                        });
+                                    feederYs.forEach((feederY, idx) => {
+                                        lines.push(<path key={`feeder-${idx}`} d={`M 0 ${feederY} H ${cx} V ${myY}`} fill="none" stroke={`url(#bracket-connector-${ri})`} strokeWidth="1.75" strokeLinejoin="round" />);
+                                    });
+                                    if (feederYs.length > 0) {
+                                        lines.push(<path key="out" d={`M ${cx} ${myY} H ${CONNECTOR_W}`} fill="none" stroke={`url(#bracket-connector-${ri})`} strokeWidth="1.75" />);
                                     }
 
                                     return <g key={m.id}>{lines}</g>;
@@ -246,6 +297,9 @@ function BracketSection({
                                                 loserOfNums={loserOfNums}
                                                 numMap={numMap}
                                                 t={t}
+                                                searchQuery={searchQuery}
+                                                activeMatchId={activeMatchId}
+                                                badgesByName={badgesByName}
                                             />
                                         </div>
                                     );
@@ -268,13 +322,104 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
 
     const [scale, setScale] = useState(0.85);
     const [isDragging, setIsDragging] = useState(false);
+    const [isPinching, setIsPinching] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchLane, setSearchLane] = useState<'upper' | 'lower'>('upper');
+    const [badgesByName, setBadgesByName] = useState<Record<string, PlayerRankingBadges>>({});
+
+    useEffect(() => {
+        const names = [...new Set(matches.flatMap(match => [match.player1?.name, match.player2?.name]).filter((name): name is string => Boolean(name?.trim())))];
+        if (!names.length) { setBadgesByName({}); return; }
+        const params = new URLSearchParams();
+        names.forEach(name => params.append('name', name));
+        let cancelled = false;
+        fetch(`/api/public/rankings/badges?${params.toString()}`)
+            .then(response => response.ok ? response.json() : { badges: {} })
+            .then(data => { if (!cancelled) setBadgesByName(data.badges || {}); })
+            .catch(() => { if (!cancelled) setBadgesByName({}); });
+        return () => { cancelled = true; };
+    }, [matches]);
 
     const currentPosition = useRef({ x: 40, y: 40 });
+    const scaleRef = useRef(0.85);
     const dragStart = useRef({ x: 0, y: 0 });
     const isPointerDown = useRef(false);
 
     const initialTouchDistance = useRef<number | null>(null);
     const initialScale = useRef<number>(1.0);
+    const searchWasActive = useRef(false);
+    const viewBeforeSearch = useRef({ x: 40, y: 40, scale: 0.85 });
+
+    const searchResults = useMemo(() => {
+        const query = searchQuery.trim().toLocaleLowerCase();
+        if (!query) return { upper: [] as InternalMatch[], lower: [] as InternalMatch[] };
+        const found = matches.filter((match) =>
+            match.player1?.name?.toLocaleLowerCase().includes(query) ||
+            match.player2?.name?.toLocaleLowerCase().includes(query)
+        );
+        const latestFirst = (items: InternalMatch[]) => [...items].sort((a, b) =>
+            (b.suggested_play_order ?? 0) - (a.suggested_play_order ?? 0)
+        );
+        return {
+            upper: latestFirst(found.filter((match) => match.round > 0 || match.is_grand_final)),
+            lower: latestFirst(found.filter((match) => match.round < 0)),
+        };
+    }, [matches, searchQuery]);
+
+    const activeSearchLane = searchLane === 'lower'
+        ? (searchResults.lower.length > 0 ? 'lower' : 'upper')
+        : (searchResults.upper.length > 0 ? 'upper' : 'lower');
+    const activeMatchIds = searchResults[activeSearchLane].map((match) => match.id);
+    const activeMatchId = activeMatchIds[0];
+
+    useEffect(() => {
+        setSearchLane('upper');
+    }, [searchQuery]);
+
+    useEffect(() => {
+        const query = searchQuery.trim();
+        if (!query) {
+            if (searchWasActive.current) {
+                searchWasActive.current = false;
+                currentPosition.current = { x: viewBeforeSearch.current.x, y: viewBeforeSearch.current.y };
+                scaleRef.current = viewBeforeSearch.current.scale;
+                setScale(viewBeforeSearch.current.scale);
+                updateTransform(viewBeforeSearch.current.x, viewBeforeSearch.current.y, viewBeforeSearch.current.scale);
+            }
+            return;
+        }
+        if (!containerRef.current || !contentRef.current) return;
+        if (!searchWasActive.current) {
+            searchWasActive.current = true;
+            viewBeforeSearch.current = { ...currentPosition.current, scale: scaleRef.current };
+        }
+
+        const frame = requestAnimationFrame(() => {
+            const target = activeMatchIds
+                .map((matchId) => contentRef.current?.querySelector<HTMLElement>(`[data-bracket-match-id="${matchId}"]`))
+                .find((element): element is HTMLElement => !!element);
+            const container = containerRef.current;
+            const content = contentRef.current;
+            if (!target || !container || !content) return;
+
+            const targetRect = target.getBoundingClientRect();
+            const contentRect = content.getBoundingClientRect();
+            const nextScale = Math.max(scaleRef.current, 1.05);
+            const targetX = (targetRect.left - contentRect.left) / scaleRef.current;
+            const targetY = (targetRect.top - contentRect.top) / scaleRef.current;
+            const rawX = container.clientWidth / 2 - (targetX + CARD_W / 2) * nextScale;
+            const rawY = container.clientHeight / 2 - (targetY + CARD_H / 2) * nextScale;
+            const clamped = clampPosition(rawX, rawY, nextScale);
+            currentPosition.current = clamped;
+            scaleRef.current = nextScale;
+            setScale(nextScale);
+            updateTransform(clamped.x, clamped.y, nextScale);
+        });
+
+        return () => cancelAnimationFrame(frame);
+    // Focus only when the query or match data changes, not after every zoom gesture.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery, matches, activeSearchLane, activeMatchId]);
 
     const updateTransform = (x: number, y: number, currentScale: number) => {
         if (contentRef.current) {
@@ -317,18 +462,20 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
         const x = currentPosition.current.x;
         const y = currentPosition.current.y;
 
-        const ratio = newScale / scale;
+        const ratio = newScale / scaleRef.current;
         const rawX = cx - (cx - x) * ratio;
         const rawY = cy - (cy - y) * ratio;
 
         const clamped = clampPosition(rawX, rawY, newScale);
         currentPosition.current = clamped;
+        scaleRef.current = newScale;
         setScale(newScale);
         updateTransform(clamped.x, clamped.y, newScale);
     };
 
     const resetToLeftFocus = () => {
         const defaultScale = 0.85;
+        scaleRef.current = defaultScale;
         setScale(defaultScale);
 
         if (containerRef.current && contentRef.current) {
@@ -384,18 +531,20 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
 
             const zoomFactor = 0.05;
             const direction = e.deltaY < 0 ? 1 : -1;
-            const newScale = Math.max(0.15, Math.min(2.0, scale + direction * zoomFactor));
+            const currentScale = scaleRef.current;
+            const newScale = Math.max(0.15, Math.min(2.0, currentScale + direction * zoomFactor));
 
-            if (newScale !== scale) {
+            if (newScale !== currentScale) {
                 const x = currentPosition.current.x;
                 const y = currentPosition.current.y;
-                const ratio = newScale / scale;
+                const ratio = newScale / currentScale;
 
                 const rawX = mouseX - (mouseX - x) * ratio;
                 const rawY = mouseY - (mouseY - y) * ratio;
 
                 const clamped = clampPosition(rawX, rawY, newScale);
                 currentPosition.current = clamped;
+                scaleRef.current = newScale;
                 setScale(newScale);
                 updateTransform(clamped.x, clamped.y, newScale);
             }
@@ -423,9 +572,9 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
         const rawX = e.clientX - dragStart.current.x;
         const rawY = e.clientY - dragStart.current.y;
         
-        const clamped = clampPosition(rawX, rawY, scale);
+        const clamped = clampPosition(rawX, rawY, scaleRef.current);
         currentPosition.current = clamped;
-        updateTransform(clamped.x, clamped.y, scale);
+        updateTransform(clamped.x, clamped.y, scaleRef.current);
     };
 
     const handleMouseUp = () => {
@@ -446,12 +595,13 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
         } else if (e.touches.length === 2) {
             isPointerDown.current = false;
             setIsDragging(false);
+            setIsPinching(true);
             const t1 = e.touches[0];
             const t2 = e.touches[1];
             const dx = t1.clientX - t2.clientX;
             const dy = t1.clientY - t2.clientY;
             initialTouchDistance.current = Math.sqrt(dx * dx + dy * dy);
-            initialScale.current = scale;
+            initialScale.current = scaleRef.current;
         }
     };
 
@@ -461,9 +611,9 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
             const rawX = touch.clientX - dragStart.current.x;
             const rawY = touch.clientY - dragStart.current.y;
             
-            const clamped = clampPosition(rawX, rawY, scale);
+            const clamped = clampPosition(rawX, rawY, scaleRef.current);
             currentPosition.current = clamped;
-            updateTransform(clamped.x, clamped.y, scale);
+            updateTransform(clamped.x, clamped.y, scaleRef.current);
         } else if (e.touches.length === 2 && initialTouchDistance.current !== null) {
             const t1 = e.touches[0];
             const t2 = e.touches[1];
@@ -484,14 +634,14 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
 
                 const dxZoom = localCenterX - currentPosition.current.x;
                 const dyZoom = localCenterY - currentPosition.current.y;
-                const ratio = newScale / scale;
+                const ratio = newScale / scaleRef.current;
 
                 const rawX = localCenterX - dxZoom * ratio;
                 const rawY = localCenterY - dyZoom * ratio;
 
                 const clamped = clampPosition(rawX, rawY, newScale);
                 currentPosition.current = clamped;
-                setScale(newScale);
+                scaleRef.current = newScale;
                 updateTransform(clamped.x, clamped.y, newScale);
             }
         }
@@ -501,6 +651,8 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
         isPointerDown.current = false;
         setIsDragging(false);
         initialTouchDistance.current = null;
+        setIsPinching(false);
+        setScale(scaleRef.current);
     };
 
     const { winnersRounds = [], losersRounds = [], slotMap = new Map(), UNIT = UNIT_BASE, numMap = new Map(), yMap = new Map() } = useMemo(() => {
@@ -796,6 +948,48 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
             flexDirection: 'column',
             overflow: 'hidden'
         }}>
+            <style>{`@keyframes bracketSearchPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } } @keyframes bracketSearchGlow { 0%, 100% { box-shadow: 0 0 0 2px rgba(134, 239, 172, .12), 0 0 10px rgba(134, 239, 172, .18); } 50% { box-shadow: 0 0 0 3px rgba(134, 239, 172, .3), 0 0 26px rgba(134, 239, 172, .58); } }`}</style>
+            <div style={{
+                position: 'absolute', top: 16, left: 16, zIndex: 100,
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: 'min(310px, calc(100% - 116px))', padding: '8px 10px',
+                background: 'rgba(18, 18, 21, 0.88)', backdropFilter: 'blur(12px)',
+                border: searchQuery ? '1px solid rgba(134, 239, 172, .7)' : '1px solid rgba(255, 255, 255, .12)',
+                boxShadow: searchQuery ? '0 0 18px rgba(134, 239, 172, .16)' : '0 8px 24px rgba(0, 0, 0, .25)',
+                borderRadius: 12, transition: 'border-color 180ms ease, box-shadow 180ms ease',
+            }}>
+                <Search size={16} color={searchQuery ? '#86efac' : '#a1a1aa'} style={searchQuery ? { animation: 'bracketSearchPulse 2.4s ease-in-out infinite' } : undefined} />
+                <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ค้นหาชื่อผู้เล่น / Search player"
+                    aria-label="Search player in bracket"
+                    style={{ minWidth: 0, flex: 1, border: 0, outline: 0, color: '#f4f4f5', background: 'transparent', fontSize: 13 }}
+                />
+                {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} aria-label="Clear player search" style={{ border: 0, background: 'transparent', color: '#a1a1aa', padding: 2, cursor: 'pointer', display: 'flex' }}>
+                        <X size={15} />
+                    </button>
+                )}
+            </div>
+            {searchQuery.trim() && searchResults.upper.length > 0 && searchResults.lower.length > 0 && (
+                <div style={{ position: 'absolute', top: 66, left: 16, zIndex: 100, display: 'flex', overflow: 'hidden', borderRadius: 10, border: '1px solid rgba(134, 239, 172, .35)', background: 'rgba(18, 18, 21, .9)', backdropFilter: 'blur(12px)' }}>
+                    <button
+                        onClick={() => setSearchLane('upper')}
+                        aria-pressed={activeSearchLane === 'upper'}
+                        style={{ border: 0, background: activeSearchLane === 'upper' ? 'rgba(134, 239, 172, .16)' : 'transparent', color: activeSearchLane === 'upper' ? '#bbf7d0' : '#a1a1aa', padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700 }}
+                    >
+                        <ChevronUp size={14} /> สายบน
+                    </button>
+                    <button
+                        onClick={() => setSearchLane('lower')}
+                        aria-pressed={activeSearchLane === 'lower'}
+                        style={{ border: 0, borderLeft: '1px solid rgba(134, 239, 172, .22)', background: activeSearchLane === 'lower' ? 'rgba(134, 239, 172, .16)' : 'transparent', color: activeSearchLane === 'lower' ? '#bbf7d0' : '#a1a1aa', padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700 }}
+                    >
+                        <ChevronDown size={14} /> สายล่าง
+                    </button>
+                </div>
+            )}
             {/* Sticky Zoom Controls Container */}
             <div style={{
                 position: 'absolute',
@@ -910,20 +1104,21 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
                         textAlign: 'left',
                         minWidth: 'max-content',
                         padding: '40px',
-                        willChange: 'transform'
+                        willChange: 'transform',
+                        transition: isDragging || isPinching ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)',
                     }}
                 >
                     {winnersRounds.length > 0 && (
                         <div style={{ marginBottom: isDoubleElim ? 80 : 0 }}>
                             {isDoubleElim && <SectionDivider>{t('admin.matches.winner_bracket' as any)}</SectionDivider>}
-                            <BracketSection rounds={winnersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} />
+                            <BracketSection rounds={winnersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} searchQuery={searchQuery} activeMatchId={activeMatchId} badgesByName={badgesByName} />
                         </div>
                     )}
 
                     {losersRounds.length > 0 && (
                         <div>
                             <SectionDivider>{t('admin.matches.loser_bracket' as any)}</SectionDivider>
-                            <BracketSection rounds={losersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} />
+                            <BracketSection rounds={losersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} searchQuery={searchQuery} activeMatchId={activeMatchId} badgesByName={badgesByName} />
                         </div>
                     )}
                 </div>

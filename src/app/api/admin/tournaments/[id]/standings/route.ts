@@ -70,12 +70,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                 .filter((m: any) => m.round > 0 && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled'))
                 .sort((a: any, b: any) => b.round - a.round);
             
-            // The very last WB match might be the Grand Final or Winners Final
-            // In Double Elim, the Grand Final determines 1st and 2nd.
+            // A completed reset game is always the championship decider. The
+            // first Grand Final only decides the champion when no reset was
+            // played (the winners-bracket finalist won it).
             const isDoubleElim = (matches || []).some((m: any) => m.round < 0);
-            const finalMatch = (matches || []).find((m: any) => m.is_grand_final && m.state === 'COMPLETE') 
-                               || (matches || []).find((m: any) => m.is_reset_match && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled'))
-                               || playedWbMatches[0];
+            const resetFinal = (matches || [])
+                .filter((m: any) => m.is_reset_match && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled') && !m.scores_csv?.includes('BYE'))
+                .sort((a: any, b: any) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())[0];
+            const grandFinal = (matches || [])
+                .filter((m: any) => m.is_grand_final && m.state === 'COMPLETE' && !m.scores_csv?.includes('Cancelled') && !m.scores_csv?.includes('BYE'))
+                .sort((a: any, b: any) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())[0];
+            const finalMatch = resetFinal || grandFinal || playedWbMatches[0];
 
             if (finalMatch) {
                 const winnerId = finalMatch.winner_id;

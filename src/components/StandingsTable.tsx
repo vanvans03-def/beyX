@@ -90,6 +90,7 @@ export default function StandingsTable({
         if (r === 1) return <div className="flex items-center gap-1">{rankNum}<Trophy className="h-5 w-5 text-yellow-500 fill-yellow-500" /></div>;
         if (r === 2) return <div className="flex items-center gap-1">{rankNum}<Medal className="h-5 w-5 text-gray-400 fill-gray-400" /></div>;
         if (r === 3) return <div className="flex items-center gap-1">{rankNum}<Medal className="h-5 w-5 text-amber-700 fill-amber-700" /></div>;
+        if (r === 4) return <div className="flex items-center gap-1">{rankNum}<Medal className="h-5 w-5 text-sky-400 fill-sky-400" /></div>;
         return rankNum;
     };
 
@@ -97,6 +98,7 @@ export default function StandingsTable({
         if (rank === 1) return "bg-yellow-500/10 border-yellow-500/20";
         if (rank === 2) return "bg-gray-400/10 border-gray-400/20";
         if (rank === 3) return "bg-amber-700/10 border-amber-700/20";
+        if (rank === 4) return "bg-sky-400/10 border-sky-400/20";
         return "bg-secondary/20 border-white/5";
     };
 

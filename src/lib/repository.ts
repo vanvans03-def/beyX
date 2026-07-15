@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase";
+import { isExcludedRankingUsername } from '@/lib/ranking-eligibility';
 import { v4 as uuidv4 } from 'uuid';
 
 // Types (Mirrors DB Schema)
@@ -218,6 +219,7 @@ export async function createTournament(
     const id = uuidv4();
     const status = 'OPEN';
     const created_at = new Date();
+    const { data: organizer } = await supabaseAdmin.from('users').select('username').eq('id', userId).maybeSingle();
 
     // 1. Supabase
     const { error } = await supabaseAdmin
@@ -230,6 +232,7 @@ export async function createTournament(
             type,
             ban_list,
             user_id: userId,
+            is_excluded_from_rankings: isExcludedRankingUsername(organizer?.username),
             provider,
             bracket_type
         });

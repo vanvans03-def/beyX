@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useRegistration } from "./useRegistration";
 import { cn } from "@/lib/utils";
@@ -73,9 +73,26 @@ export function RegistrationView({
     } | null>(null);
     const [showResetConfirm, setShowResetConfirm] = useState(false); // State for reset modal
     const [showUpdateConfirm, setShowUpdateConfirm] = useState(false); // State for update modal
+    const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
 
     // Derived
     const activeProfile = profiles[activeTab];
+
+    useEffect(() => {
+        const query = activeProfile?.name?.trim();
+        if (!query) {
+            const timer = setTimeout(() => setNameSuggestions([]), 0);
+            return () => clearTimeout(timer);
+        }
+        const timer = setTimeout(() => {
+            fetch(`/api/public/players/suggestions?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => setNameSuggestions((data.suggestions || []).map((player: { display_name: string }) => player.display_name)))
+                .catch(() => setNameSuggestions([]));
+        }, 180);
+        return () => clearTimeout(timer);
+    }, [activeProfile?.name]);
+
     if (!activeProfile) return null; // Should not happen
 
     // Helper for visual selector
@@ -205,10 +222,14 @@ export function RegistrationView({
                             type="text"
                             value={activeProfile.name}
                             onChange={(e) => updateProfile(activeTab, { name: e.target.value })}
+                            list="ranking-player-suggestions"
                             disabled={activeProfile.status === 'submitted' || (tournamentStatus === 'STARTED' || tournamentStatus === 'COMPLETED' || tournamentStatus === 'CLOSED' || !!challongeUrl)}
                             placeholder={t('reg.placeholder.name')}
                             className="flex-1 rounded-lg border border-input bg-secondary px-4 py-3 font-medium text-foreground outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/50 disabled:opacity-50"
                         />
+                        <datalist id="ranking-player-suggestions">
+                            {nameSuggestions.map(name => <option key={name} value={name} />)}
+                        </datalist>
                         <button
                             type="button"
                             onClick={triggerFetchExistingPlayers}

@@ -11,7 +11,8 @@
     "test": "node scripts/run-tests.js all",
     "test:functional": "node scripts/run-tests.js functional",
     "test:load": "node scripts/run-tests.js load",
-    "test:new": "node scripts/run-tests.js new"
+    "test:new": "node scripts/run-tests.js new",
+    "test:e2e:challonge": "node scratch/test_e2e_all_conditions.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",

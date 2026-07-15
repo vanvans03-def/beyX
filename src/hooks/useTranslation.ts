@@ -11,16 +11,25 @@ export function useTranslation() {
     const [lang, setLang] = useState<Lang>("TH");
 
     useEffect(() => {
-        const saved = localStorage.getItem("app_lang") as Lang;
-        if (saved && (saved === "TH" || saved === "EN")) {
-            setLang(saved);
-        }
+        const readSavedLanguage = () => {
+            const saved = localStorage.getItem("app_lang") as Lang;
+            if (saved && (saved === "TH" || saved === "EN")) setLang(saved);
+        };
+        const handleLanguageChange = (event: Event) => setLang((event as CustomEvent<Lang>).detail);
+        readSavedLanguage();
+        window.addEventListener('app-language-change', handleLanguageChange);
+        window.addEventListener('storage', readSavedLanguage);
+        return () => {
+            window.removeEventListener('app-language-change', handleLanguageChange);
+            window.removeEventListener('storage', readSavedLanguage);
+        };
     }, []);
 
     const toggleLang = () => {
         const next = lang === "TH" ? "EN" : "TH";
         setLang(next);
         localStorage.setItem("app_lang", next);
+        window.dispatchEvent(new CustomEvent<Lang>('app-language-change', { detail: next }));
     };
 
     const t = useCallback((key: LocaleKey, params?: Record<string, string | number>) => {

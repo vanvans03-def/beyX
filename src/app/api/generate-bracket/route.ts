@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { setupAndStartTournament } from '@/lib/challonge';
 import { getUserApiKey, getTournament, getRegistrations, getParticipantOrder } from '@/lib/repository';
-import { generateSingleElimination, generateDoubleElimination } from '@/lib/brackets';
+import { generateSingleElimination, generateDoubleElimination, type InternalMatch } from '@/lib/brackets';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
             const participants = orderedRegistrations.map(r => ({ id: r.id, name: r.player_name }));
 
-            let matches = [];
+            let matches: InternalMatch[] = [];
             if (tournament.bracket_type === 'DOUBLE') {
                 matches = generateDoubleElimination(tournamentId, participants);
             } else {
@@ -53,41 +53,86 @@ export async function POST(request: Request) {
             // generateSingleElimination with correct phase-interleaved ordering — do NOT
             // override it with the flat array index here.
             if (matches.length > 0) {
-                const { error } = await supabase
-                    .from('internal_matches')
-                    .insert(matches.map(m => ({
-                        id: m.id,
-                        tournament_id: m.tournament_id,
-                        player1_id: m.player1_id,
-                        player2_id: m.player2_id,
-                        winner_id: m.winner_id,
-                        state: m.state,
-                        scores_csv: m.scores_csv,
-                        round: m.round,
-                        player1_prereq_match_id: m.player1_prereq_match_id,
-                        player2_prereq_match_id: m.player2_prereq_match_id,
-                        loser_to_match_id: m.loser_to_match_id,
-                        player1_loser_feeder_id: m.player1_loser_feeder_id,
-                        player2_loser_feeder_id: m.player2_loser_feeder_id,
-                        is_grand_final: m.is_grand_final,
-                        is_reset_match: m.is_reset_match,
-                        suggested_play_order: m.suggested_play_order,
-                    })));
+                const toDbMatch = (m: InternalMatch, includeSelfReferences: boolean) => ({
+                    id: m.id,
+                    tournament_id: m.tournament_id,
+                    player1_id: m.player1_id,
+                    player2_id: m.player2_id,
+                    winner_id: m.winner_id,
+                    state: m.state,
+                    scores_csv: m.scores_csv,
+                    round: m.round,
+                    player1_prereq_match_id: includeSelfReferences ? m.player1_prereq_match_id : null,
+                    player2_prereq_match_id: includeSelfReferences ? m.player2_prereq_match_id : null,
+                    loser_to_match_id: includeSelfReferences ? m.loser_to_match_id : null,
+                    player1_loser_feeder_id: includeSelfReferences ? m.player1_loser_feeder_id : null,
+                    player2_loser_feeder_id: includeSelfReferences ? m.player2_loser_feeder_id : null,
+                    is_grand_final: m.is_grand_final,
+                    is_reset_match: m.is_reset_match,
+                    suggested_play_order: m.suggested_play_order,
+                });
 
-                if (error) {
-                    console.error("Failed to save internal matches:", error);
-                    return NextResponse.json({ error: 'Failed to save bracket matches' }, { status: 500 });
+                const { error: deleteError } = await supabase
+                    .from('internal_matches')
+                    .delete()
+                    .eq('tournament_id', tournamentId);
+
+                if (deleteError) {
+                    console.error("Failed to clear previous internal matches:", deleteError);
+                    return NextResponse.json(
+                        { error: `Failed to clear previous bracket matches: ${deleteError.message}` },
+                        { status: 500 }
+                    );
+                }
+
+                // Insert without match-to-match references first. Some rows point
+                // forward to generated matches that do not exist until later rows.
+                const { error: insertError } = await supabase
+                    .from('internal_matches')
+                    .insert(matches.map(m => toDbMatch(m, false)));
+
+                if (insertError) {
+                    console.error("Failed to save internal matches:", insertError);
+                    return NextResponse.json(
+                        { error: `Failed to save bracket matches: ${insertError.message}` },
+                        { status: 500 }
+                    );
+                }
+
+                const { error: referenceError } = await supabase
+                    .from('internal_matches')
+                    .upsert(matches.map(m => toDbMatch(m, true)), { onConflict: 'id' });
+
+                if (referenceError) {
+                    console.error("Failed to save internal match references:", referenceError);
+                    await supabase
+                        .from('internal_matches')
+                        .delete()
+                        .eq('tournament_id', tournamentId);
+
+                    return NextResponse.json(
+                        { error: `Failed to save bracket match references: ${referenceError.message}` },
+                        { status: 500 }
+                    );
                 }
             }
 
             // Update Tournament Status & Arena Count
-            await supabase
+            const { error: tournamentUpdateError } = await supabase
                 .from('tournaments')
                 .update({ 
                     status: 'STARTED',
                     arena_count: arenaCount || 0
                 })
                 .eq('id', tournamentId);
+
+            if (tournamentUpdateError) {
+                console.error("Failed to update internal tournament status:", tournamentUpdateError);
+                return NextResponse.json(
+                    { error: `Failed to update tournament status: ${tournamentUpdateError.message}` },
+                    { status: 500 }
+                );
+            }
 
             return NextResponse.json({ success: true, url: `/tournament/${tournamentId}/bracket` });
         }
@@ -124,11 +169,15 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json({ url: result.url, raw_url: result.raw_url });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('API Error:', error);
+        const apiError = error as {
+            response?: { status?: number; data?: { errors?: unknown } };
+            message?: string;
+        };
 
         // Handle Axios 401 specifically
-        if (error.response?.status === 401) {
+        if (apiError.response?.status === 401) {
             return NextResponse.json(
                 { error: 'Invalid Challonge API Key. Please check your settings.' },
                 { status: 401 }
@@ -136,8 +185,8 @@ export async function POST(request: Request) {
         }
 
         // Handle Axios 422 (Unprocessable Entity) - Validation Errors
-        if (error.response?.status === 422) {
-            const validationErrors = error.response.data?.errors;
+        if (apiError.response?.status === 422) {
+            const validationErrors = apiError.response.data?.errors;
             const errorMessage = Array.isArray(validationErrors)
                 ? validationErrors.join(', ')
                 : 'Validation failed on Challonge side.';
@@ -149,7 +198,7 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json(
-            { error: error.message || 'Failed to generate bracket' },
+            { error: apiError.message || 'Failed to generate bracket' },
             { status: 500 }
         );
     }

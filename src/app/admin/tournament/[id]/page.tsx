@@ -381,6 +381,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     const [highlightedLines, setHighlightedLines] = useState<number[]>([]);
     const [dbConflicts, setDbConflicts] = useState<string[]>([]);
     const [internalConflicts, setInternalConflicts] = useState<string[]>([]);
+    const [bulkSuggestions, setBulkSuggestions] = useState<string[]>([]);
+
+    useEffect(() => {
+        const lastName = bulkPlayers.split('\n').at(-1)?.trim() || '';
+        if (!lastName) return setBulkSuggestions([]);
+        const timer = setTimeout(() => {
+            fetch(`/api/public/players/suggestions?q=${encodeURIComponent(lastName)}`)
+                .then(res => res.json())
+                .then(json => setBulkSuggestions((json.suggestions || []).map((player: { display_name: string }) => player.display_name)))
+                .catch(() => setBulkSuggestions([]));
+        }, 180);
+        return () => clearTimeout(timer);
+    }, [bulkPlayers]);
 
     // Calculate duplicates on the fly
     const getDuplicateLines = (text: string) => {
@@ -3696,6 +3709,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     spellCheck={false}
                                 />
                             </div>
+                            {bulkSuggestions.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {bulkSuggestions.map(name => <button key={name} type="button" onClick={() => setBulkPlayers(prev => {
+                                        const lines = prev.split('\n'); lines[lines.length - 1] = name; return lines.join('\n');
+                                    })} className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-primary hover:bg-primary/20">ใช้ชื่อ: {name}</button>)}
+                                </div>
+                            )}
 
                             {/* Error Summary */}
                             {(internalConflicts.length > 0 || dbConflicts.length > 0) && (

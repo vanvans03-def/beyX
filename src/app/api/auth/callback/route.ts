@@ -12,6 +12,18 @@ export async function GET(request: Request) {
     const code = requestUrl.searchParams.get('code');
     const next = requestUrl.searchParams.get('next') || '/admin';
 
+    // Get the base URL for redirection
+    let baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL;
+    if (!baseUrl) {
+        const forwardedHost = request.headers.get('x-forwarded-host');
+        const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
+        if (forwardedHost) {
+            baseUrl = `${forwardedProto}://${forwardedHost}`;
+        } else {
+            baseUrl = requestUrl.origin;
+        }
+    }
+
     if (code) {
         try {
             const supabase = await createServerSideClient();
@@ -20,20 +32,21 @@ export async function GET(request: Request) {
 
             const user = data.user;
             if (!user || !user.email) {
-                return NextResponse.redirect(new URL('/login?error=no_email', request.url));
+                return NextResponse.redirect(new URL('/login?error=no_email', baseUrl));
             }
 
             const email = user.email.toLowerCase();
             const fullName = user.user_metadata?.full_name || user.user_metadata?.name || email.split('@')[0];
 
             // 1. Query the users table for an existing user with this email
-            let { data: dbUser, error: dbError } = await supabaseAdmin
+            const { data: dbUserResult, error: dbError } = await supabaseAdmin
                 .from('users')
                 .select('*')
                 .eq('email', email)
                 .maybeSingle();
 
             if (dbError) throw dbError;
+            let dbUser = dbUserResult;
 
             // 2. If user with email doesn't exist, create a new one
             if (!dbUser) {
@@ -98,9 +111,9 @@ export async function GET(request: Request) {
 
         } catch (err) {
             console.error('OAuth Callback Error:', err);
-            return NextResponse.redirect(new URL('/login?error=oauth_failed', request.url));
+            return NextResponse.redirect(new URL('/login?error=oauth_failed', baseUrl));
         }
     }
 
-    return NextResponse.redirect(new URL(next, request.url));
+    return NextResponse.redirect(new URL(next, baseUrl));
 }

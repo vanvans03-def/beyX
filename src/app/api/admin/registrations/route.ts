@@ -151,6 +151,9 @@ export async function DELETE(req: Request) {
 
 export async function PATCH(req: Request) {
     try {
+        const userId = req.headers.get('x-user-id');
+        const userRole = req.headers.get('x-user-role');
+        if (!userId) return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
         const body = await req.json();
         const { id, player_name } = body;
 
@@ -169,6 +172,16 @@ export async function PATCH(req: Request) {
 
         if (fetchErr || !reg) {
             return NextResponse.json({ success: false, message: "Registration not found" }, { status: 404 });
+        }
+
+        const { data: tournament, error: tournamentError } = await supabaseAdmin
+            .from('tournaments')
+            .select('user_id')
+            .eq('id', reg.tournament_id)
+            .single();
+        if (tournamentError || !tournament) throw new Error('Tournament not found');
+        if (userRole !== 'superadmin' && tournament.user_id !== userId) {
+            return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 403 });
         }
 
         // 2. Fetch all other registrations for the same tournament to check for duplicates

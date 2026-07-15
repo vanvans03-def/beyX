@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw, KeyRound, Users, Shield, Award } from "lucide-react";
+import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw, KeyRound, Users, Shield, Award, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -755,6 +755,13 @@ export default function AdminPage() {
                                     >
                                         <Shield className="w-4 h-4 text-primary" />
                                         <span>Catalog</span>
+                                    </Link>
+                                    <Link
+                                        href="/admin/players"
+                                        className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/5 whitespace-nowrap cursor-pointer"
+                                    >
+                                        <Trophy className="w-4 h-4 text-primary" />
+                                        <span>Players</span>
                                     </Link>
                                 </>
                             ) : (
