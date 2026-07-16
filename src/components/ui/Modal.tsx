@@ -16,6 +16,7 @@ interface ModalProps {
     confirmText?: string;
     cancelText?: string;
     variant?: "default" | "destructive";
+    compact?: boolean;
 }
 
 export function Modal({
@@ -29,7 +30,8 @@ export function Modal({
     onConfirm,
     confirmText,
     cancelText,
-    variant = "default"
+    variant = "default",
+    compact = false
 }: ModalProps) {
     const { t } = useTranslation();
     const [mounted, setMounted] = useState(false);
@@ -58,7 +60,8 @@ export function Modal({
 
     return createPortal(
         <div className={cn(
-            "fixed inset-0 z-[9999] flex items-start justify-center px-4 pt-20 overflow-y-auto transition-all duration-300",
+            "fixed inset-0 z-[9999] flex justify-center overflow-y-auto transition-all duration-300",
+            compact ? "items-center px-3 py-4" : "items-start px-4 pt-20",
             isOpen ? "opacity-100" : "opacity-0"
         )}>
             {/* Backdrop */}
@@ -69,18 +72,19 @@ export function Modal({
 
             {/* Content */}
             <div className={cn(
-                "relative z-10 w-full max-w-md glass-card p-6 rounded-2xl border border-white/10 shadow-2xl transition-all duration-300 transform",
+                "relative z-10 w-full glass-card rounded-2xl border border-white/10 shadow-2xl transition-all duration-300 transform",
+                compact ? "max-w-sm p-3.5 sm:p-4" : "max-w-md p-6",
                 isOpen ? "scale-100 translate-y-0" : "scale-95 translate-y-4"
             )}>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+                <div className={cn("flex items-center justify-between", compact ? "mb-2.5" : "mb-4")}>
+                    <h3 className={cn("font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent", compact ? "text-base" : "text-xl")}>
                         {title}
                     </h3>
                     <button
                         onClick={onClose}
                         className="p-1 hover:bg-white/10 rounded-full transition-colors text-muted-foreground hover:text-white"
                     >
-                        <X className="w-5 h-5" />
+                        <X className={compact ? "w-4 h-4" : "w-5 h-5"} />
                     </button>
                 </div>
 

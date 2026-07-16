@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { ZoomIn, ZoomOut, RefreshCw, Search, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Modal } from '@/components/ui/Modal';
 
 interface InternalMatch {
     id: string;
@@ -28,22 +29,43 @@ interface Props {
 }
 
 type BadgePeriod = { rank: number; period: string };
-type PlayerRankingBadges = { monthly?: number; yearly?: number; winrate?: number; monthlyPeriods?: BadgePeriod[]; winratePeriods?: BadgePeriod[] };
+type BadgeHistoryEntry = {
+    type: 'monthly' | 'yearly' | 'winrate';
+    rank: number;
+    period: string;
+    points?: number;
+    championships?: number;
+    topFour?: number;
+    wins: number;
+    matches: number;
+    winRate?: number;
+};
+type PlayerRankingBadges = {
+    monthly?: number;
+    yearly?: number;
+    winrate?: number;
+    monthlyPeriods?: BadgePeriod[];
+    winratePeriods?: BadgePeriod[];
+    history?: BadgeHistoryEntry[];
+};
 
 const normalizeBadgeName = (name: string) => name.normalize('NFKC').trim().toLocaleLowerCase('th-TH').replace(/\s+/g, ' ');
 
-function RankingBadges({ badges }: { badges?: PlayerRankingBadges }) {
-    if (!badges?.monthly && !badges?.yearly && !badges?.winrate) return null;
-    const BadgeImage = ({ rank, period, history }: { rank: number; period: 'M' | 'Y' | 'W'; history?: BadgePeriod[] }) => <img
+function BadgeImage({ rank, period, history, size = 18 }: { rank: number; period: 'M' | 'Y' | 'W'; history?: BadgePeriod[]; size?: number }) {
+    return <img
         src={`/images/badge/${period === 'W' ? `w${rank}` : `${rank}${period}`}-Photoroom.webp`}
         alt={`${period === 'M' ? 'Monthly' : period === 'Y' ? 'Yearly' : 'Win Rate'} Top ${rank}`}
         title={`${period === 'M' ? 'Monthly' : period === 'Y' ? 'Yearly' : 'Win Rate'} Top ${rank}${history?.length ? `\n${history.map(entry => `${entry.period}: Top ${entry.rank}`).join('\n')}` : ''}`}
-        width={18}
-        height={18}
+        width={size}
+        height={size}
         loading="lazy"
         decoding="async"
-        style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }}
+        style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
     />;
+}
+
+function RankingBadges({ badges }: { badges?: PlayerRankingBadges }) {
+    if (!badges?.monthly && !badges?.yearly && !badges?.winrate) return null;
     return <span style={{ display: 'inline-flex', gap: 2, flexShrink: 0, marginLeft: 3, alignItems: 'center' }}>
         {badges.monthly && <BadgeImage rank={badges.monthly} period="M" history={badges.monthlyPeriods} />}
         {badges.yearly && <BadgeImage rank={badges.yearly} period="Y" />}
@@ -51,11 +73,34 @@ function RankingBadges({ badges }: { badges?: PlayerRankingBadges }) {
     </span>;
 }
 
-function BracketPlayerName({ name, badges, fallback }: { name?: string; badges?: PlayerRankingBadges; fallback: React.ReactNode }) {
+function BracketPlayerName({ name, badges, fallback, onShowBadgeHistory }: {
+    name?: string;
+    badges?: PlayerRankingBadges;
+    fallback: React.ReactNode;
+    onShowBadgeHistory: (name: string, badges: PlayerRankingBadges) => void;
+}) {
+    const hasBadgeHistory = Boolean(badges?.history?.length);
     return <span style={{ display: 'flex', minWidth: 0, flex: 1, alignItems: 'center', fontSize: 13, maxWidth: 158 }}>
-        {name ? <span title={name} style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span> : fallback}
+        {name ? (hasBadgeHistory ? <button
+            type="button"
+            title={name}
+            data-badge-history-player={name}
+            onClick={event => {
+                event.stopPropagation();
+                onShowBadgeHistory(name, badges!);
+            }}
+            style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', border: 0, padding: 0, background: 'transparent', color: 'inherit', font: 'inherit', fontWeight: 'inherit', textAlign: 'left', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(134, 239, 172, .45)', textUnderlineOffset: 2 }}
+        >{name}</button> : <span title={name} style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>) : fallback}
         <RankingBadges badges={badges} />
     </span>;
+}
+
+function formatBadgePeriod(entry: BadgeHistoryEntry, lang: 'TH' | 'EN') {
+    if (entry.type === 'yearly') return lang === 'TH' ? `ปี ${Number(entry.period) + 543}` : entry.period;
+    const [year, month] = entry.period.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(lang === 'TH' ? 'th-TH' : 'en-US', {
+        month: 'long', year: 'numeric', timeZone: 'UTC',
+    });
 }
 
 const CARD_W = 200;
@@ -72,8 +117,21 @@ function cardTopY(slotIdx: number, roundIdx: number, UNIT: number): number {
     return cardCenterY(slotIdx, roundIdx, UNIT) - CARD_H / 2;
 }
 
+function isBracketMatchHidden(match: InternalMatch, allMatches: InternalMatch[]): boolean {
+    const winnerBracketFeeders = allMatches.filter(candidate => candidate.loser_to_match_id === match.id);
+    const isSingleDropBye = winnerBracketFeeders.length === 1
+        && !match.player1_prereq_match_id
+        && !match.player2_prereq_match_id;
+
+    return Boolean(
+        match.scores_csv?.includes('BYE')
+        || (match.state?.toUpperCase() === 'COMPLETE' && (!match.player1_id || !match.player2_id) && !match.is_grand_final)
+        || isSingleDropBye
+    );
+}
+
 // ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t, searchQuery, activeMatchId, badgesByName }: {
+function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t, searchQuery, activeMatchId, badgesByName, onShowBadgeHistory }: {
     match: InternalMatch;
     onReportWin?: (m: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
     matchNum?: number;
@@ -83,6 +141,7 @@ function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t, searc
     searchQuery: string;
     activeMatchId?: string;
     badgesByName: Record<string, PlayerRankingBadges>;
+    onShowBadgeHistory: (name: string, badges: PlayerRankingBadges) => void;
 }) {
     const isOpen = match.state?.toUpperCase() === 'OPEN';
     const isComplete = match.state?.toUpperCase() === 'COMPLETE';
@@ -144,7 +203,7 @@ function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t, searc
                         boxShadow: p1Won ? 'inset 3px 0 0 #86efac' : p1MatchesSearch ? 'inset 3px 0 0 #86efac' : undefined,
                     }}
                 >
-                    <span style={{ display: 'flex', minWidth: 0, flex: 1, color: p2Won ? '#a1a1aa' : '#f4f4f5', fontWeight: p1Won ? 700 : 500 }}><BracketPlayerName name={p1} badges={p1Badges} fallback={
+                    <span style={{ display: 'flex', minWidth: 0, flex: 1, color: p2Won ? '#a1a1aa' : '#f4f4f5', fontWeight: p1Won ? 700 : 500 }}><BracketPlayerName name={p1} badges={p1Badges} onShowBadgeHistory={onShowBadgeHistory} fallback={
                             <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>
                                 {loserOfNums?.[0] !== undefined 
                                     ? t('bracket.loser_of' as any, { n: loserOfNums[0] }) 
@@ -164,7 +223,7 @@ function MatchCard({ match, onReportWin, matchNum, loserOfNums, numMap, t, searc
                         boxShadow: p2Won ? 'inset 3px 0 0 #86efac' : p2MatchesSearch ? 'inset 3px 0 0 #86efac' : undefined,
                     }}
                 >
-                    <span style={{ display: 'flex', minWidth: 0, flex: 1, color: p1Won ? '#a1a1aa' : '#f4f4f5', fontWeight: p2Won ? 700 : 500 }}><BracketPlayerName name={p2} badges={p2Badges} fallback={
+                    <span style={{ display: 'flex', minWidth: 0, flex: 1, color: p1Won ? '#a1a1aa' : '#f4f4f5', fontWeight: p2Won ? 700 : 500 }}><BracketPlayerName name={p2} badges={p2Badges} onShowBadgeHistory={onShowBadgeHistory} fallback={
                             <em style={{ color: '#71717a', fontStyle: 'normal', fontSize: 12 }}>
                                 {loserOfNums?.[1] !== undefined 
                                     ? t('bracket.loser_of' as any, { n: loserOfNums[1] }) 
@@ -193,6 +252,7 @@ function BracketSection({
     searchQuery,
     activeMatchId,
     badgesByName,
+    onShowBadgeHistory,
 }: {
     rounds: { label: string; matches: InternalMatch[]; isQualify: boolean }[];
     onReportWin?: (m: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
@@ -205,9 +265,15 @@ function BracketSection({
     searchQuery: string;
     activeMatchId?: string;
     badgesByName: Record<string, PlayerRankingBadges>;
+    onShowBadgeHistory: (name: string, badges: PlayerRankingBadges) => void;
 }) {
     const r1Count = rounds[0]?.matches.length ?? 0;
     const totalH = r1Count * UNIT + 40;
+    const sectionMatchIds = new Set(rounds.flatMap(round => round.matches.map(match => match.id)));
+    const visibleSectionMatchIds = new Set(rounds.flatMap(round => round.matches)
+        .filter(match => !isBracketMatchHidden(match, allMatches))
+        .map(match => match.id));
+    const connectorPrefix = rounds.some(round => round.matches.some(match => match.round < 0)) ? 'losers' : 'winners';
 
     return (
         <div style={{ display: 'flex', alignItems: 'flex-start' }}>
@@ -217,46 +283,52 @@ function BracketSection({
                 return (
                     <React.Fragment key={ri}>
                         {prevRound && (
-                            <svg width={CONNECTOR_W} height={totalH + 40} style={{ flexShrink: 0, overflow: 'visible', marginTop: 28 }}>
+                            <svg width={CONNECTOR_W} height={totalH + 40} style={{ flexShrink: 0, overflow: 'hidden', marginTop: 28 }}>
                                 <defs>
-                                    <linearGradient id={`bracket-connector-${ri}`} x1="0" x2="1" y1="0" y2="0">
+                                    <linearGradient
+                                        id={`bracket-connector-${connectorPrefix}-${ri}`}
+                                        gradientUnits="userSpaceOnUse"
+                                        x1={0}
+                                        x2={CONNECTOR_W}
+                                        y1={0}
+                                        y2={0}
+                                    >
                                         <stop offset="0%" stopColor="#3f3f46" />
                                         <stop offset="52%" stopColor="#71717a" />
                                         <stop offset="100%" stopColor="#22c55e" />
                                     </linearGradient>
                                 </defs>
                                 {round.matches.map(m => {
-                                    const wbFeedersForMatch = allMatches.filter(wm => wm.loser_to_match_id === m.id);
-                                    const isOnlyOneLBFeeder = wbFeedersForMatch.length === 1 && !m.player1_prereq_match_id && !m.player2_prereq_match_id;
-                                    const isBye = m.scores_csv?.includes('BYE') || isOnlyOneLBFeeder;
-                                    if (isBye) return null;
+                                    if (!visibleSectionMatchIds.has(m.id)) return null;
 
                                     const myY = yMap.get(m.id) ?? 0;
                                     const cx = CONNECTOR_W / 2;
                                     const lines: React.ReactNode[] = [];
 
-                                    // Resolve from the entire graph: a bye or lower-bracket drop can
-                                    // skip a visual column, so limiting this to prevRound hides a line.
+                                    // Each BracketSection has its own coordinate origin. Cross-section
+                                    // drops (WB -> LB and LB -> GF) are represented by player/loser labels,
+                                    // not SVG paths, because their Y values belong to a different canvas.
                                     const prerequisiteFeeders = [m.player1_prereq_match_id, m.player2_prereq_match_id]
                                         .filter((id): id is string => Boolean(id))
                                         .map(id => allMatches.find(candidate => candidate.id === id))
-                                        .filter((candidate): candidate is InternalMatch => Boolean(candidate));
+                                        .filter((candidate): candidate is InternalMatch => Boolean(candidate))
+                                        .filter(candidate => sectionMatchIds.has(candidate.id)
+                                            && visibleSectionMatchIds.has(candidate.id));
                                     const loserFeeders = allMatches.filter(pm =>
                                         pm.loser_to_match_id === m.id &&
-                                        !pm.scores_csv?.includes('BYE') &&
-                                        !(pm.state?.toUpperCase() === 'COMPLETE' && (!pm.player1_id || !pm.player2_id))
+                                        sectionMatchIds.has(pm.id) &&
+                                        visibleSectionMatchIds.has(pm.id)
                                     );
                                     const feederYs = [...new Map([...prerequisiteFeeders, ...loserFeeders]
-                                        .filter(feeder => !feeder.scores_csv?.includes('BYE'))
                                         .map(feeder => [feeder.id, yMap.get(feeder.id)]))
                                         .values()]
                                         .filter((y): y is number => y !== undefined);
 
                                     feederYs.forEach((feederY, idx) => {
-                                        lines.push(<path key={`feeder-${idx}`} d={`M 0 ${feederY} H ${cx} V ${myY}`} fill="none" stroke={`url(#bracket-connector-${ri})`} strokeWidth="1.75" strokeLinejoin="round" />);
+                                        lines.push(<path key={`feeder-${idx}`} d={`M 0 ${feederY} H ${cx} V ${myY}`} fill="none" stroke={`url(#bracket-connector-${connectorPrefix}-${ri})`} strokeWidth="1.75" strokeLinejoin="round" />);
                                     });
                                     if (feederYs.length > 0) {
-                                        lines.push(<path key="out" d={`M ${cx} ${myY} H ${CONNECTOR_W}`} fill="none" stroke={`url(#bracket-connector-${ri})`} strokeWidth="1.75" />);
+                                        lines.push(<path key="out" d={`M ${cx} ${myY} H ${CONNECTOR_W}`} fill="none" stroke={`url(#bracket-connector-${connectorPrefix}-${ri})`} strokeWidth="1.75" />);
                                     }
 
                                     return <g key={m.id}>{lines}</g>;
@@ -277,12 +349,7 @@ function BracketSection({
 
                             <div style={{ position: 'relative', width: CARD_W + 22, height: totalH }}>
                                 {round.matches.map(m => {
-                                    const wbFeedersForMatch = allMatches.filter(wm => wm.loser_to_match_id === m.id);
-                                    const isOnlyOneLBFeeder = wbFeedersForMatch.length === 1 && !m.player1_prereq_match_id && !m.player2_prereq_match_id;
-                                    const isBye = m.scores_csv?.includes('BYE') ||
-                                        (m.state?.toUpperCase() === 'COMPLETE' && (!m.player1_id || !m.player2_id) && !m.is_grand_final) ||
-                                        isOnlyOneLBFeeder;
-                                    if (isBye) return null;
+                                    if (!visibleSectionMatchIds.has(m.id)) return null;
 
                                     const topY = (yMap.get(m.id) ?? 0) - CARD_H / 2;
                                     const num = numMap.get(m.id);
@@ -300,6 +367,7 @@ function BracketSection({
                                                 searchQuery={searchQuery}
                                                 activeMatchId={activeMatchId}
                                                 badgesByName={badgesByName}
+                                                onShowBadgeHistory={onShowBadgeHistory}
                                             />
                                         </div>
                                     );
@@ -315,7 +383,7 @@ function BracketSection({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
-    const { t } = useTranslation();
+    const { t, lang } = useTranslation();
     
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -326,6 +394,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchLane, setSearchLane] = useState<'upper' | 'lower'>('upper');
     const [badgesByName, setBadgesByName] = useState<Record<string, PlayerRankingBadges>>({});
+    const [selectedBadgeHistory, setSelectedBadgeHistory] = useState<{ name: string; badges: PlayerRankingBadges } | null>(null);
 
     useEffect(() => {
         const names = [...new Set(matches.flatMap(match => [match.player1?.name, match.player2?.name]).filter((name): name is string => Boolean(name?.trim())))];
@@ -1111,18 +1180,57 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
                     {winnersRounds.length > 0 && (
                         <div style={{ marginBottom: isDoubleElim ? 80 : 0 }}>
                             {isDoubleElim && <SectionDivider>{t('admin.matches.winner_bracket' as any)}</SectionDivider>}
-                            <BracketSection rounds={winnersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} searchQuery={searchQuery} activeMatchId={activeMatchId} badgesByName={badgesByName} />
+                            <BracketSection rounds={winnersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} searchQuery={searchQuery} activeMatchId={activeMatchId} badgesByName={badgesByName} onShowBadgeHistory={(name, badges) => setSelectedBadgeHistory({ name, badges })} />
                         </div>
                     )}
 
                     {losersRounds.length > 0 && (
                         <div>
                             <SectionDivider>{t('admin.matches.loser_bracket' as any)}</SectionDivider>
-                            <BracketSection rounds={losersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} searchQuery={searchQuery} activeMatchId={activeMatchId} badgesByName={badgesByName} />
+                            <BracketSection rounds={losersRounds} onReportWin={onReportWin} slotMap={slotMap} UNIT={UNIT} numMap={numMap} allMatches={matches} yMap={yMap} t={t} searchQuery={searchQuery} activeMatchId={activeMatchId} badgesByName={badgesByName} onShowBadgeHistory={(name, badges) => setSelectedBadgeHistory({ name, badges })} />
                         </div>
                     )}
                 </div>
             </div>
+            <Modal
+                isOpen={Boolean(selectedBadgeHistory)}
+                onClose={() => setSelectedBadgeHistory(null)}
+                title={`${t('bracket.badge_history' as any)} — ${selectedBadgeHistory?.name || ''}`}
+                type="custom"
+                compact
+            >
+                <div data-badge-history-modal style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 'min(70dvh, 540px)', overflowY: 'auto', paddingRight: 1 }}>
+                    {selectedBadgeHistory?.badges.history?.map((entry, index) => {
+                        const periodCode = entry.type === 'monthly' ? 'M' : entry.type === 'yearly' ? 'Y' : 'W';
+                        const typeLabel = entry.type === 'monthly'
+                            ? t('rankings.monthly' as any)
+                            : entry.type === 'yearly'
+                                ? t('rankings.yearly' as any)
+                                : t('rankings.winrate' as any);
+                        return <div
+                            key={`${entry.type}-${entry.period}-${index}`}
+                            data-badge-history-entry={`${entry.type}:${entry.period}:${entry.rank}`}
+                            style={{ display: 'flex', gap: 9, alignItems: 'center', padding: 9, borderRadius: 10, border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.035)' }}
+                        >
+                            <BadgeImage rank={entry.rank} period={periodCode} size={38} />
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'baseline' }}>
+                                    <strong style={{ color: '#f4f4f5', fontSize: 12 }}>{typeLabel} · {t('bracket.badge_rank' as any)} {entry.rank}</strong>
+                                    <span style={{ color: '#a1a1aa', fontSize: 10, whiteSpace: 'nowrap' }}>{formatBadgePeriod(entry, lang)}</span>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', marginTop: 4, color: '#d4d4d8', fontSize: 10 }}>
+                                    {entry.winRate !== undefined && <span>{t('rankings.winrate' as any)} <strong style={{ color: '#86efac' }}>{entry.winRate.toFixed(2)}%</strong></span>}
+                                    {entry.points !== undefined && <span>{t('rankings.points' as any)} <strong>{entry.points}</strong></span>}
+                                    {entry.championships !== undefined && <span>{t('rankings.championships' as any)} <strong>{entry.championships}</strong></span>}
+                                    {entry.topFour !== undefined && <span>{t('rankings.top4_total' as any)} <strong>{entry.topFour}</strong></span>}
+                                    <span>{t('rankings.wins' as any)} <strong>{entry.wins}</strong></span>
+                                    <span>{t('rankings.matches' as any)} <strong>{entry.matches}</strong></span>
+                                </div>
+                            </div>
+                        </div>;
+                    })}
+                </div>
+            </Modal>
         </div>
     );
 }
