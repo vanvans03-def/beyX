@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/utils/supabase/client';
 
@@ -23,8 +24,8 @@ export default function LoginPage() {
                 },
             });
             if (error) throw error;
-        } catch (error: any) {
-            toast.error(error.message || "Failed to sign in with Google");
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to sign in with Google");
         }
     };
 
@@ -64,7 +65,7 @@ export default function LoginPage() {
             } else {
                 toast.error(data.error || 'Login failed');
             }
-        } catch (error) {
+        } catch {
             toast.error("Something went wrong");
         } finally {
             setLoading(false);
@@ -77,7 +78,15 @@ export default function LoginPage() {
             <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] animate-pulse-slow" />
             <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] animate-pulse-slow delay-1000" />
 
-            <div className="w-full max-w-md space-y-8 relative z-10">
+            <div className="w-full max-w-md space-y-6 sm:space-y-8 relative z-10">
+                <Link
+                    href="/"
+                    className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-gray-300 backdrop-blur-sm transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    กลับหน้าแรก / Home
+                </Link>
+
                 <div className="text-center space-y-2">
                     <div className="mx-auto w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 mb-6 backdrop-blur-sm">
                         <ShieldCheck className="w-8 h-8 text-primary" />
