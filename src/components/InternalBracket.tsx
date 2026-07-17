@@ -26,6 +26,8 @@ interface Props {
     matches: InternalMatch[];
     onReportWin?: (match: InternalMatch, winnerId: string, winnerName: string, scores: string) => void;
     provider?: string;
+    tournamentId?: string;
+    participantNames?: string[];
 }
 
 type BadgePeriod = { rank: number; period: string };
@@ -51,7 +53,7 @@ type PlayerRankingBadges = {
 
 const normalizeBadgeName = (name: string) => name.normalize('NFKC').trim().toLocaleLowerCase('th-TH').replace(/\s+/g, ' ');
 
-function BadgeImage({ rank, period, history, size = 18 }: { rank: number; period: 'M' | 'Y' | 'W'; history?: BadgePeriod[]; size?: number }) {
+function BadgeImage({ rank, period, history, size = 18, muted = false }: { rank: number; period: 'M' | 'Y' | 'W'; history?: BadgePeriod[]; size?: number; muted?: boolean }) {
     return <img
         src={`/images/badge/${period === 'W' ? `w${rank}` : `${rank}${period}`}-Photoroom.webp`}
         alt={`${period === 'M' ? 'Monthly' : period === 'Y' ? 'Yearly' : 'Win Rate'} Top ${rank}`}
@@ -60,7 +62,15 @@ function BadgeImage({ rank, period, history, size = 18 }: { rank: number; period
         height={size}
         loading="lazy"
         decoding="async"
-        style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
+        data-badge-muted={muted ? 'true' : undefined}
+        style={{
+            width: size,
+            height: size,
+            objectFit: 'contain',
+            flexShrink: 0,
+            filter: muted ? 'grayscale(1)' : undefined,
+            opacity: muted ? 0.58 : 1,
+        }}
     />;
 }
 
@@ -101,6 +111,12 @@ function formatBadgePeriod(entry: BadgeHistoryEntry, lang: 'TH' | 'EN') {
     return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(lang === 'TH' ? 'th-TH' : 'en-US', {
         month: 'long', year: 'numeric', timeZone: 'UTC',
     });
+}
+
+function sortBadgeHistory(entries: BadgeHistoryEntry[] = []) {
+    return [...entries].sort((a, b) =>
+        Number(b.type === 'yearly') - Number(a.type === 'yearly')
+    );
 }
 
 const CARD_W = 200;
@@ -382,7 +398,7 @@ function BracketSection({
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
+const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, participantNames }) => {
     const { t, lang } = useTranslation();
     
     const containerRef = useRef<HTMLDivElement>(null);
@@ -395,19 +411,27 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
     const [searchLane, setSearchLane] = useState<'upper' | 'lower'>('upper');
     const [badgesByName, setBadgesByName] = useState<Record<string, PlayerRankingBadges>>({});
     const [selectedBadgeHistory, setSelectedBadgeHistory] = useState<{ name: string; badges: PlayerRankingBadges } | null>(null);
+    const badgePlayerKey = JSON.stringify(
+        [...new Set((participantNames?.length
+            ? participantNames
+            : matches.flatMap(match => [match.player1?.name, match.player2?.name])
+        ).filter((name): name is string => Boolean(name?.trim())))]
+            .sort((a, b) => normalizeBadgeName(a).localeCompare(normalizeBadgeName(b), 'th')),
+    );
 
     useEffect(() => {
-        const names = [...new Set(matches.flatMap(match => [match.player1?.name, match.player2?.name]).filter((name): name is string => Boolean(name?.trim())))];
+        const names = JSON.parse(badgePlayerKey) as string[];
         if (!names.length) { setBadgesByName({}); return; }
         const params = new URLSearchParams();
         names.forEach(name => params.append('name', name));
+        if (tournamentId) params.set('tournamentId', tournamentId);
         let cancelled = false;
         fetch(`/api/public/rankings/badges?${params.toString()}`)
             .then(response => response.ok ? response.json() : { badges: {} })
             .then(data => { if (!cancelled) setBadgesByName(data.badges || {}); })
             .catch(() => { if (!cancelled) setBadgesByName({}); });
         return () => { cancelled = true; };
-    }, [matches]);
+    }, [badgePlayerKey, tournamentId]);
 
     const currentPosition = useRef({ x: 40, y: 40 });
     const scaleRef = useRef(0.85);
@@ -1200,8 +1224,14 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
                 compact
             >
                 <div data-badge-history-modal style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 'min(70dvh, 540px)', overflowY: 'auto', paddingRight: 1 }}>
-                    {selectedBadgeHistory?.badges.history?.map((entry, index) => {
+                    {sortBadgeHistory(selectedBadgeHistory?.badges.history).map((entry, index) => {
                         const periodCode = entry.type === 'monthly' ? 'M' : entry.type === 'yearly' ? 'Y' : 'W';
+                        const now = new Date();
+                        const currentMonth = now.toISOString().slice(0, 7);
+                        const currentYear = String(now.getUTCFullYear());
+                        const isCurrent = entry.type === 'yearly'
+                            ? entry.period === currentYear
+                            : entry.period === currentMonth;
                         const typeLabel = entry.type === 'monthly'
                             ? t('rankings.monthly' as any)
                             : entry.type === 'yearly'
@@ -1212,7 +1242,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin }) => {
                             data-badge-history-entry={`${entry.type}:${entry.period}:${entry.rank}`}
                             style={{ display: 'flex', gap: 9, alignItems: 'center', padding: 9, borderRadius: 10, border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.035)' }}
                         >
-                            <BadgeImage rank={entry.rank} period={periodCode} size={38} />
+                            <BadgeImage rank={entry.rank} period={periodCode} size={38} muted={!isCurrent} />
                             <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'baseline' }}>
                                     <strong style={{ color: '#f4f4f5', fontSize: 12 }}>{typeLabel} · {t('bracket.badge_rank' as any)} {entry.rank}</strong>

@@ -310,7 +310,12 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         ) : tournament.provider === 'INTERNAL' ? (
                             <div className="absolute inset-0">
                                 {matches.length > 0 ? (
-                                    <InternalBracket matches={matches} provider={tournament.provider} />
+                                    <InternalBracket
+                                        matches={matches}
+                                        provider={tournament.provider}
+                                        tournamentId={tournament.id}
+                                        participantNames={registrations.map(player => player.player_name)}
+                                    />
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                                         <MonitorPlay className="w-12 h-12 mb-4 opacity-50" />

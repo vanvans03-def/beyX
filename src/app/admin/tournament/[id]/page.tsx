@@ -2129,6 +2129,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             url={bracketUrl}
                             provider={tournament?.provider}
                             matches={matches}
+                            tournamentId={id}
+                            participantNames={data.map(player => player.player_name)}
                             onReportWin={(match, winnerId, winnerName, scores) => {
                                 handleUpdateMatch(match.id, scores, winnerId, winnerName);
                             }}

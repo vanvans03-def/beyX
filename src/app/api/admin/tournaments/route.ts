@@ -3,6 +3,7 @@ import { createTournament, getTournaments, getTournament, updateTournamentStatus
 import { finalizeTournament, getTournamentStandings } from "@/lib/challonge";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getInternalTopFour, recordTournamentResults } from "@/lib/player-rankings";
+import { refreshPlayerWinRateTotals } from '@/lib/player-win-rate-totals';
 
 export const dynamic = 'force-dynamic';
 
@@ -198,6 +199,10 @@ export async function PATCH(req: Request) {
                 const standings = await getTournamentStandings(apiKey, identifier);
                 await recordTournamentResults(tournament.id, 'CHALLONGE', standings, completedAt);
             }
+
+            // Rankings are intentionally rebuilt once, after the final results have
+            // been recorded. Match updates must stay lightweight during live play.
+            await refreshPlayerWinRateTotals();
         }
 
         await updateTournamentStatus(body.tournamentId, body.status);

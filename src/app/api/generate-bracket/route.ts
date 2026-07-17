@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { setupAndStartTournament } from '@/lib/challonge';
 import { getUserApiKey, getTournament, getRegistrations, getParticipantOrder } from '@/lib/repository';
 import { generateSingleElimination, generateDoubleElimination, type InternalMatch } from '@/lib/brackets';
+import { createTournamentBadgeSnapshot } from '@/lib/tournament-badge-snapshot';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
             }
 
             const participants = orderedRegistrations.map(r => ({ id: r.id, name: r.player_name }));
+            await createTournamentBadgeSnapshot(tournamentId, participants.map(participant => participant.name));
 
             let matches: InternalMatch[] = [];
             if (tournament.bracket_type === 'DOUBLE') {
@@ -151,6 +153,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Players list is required and must be an array' }, { status: 400 });
         }
 
+        await createTournamentBadgeSnapshot(
+            tournamentId,
+            players.map((player: { username?: string }) => player.username || '').filter(Boolean),
+        );
         const result = await setupAndStartTournament(apiKey, roomName, players, { type, shuffle, quickAdvance });
 
         // Save to Database if tournamentId provided

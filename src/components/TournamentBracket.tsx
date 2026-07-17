@@ -6,9 +6,11 @@ interface TournamentBracketProps {
     provider?: 'CHALLONGE' | 'INTERNAL';
     matches?: any[];
     onReportWin?: (match: any, winnerId: string, winnerName: string, scores: string) => void;
+    tournamentId?: string;
+    participantNames?: string[];
 }
 
-const TournamentBracket: React.FC<TournamentBracketProps> = ({ url, provider = 'CHALLONGE', matches = [], onReportWin }) => {
+const TournamentBracket: React.FC<TournamentBracketProps> = ({ url, provider = 'CHALLONGE', matches = [], onReportWin, tournamentId, participantNames }) => {
     if (provider === 'INTERNAL') {
         return (
             <div className="space-y-4">
@@ -19,7 +21,7 @@ const TournamentBracket: React.FC<TournamentBracketProps> = ({ url, provider = '
                         <span className="text-[10px] text-muted-foreground uppercase">Real-time Connected</span>
                     </div>
                 </div>
-                <InternalBracket matches={matches} onReportWin={onReportWin} />
+                <InternalBracket matches={matches} onReportWin={onReportWin} tournamentId={tournamentId} participantNames={participantNames} />
             </div>
         );
     }
