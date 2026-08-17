@@ -4,6 +4,7 @@ import { setupAndStartTournament } from '@/lib/challonge';
 import { getUserApiKey, getTournament, getRegistrations, getParticipantOrder } from '@/lib/repository';
 import { generateSingleElimination, generateDoubleElimination, type InternalMatch } from '@/lib/brackets';
 import { createTournamentBadgeSnapshot } from '@/lib/tournament-badge-snapshot';
+import { invalidateTournamentCache } from '@/lib/redis';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,9 +52,6 @@ export async function POST(request: Request) {
             }
 
             // Save Matches to internal_matches
-            // NOTE: suggested_play_order is already computed by generateDoubleElimination /
-            // generateSingleElimination with correct phase-interleaved ordering — do NOT
-            // override it with the flat array index here.
             if (matches.length > 0) {
                 const toDbMatch = (m: InternalMatch, includeSelfReferences: boolean) => ({
                     id: m.id,
@@ -87,8 +85,6 @@ export async function POST(request: Request) {
                     );
                 }
 
-                // Insert without match-to-match references first. Some rows point
-                // forward to generated matches that do not exist until later rows.
                 const { error: insertError } = await supabase
                     .from('internal_matches')
                     .insert(matches.map(m => toDbMatch(m, false)));
@@ -136,6 +132,9 @@ export async function POST(request: Request) {
                 );
             }
 
+            // Invalidate Redis cache for new bracket
+            await invalidateTournamentCache(tournamentId);
+
             return NextResponse.json({ success: true, url: `/tournament/${tournamentId}/bracket` });
         }
 
@@ -172,6 +171,8 @@ export async function POST(request: Request) {
                 .eq('id', tournamentId);
 
             if (error) console.error("Failed to save URL to DB:", error);
+
+            await invalidateTournamentCache(tournamentId);
         }
 
         return NextResponse.json({ url: result.url, raw_url: result.raw_url });
@@ -182,7 +183,6 @@ export async function POST(request: Request) {
             message?: string;
         };
 
-        // Handle Axios 401 specifically
         if (apiError.response?.status === 401) {
             return NextResponse.json(
                 { error: 'Invalid Challonge API Key. Please check your settings.' },
@@ -190,7 +190,6 @@ export async function POST(request: Request) {
             );
         }
 
-        // Handle Axios 422 (Unprocessable Entity) - Validation Errors
         if (apiError.response?.status === 422) {
             const validationErrors = apiError.response.data?.errors;
             const errorMessage = Array.isArray(validationErrors)

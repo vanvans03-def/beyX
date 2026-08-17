@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { invalidateRegisterConfigCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,8 @@ export async function POST(req: Request) {
                 if (error) throw error;
             }
         }
+
+        await invalidateRegisterConfigCache();
 
         return NextResponse.json({ success: true });
     } catch (e: any) {

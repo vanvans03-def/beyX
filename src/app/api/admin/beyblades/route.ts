@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { invalidateRegisterConfigCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +51,8 @@ export async function POST(req: Request) {
 
         if (error) throw error;
 
+        await invalidateRegisterConfigCache();
+
         return NextResponse.json({ success: true, beyblade: data });
     } catch (e: any) {
         console.error("POST beyblade error:", e);
@@ -89,6 +92,8 @@ export async function PATCH(req: Request) {
 
         if (error) throw error;
 
+        await invalidateRegisterConfigCache();
+
         return NextResponse.json({ success: true, beyblade: data });
     } catch (e: any) {
         console.error("PATCH beyblade error:", e);
@@ -117,6 +122,8 @@ export async function DELETE(req: Request) {
             .eq('id', id);
 
         if (error) throw error;
+
+        await invalidateRegisterConfigCache();
 
         return NextResponse.json({ success: true });
     } catch (e: any) {

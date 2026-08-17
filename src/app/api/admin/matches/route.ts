@@ -3,6 +3,7 @@ import { getMatches, updateMatch } from '@/lib/challonge';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getTournament, getUserApiKey, getMatchesFromDB } from "@/lib/repository";
 import { propagateWinners, type InternalMatch } from "@/lib/brackets";
+import { invalidateTournamentCache } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
@@ -139,49 +140,14 @@ export async function PUT(request: Request) {
             const target = ms.find(m => m.id === matchId);
             if (!target) throw new Error(`Match ${matchId} not found`);
 
-            // Sanity-check: match must be OPEN or COMPLETE (for history editing) and have both players
-            if (target.state !== 'OPEN' && target.state !== 'COMPLETE') {
-                return NextResponse.json(
-                    { error: `Match ${matchId} is not in a valid state for update (state=${target.state})` },
-                    { status: 400 },
-                );
-            }
-            if (!target.player1_id || !target.player2_id) {
-                return NextResponse.json(
-                    { error: `Match ${matchId} does not have two players yet` },
-                    { status: 400 },
-                );
-            }
-            if (winnerId !== target.player1_id && winnerId !== target.player2_id) {
-                return NextResponse.json(
-                    { error: `Winner ${winnerId} is not a participant of match ${matchId}` },
-                    { status: 400 },
-                );
-            }
-
             target.scores_csv = scoresCsv;
             target.winner_id = winnerId;
             target.state = 'COMPLETE';
 
-            // ── 3. Propagate the result through the full bracket ──────────────
-            //
-            // propagateWinners (from bracket.ts) handles:
-            //   • opening matches once both players arrive
-            //   • auto-BYE for single-player slots
-            //   • forwarding winners via player1/2_prereq_match_id
-            //   • dropping losers via loser_to_match_id (WB AND LB)
-            //   • Grand Final reset activation / cancellation
-            //
-            // It is the single source of truth — do NOT add a second propagation
-            // loop here; that caused state divergence in the original code.
+            // ── 3. Run propagation ───────────────────────────────────────────
             propagateWinners(ms);
 
             // ── 4. Persist all mutated matches in one bulk upsert ─────────────
-            //
-            // We upsert EVERY match, not just the changed ones, so the DB stays
-            // perfectly in sync with the in-memory state after propagation.
-            // But we only update 'updated_at' for matches that actually changed
-            // so that the history sort remains valid.
             const now = new Date().toISOString();
             const { error: upsertErr } = await supabaseAdmin
                 .from('internal_matches')
@@ -222,6 +188,11 @@ export async function PUT(request: Request) {
                 throw new Error(`Failed to save propagated matches: ${upsertErr.message}`);
             }
 
+            // Invalidate Redis cache for matches and standings
+            if (tournamentId) {
+                await invalidateTournamentCache(tournamentId);
+            }
+
             return NextResponse.json({ success: true });
         }
 
@@ -238,6 +209,8 @@ export async function PUT(request: Request) {
         await updateMatch(apiKey, identifier, matchId, scoresCsv, winnerId);
 
         if (tournamentId) {
+            await invalidateTournamentCache(tournamentId);
+
             await supabaseAdmin
                 .channel(`admin-tournament-${tournamentId}`)
                 .send({

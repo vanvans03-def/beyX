@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { getCachedData, setCachedData } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,11 @@ export async function GET(req: Request) {
     }
 
     try {
+        const cacheKey = `register:config:${tournamentId}`;
+        const cachedResponse = await getCachedData<any>(cacheKey);
+        if (cachedResponse) {
+            return NextResponse.json(cachedResponse);
+        }
         // Fetch tournament to find its user_id and tournament format type
         let query = supabaseAdmin.from('tournaments').select('user_id, ban_list, type');
         const looksLikeUUID = tournamentId.includes('-') || (tournamentId.length === 36 || tournamentId.length === 32);
@@ -71,12 +77,16 @@ export async function GET(req: Request) {
         // Resolved ban list
         const resolvedBanList = resolved.filter(b => b.is_banned).map(b => b.name);
 
-        return NextResponse.json({
+        const responseData = {
             success: true,
             beyblades: resolved,
             banList: resolvedBanList,
             cxEnabled: cxEnabled
-        });
+        };
+
+        await setCachedData(cacheKey, responseData, 3600);
+
+        return NextResponse.json(responseData);
     } catch (e: any) {
         console.error("GET register config error:", e);
         return NextResponse.json({ error: e.message }, { status: 500 });

@@ -2,12 +2,20 @@ import { NextResponse } from "next/server";
 import { getTournament, getUserApiKey } from "@/lib/repository";
 import { getTournamentStandings } from "@/lib/challonge";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getCachedData, setCachedData } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
+
+        const cacheKey = `tournament:${id}:standings`;
+        const cachedResponse = await getCachedData<{ success: boolean; data: any[] }>(cacheKey);
+        if (cachedResponse) {
+            return NextResponse.json(cachedResponse);
+        }
+
         const tournament = await getTournament(id);
 
         if (!tournament) {
@@ -109,7 +117,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                 }
             }
 
-            return NextResponse.json({ success: true, data: standings });
+            const responseData = { success: true, data: standings };
+            await setCachedData(cacheKey, responseData, 3600);
+            return NextResponse.json(responseData);
         }
 
         if (!tournament.challonge_url) {
@@ -130,7 +140,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         if (!apiKey) throw new Error("Challonge API Key not found for user");
 
         const standings = await getTournamentStandings(apiKey, identifier);
-        return NextResponse.json({ success: true, data: standings });
+        const responseData = { success: true, data: standings };
+        await setCachedData(cacheKey, responseData, 3600);
+        return NextResponse.json(responseData);
 
     } catch (error: any) {
         console.error("GET Public Standings Error:", error);

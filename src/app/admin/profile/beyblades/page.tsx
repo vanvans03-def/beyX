@@ -34,6 +34,12 @@ export default function CustomScoringPage() {
     const [activeTab, setActiveTab] = useState<'beyblades' | 'attachments'>('beyblades');
     const [subFilter, setSubFilter] = useState<string>('All');
 
+    // Count items where superadmin global changed but user has custom override
+    const globalUpdatedCount = beyblades.filter(b =>
+        b.custom_points_standard !== null &&
+        b.custom_points_standard !== b.points_standard
+    ).length;
+
     useEffect(() => {
         const savedMode = localStorage.getItem('custom_scoring_view_mode') as 'grid' | 'list';
         if (savedMode) {
@@ -253,6 +259,21 @@ export default function CustomScoringPage() {
                     </div>
                 )}
 
+                {/* Superadmin Global Score Update Notification */}
+                {globalUpdatedCount > 0 && (
+                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-3 sm:p-4 flex gap-3 text-xs sm:text-sm text-blue-400">
+                        <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5 text-blue-400" />
+                        <div>
+                            <span className="font-bold">{lang === 'TH' ? `มีอัปเดตคะแนนจาก Super Admin (${globalUpdatedCount} รายการ)` : `Superadmin updated ${globalUpdatedCount} item(s)`}</span>
+                            <p className="text-blue-300/70 mt-1 leading-relaxed text-[11px] sm:text-xs">
+                                {lang === 'TH'
+                                    ? 'รายการที่มีแถบสีน้ำเงิน (↑) หมายถึงคะแนน Global ถูกอัปเดตโดย Super Admin แต่คุณมีค่า Custom อยู่ คุณสามารถเลือกรับค่าใหม่หรือคงค่า Custom ของคุณไว้ได้'
+                                    : 'Items marked with (↑) have their global score updated by Superadmin but you have a custom override. You can adopt the new value or keep your custom value.'}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Rules Settings Card */}
                 <div className="bg-[#111111]/40 border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
@@ -415,7 +436,7 @@ export default function CustomScoringPage() {
                                                 <h3 className="font-bold text-xs sm:text-sm truncate text-white max-w-[120px] xs:max-w-[150px] sm:max-w-none" title={bey.name}>
                                                     {bey.name}
                                                 </h3>
-                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                                     <span className="text-[9px] text-gray-500 font-bold uppercase">
                                                         {t('custom_scoring.standard_point')}: {bey.points_standard}p
                                                     </span>
@@ -423,6 +444,17 @@ export default function CustomScoringPage() {
                                                         <span className="bg-primary text-black font-black text-[7px] px-1 rounded tracking-wide uppercase">
                                                             Mod
                                                         </span>
+                                                    )}
+                                                    {/* Global update notification */}
+                                                    {bey.custom_points_standard !== null && bey.custom_points_standard !== bey.points_standard && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleUpdatePoints(bey.id, String(bey.points_standard))}
+                                                            className="flex items-center gap-0.5 bg-blue-500/20 text-blue-400 font-black text-[7px] px-1.5 py-0.5 rounded tracking-wide uppercase border border-blue-500/30 hover:bg-blue-500/30 transition-colors cursor-pointer"
+                                                            title={lang === 'TH' ? `Global อัปเดตเป็น ${bey.points_standard}p กด Apply เพื่อรับค่าใหม่` : `Global updated to ${bey.points_standard}p — click to apply`}
+                                                        >
+                                                            ↑Global {bey.points_standard}p
+                                                        </button>
                                                     )}
                                                 </div>
                                             </div>

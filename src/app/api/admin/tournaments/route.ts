@@ -211,3 +211,37 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ success: false, error: e.message }, { status: 500 });
     }
 }
+
+export async function DELETE(req: Request) {
+    try {
+        const userId = req.headers.get('x-user-id');
+        if (!userId) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+
+        const { searchParams } = new URL(req.url);
+        const id = searchParams.get("id");
+        if (!id) return NextResponse.json({ success: false, message: "Tournament ID required" }, { status: 400 });
+
+        // Verify ownership
+        const tournament = await getTournament(id);
+        if (!tournament) return NextResponse.json({ success: false, message: "Tournament not found" }, { status: 404 });
+        if (tournament.user_id && tournament.user_id !== userId) {
+            return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+        }
+
+        // Block deletion of started/completed tournaments
+        if (tournament.status === 'STARTED') {
+            return NextResponse.json({ success: false, message: "ไม่สามารถลบทัวร์นาเมนต์ที่กำลังแข่งขัน กรุณา reset ก่อน" }, { status: 400 });
+        }
+
+        // Delete registrations first (cascade)
+        await supabaseAdmin.from('registrations').delete().eq('tournament_id', id);
+
+        // Delete the tournament
+        const { error } = await supabaseAdmin.from('tournaments').delete().eq('id', id);
+        if (error) throw new Error(error.message);
+
+        return NextResponse.json({ success: true });
+    } catch (e: any) {
+        return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    }
+}

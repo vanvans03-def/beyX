@@ -492,9 +492,12 @@ export function RegistrationView({
                             const fallbackBans = banList || gameData.banList;
                             const effectiveBans = (beybladesList && beybladesList.length > 0) ? dynamicBanList : fallbackBans;
                             const isBanned = (activeP.mode === 'NoMoreMeta') && (effectiveBans.includes(bey.name) || bey.is_banned);
+                            // Lookup image_url from DB beybladesList for newly uploaded images
+                            const dbBey = beybladesList?.find((b: any) => b.name === bey.name);
 
                             return {
                                 ...bey,
+                                image_url: dbBey?.image_url || bey.image_url,
                                 blocked: isSelectedInCurrentDeck || isBanned
                             };
                         })}

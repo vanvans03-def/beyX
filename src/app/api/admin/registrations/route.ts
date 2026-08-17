@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRegistrations, deleteRegistration, createRegistration, getTournament } from "@/lib/repository";
 import { v4 as uuidv4 } from 'uuid';
 import { supabaseAdmin } from "@/lib/supabase";
+import { invalidateTournamentCache } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
@@ -130,6 +131,8 @@ export async function POST(req: Request) {
             });
         }
 
+        await invalidateTournamentCache(tournamentId);
+
         return NextResponse.json({ success: true, message: `Registered ${trimmedPlayers.length} players successfully` });
     } catch (error: unknown) {
         console.error("Bulk Registration Error:", error);
@@ -207,6 +210,8 @@ export async function PATCH(req: Request) {
             .eq('id', id);
 
         if (error) throw error;
+
+        await invalidateTournamentCache(reg.tournament_id);
 
         return NextResponse.json({ success: true });
     } catch (error: unknown) {

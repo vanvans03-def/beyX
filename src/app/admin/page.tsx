@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw, KeyRound, Users, Shield, Award, Trophy } from "lucide-react";
+import { Loader2, Plus, QrCode, Copy, LockKeyhole, ArrowRight, ExternalLink, Clock, UserPlus, Store, Pencil, Check, X, Key, RotateCcw, KeyRound, Users, Shield, Award, Trophy, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -536,6 +536,42 @@ export default function AdminPage() {
         });
     };
 
+    const handleDeleteTournament = (t: Tournament) => {
+        if (isStarted(t)) {
+            setModalConfig({
+                isOpen: true,
+                title: "ไม่สามารถลบได้",
+                desc: "ไม่สามารถลบทัวร์นาเมนต์ที่กำลังแข่งขัน กรุณา reset ก่อน",
+                type: "alert",
+                variant: "destructive"
+            });
+            return;
+        }
+        setModalConfig({
+            isOpen: true,
+            title: "ลบทัวร์นาเมนต์?",
+            desc: `คุณแน่ใจหรือไม่ที่จะลบ "${t.name}"? การลบจะลบข้อมูลการลงทะเบียนทั้งหมด และไม่สามารถกู้คืนได้`,
+            type: "confirm",
+            variant: "destructive",
+            confirmText: "ลบถาวร",
+            onConfirm: async () => {
+                setModalConfig(prev => ({ ...prev, isOpen: false }));
+                try {
+                    const res = await fetch(`/api/admin/tournaments?id=${t.id}`, { method: "DELETE" });
+                    const json = await res.json();
+                    if (res.ok && json.success) {
+                        toast.success("ลบทัวร์นาเมนต์เรียบร้อยแล้ว");
+                        fetchTournaments();
+                    } else {
+                        toast.error(json.message || json.error || "ลบไม่สำเร็จ");
+                    }
+                } catch {
+                    toast.error("เกิดข้อผิดพลาด");
+                }
+            }
+        });
+    };
+
     const handleReopenTournament = (t: Tournament) => {
         setModalConfig({
             isOpen: true,
@@ -982,6 +1018,16 @@ export default function AdminPage() {
                                                                 >
                                                                     {isStarted(t) ? <RotateCcw className="h-5 w-5" /> : <X className="h-5 w-5" />}
                                                                 </button>
+
+                                                                {!isStarted(t) && (
+                                                                    <button
+                                                                        onClick={() => handleDeleteTournament(t)}
+                                                                        className="p-2 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-lg transition-colors"
+                                                                        title="Delete Tournament"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                             <Link
                                                                 href={`/admin/tournament/${t.id}`}
@@ -1088,6 +1134,13 @@ export default function AdminPage() {
                                                                                 <span className="hidden md:inline">Re-open</span>
                                                                             </button>
                                                                         )}
+                                                                        <button
+                                                                            onClick={() => handleDeleteTournament(t)}
+                                                                            className="p-2 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-lg transition-colors"
+                                                                            title="Delete Tournament"
+                                                                        >
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        </button>
                                                                         <Link
                                                                             href={`/admin/tournament/${t.id}`}
                                                                             className="bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2"

@@ -239,6 +239,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                     return (
                         <div
                             key={player.id}
+                            data-testid={`score-player-${player.id}`}
                             className={cn(
                                 "flex-1 flex flex-col relative transition-all duration-500 ease-in-out min-h-0",
                                 // Border logic
@@ -264,7 +265,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                                     <div className={cn(
                                         "text-[150px] landscape:text-[250px] md:text-[400px] leading-none font-black text-white drop-shadow-2xl tabular-nums transition-transform duration-150 z-[1] relative select-none flex items-center justify-center h-full w-full",
                                         animatingPlayerId === player.id ? "scale-105" : "scale-100"
-                                    )}>
+                                    )} data-testid={`score-value-${player.id}`}>
                                         {player.score}
                                     </div>
                                 </div>
@@ -299,6 +300,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                                 )}>
                                     <button
                                         onClick={() => handleScore(player.id, 1, "Spin Finish")}
+                                        aria-label={`Add 1 point to ${player.name}`}
                                         disabled={animatingPlayerId !== null}
                                         className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group relative overflow-hidden"
                                     >
@@ -308,6 +310,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
 
                                     <button
                                         onClick={() => handleScore(player.id, 2, "Burst Finish")}
+                                        aria-label={`Add 2 points to ${player.name} by Burst`}
                                         disabled={animatingPlayerId !== null}
                                         className={cn(
                                             "relative overflow-hidden bg-gradient-to-br p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 shadow-lg group border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed",
@@ -321,6 +324,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
 
                                     <button
                                         onClick={() => handleScore(player.id, 2, "Over Finish")}
+                                        aria-label={`Add 2 points to ${player.name} by Over`}
                                         disabled={animatingPlayerId !== null}
                                         className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group relative overflow-hidden"
                                     >
@@ -330,6 +334,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
 
                                     <button
                                         onClick={() => handleScore(player.id, 3, "Xtreme Finish")}
+                                        aria-label={`Add 3 points to ${player.name} by Xtreme`}
                                         disabled={animatingPlayerId !== null}
                                         className="bg-neutral-900 border border-white/10 hover:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group shadow-inner relative overflow-hidden"
                                     >
@@ -340,6 +345,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                                     {/* Decrement Button - Moved Here */}
                                     <button
                                         onClick={() => decrementScore(player.id)}
+                                        aria-label={`Remove 1 point from ${player.name}`}
                                         disabled={animatingPlayerId !== null}
                                         className="col-span-2 landscape:col-span-1 bg-white/5 hover:bg-red-500/20 active:bg-red-500/30 border border-white/5 hover:border-red-500/30 text-muted-foreground hover:text-red-500 p-2 landscape:p-2 md:p-3 rounded-lg flex flex-row landscape:flex-col items-center justify-center gap-2 transition-all active:scale-95 group mt-2 landscape:mt-4"
                                     >

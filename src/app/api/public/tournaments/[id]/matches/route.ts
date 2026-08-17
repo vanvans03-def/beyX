@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getTournament } from "@/lib/repository";
+import { getCachedData, setCachedData } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-    // Await params here as requested by Next.js 15+ patterns in server components
     const params = await context.params;
     const tournamentId = params.id;
 
@@ -14,6 +14,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
 
     try {
+        const cacheKey = `tournament:${tournamentId}:matches`;
+        const cachedResponse = await getCachedData<{ matches: any[] }>(cacheKey);
+        if (cachedResponse) {
+            return NextResponse.json(cachedResponse);
+        }
+
         const tournament = await getTournament(tournamentId);
 
         if (!tournament) {
@@ -42,11 +48,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
                 player2: { name: m.player2_id ? (playerMap.get(m.player2_id) || 'Unknown Player') : null },
             }));
 
-            return NextResponse.json({ matches: enrichedMatches });
+            const responseData = { matches: enrichedMatches };
+
+            // Store in Redis (1 hour TTL, explicitly invalidated on match updates)
+            await setCachedData(cacheKey, responseData, 3600);
+
+            return NextResponse.json(responseData);
         }
 
-        // For CHALLONGE provider, we don't handle match fetching via this endpoint
-        // since the frontend will simply render the Challonge module iframe.
         return NextResponse.json({ error: 'Not an internal tournament' }, { status: 400 });
 
     } catch (error: any) {
@@ -54,3 +63,4 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+

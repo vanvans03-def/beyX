@@ -89,7 +89,7 @@ export const BladeSlot = ({
     ].filter(Boolean);
 
     return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-start gap-2">
             <div
                 onClick={onPress}
                 role="button"
@@ -137,10 +137,14 @@ export const BladeSlot = ({
                                     <span className="text-[10px] text-destructive font-bold uppercase">{t('reg.banned')}</span>
                                 )}
                             </div>
-                            {/* Customized parts list under the name (responsive wrapping) */}
+                                            {/* Customized parts list under the name (responsive wrapping) */}
                             {showAllAttachments && selectedParts.length > 0 && (
-                                <div className="text-[10px] text-muted-foreground mt-1.5 leading-normal font-mono break-words max-w-full">
-                                    {selectedParts.join(' | ')}
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {selectedParts.map((part, i) => (
+                                        <span key={i} className="text-[9px] text-muted-foreground font-mono bg-secondary/60 px-1.5 py-0.5 rounded border border-white/5 leading-tight max-w-[120px] truncate" title={part ?? ''}>
+                                            {part}
+                                        </span>
+                                    ))}
                                 </div>
                             )}
                         </>
@@ -150,7 +154,7 @@ export const BladeSlot = ({
                 </div>
 
                 {name && showAllAttachments && (
-                    <div className="ml-auto shrink-0 flex items-center">
+                    <div className="shrink-0 flex items-center">
                         <button
                             type="button"
                             onClick={(e) => {
@@ -158,7 +162,7 @@ export const BladeSlot = ({
                                 if (onCustomizePress) onCustomizePress();
                             }}
                             className={cn(
-                                "flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer",
+                                "flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
                                 selectedParts.length > 0
                                     ? "bg-primary/20 text-primary border-primary/30 hover:bg-primary/30"
                                     : "bg-secondary text-muted-foreground border-white/5 hover:bg-secondary/80"

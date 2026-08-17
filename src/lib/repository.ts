@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { isExcludedRankingUsername } from '@/lib/ranking-eligibility';
 import { v4 as uuidv4 } from 'uuid';
+import { invalidateTournamentCache } from '@/lib/redis';
 
 // Types (Mirrors DB Schema)
 export type Tournament = {
@@ -288,6 +289,8 @@ export async function resetTournamentBracket(id: string) {
     if (mError) {
         console.warn("Could not delete internal matches during reset:", mError);
     }
+
+    await invalidateTournamentCache(actualId);
 }
 
 export async function getParticipantOrder(tournamentId: string): Promise<string[] | null> {
@@ -543,6 +546,12 @@ export async function createRegistration(data: Omit<Registration, 'id' | 'timest
 }
 
 export async function deleteRegistration(id: string) {
+    const { data: reg } = await supabaseAdmin
+        .from('registrations')
+        .select('tournament_id')
+        .eq('id', id)
+        .single();
+
     // 1. Supabase
     const { error } = await supabaseAdmin
         .from('registrations')
@@ -553,12 +562,9 @@ export async function deleteRegistration(id: string) {
         throw new Error(error.message);
     }
 
-    // 2. Sheets - REMOVED per user request
-    // try {
-    //     await sheets.deleteRegistration(id);
-    // } catch (e) {
-    //     console.error("Sheets Error (deleteRegistration):", e);
-    // }
+    if (reg?.tournament_id) {
+        await invalidateTournamentCache(reg.tournament_id);
+    }
 }
 
 // --- Events ---

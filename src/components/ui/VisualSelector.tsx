@@ -11,7 +11,7 @@ interface VisualSelectorProps {
     label: string;
     value: string;
     onChange: (value: string) => void;
-    options: { name: string; point: number; blocked?: boolean }[];
+    options: { name: string; point: number; blocked?: boolean; image_url?: string }[];
     maxPoint?: number;
     onClose: () => void;
 }
@@ -131,7 +131,7 @@ export function VisualSelector({
             <div className="flex-1 overflow-y-auto p-3 grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 pb-24 content-start overscroll-contain touch-pan-y">
                 {filteredOptions.map((opt) => {
                     // @ts-ignore
-                    const imgPath = imageMap[opt.name];
+                    const imgPath = opt.image_url || (imageMap as any)[opt.name];
                     return (
                         <button
                             key={opt.name}

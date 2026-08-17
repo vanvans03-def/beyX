@@ -346,6 +346,10 @@ export function useRegistration({
                         if (attObj) {
                             pt += attObj.points_standard;
                         }
+                    } else {
+                        // Fallback: use cxAttachments or default 1pt
+                        const attFallback = (cxAttachments.attachments as any)[att!];
+                        pt += attFallback ? attFallback.points : 1;
                     }
                 }
 
@@ -357,6 +361,10 @@ export function useRegistration({
                         if (attObj) {
                             pt += attObj.points_standard;
                         }
+                    } else {
+                        // Fallback: use cxAttachments or default 1pt
+                        const attFallback = (cxAttachments.attachments as any)[att!];
+                        pt += attFallback ? attFallback.points : 1;
                     }
                 }
 

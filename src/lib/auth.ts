@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import bcrypt from 'bcryptjs';
 
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
 if (!SUPABASE_JWT_SECRET) {
@@ -51,10 +52,9 @@ export async function clearSession() {
     (await cookies()).delete('session');
 }
 
-// --- Web Crypto API password hashing (Edge Runtime compatible) ---
-// Hash format: "pbkdf2:<hex-salt>:<hex-hash>"
+// --- PBKDF2 helper functions for backward-compatibility fallback ---
 const PBKDF2_ITERATIONS = 100000;
-const HASH_LENGTH = 32; // bytes (256-bit)
+const HASH_LENGTH = 32;
 
 async function deriveKey(password: string, salt: Uint8Array): Promise<ArrayBuffer> {
     const enc = new TextEncoder();
@@ -85,32 +85,43 @@ function fromHex(hex: string): Uint8Array {
     return arr;
 }
 
+// --- Password hashing using bcryptjs ---
 export async function hashPassword(password: string): Promise<string> {
-    const saltBuf = new ArrayBuffer(16);
-    const salt = new Uint8Array(saltBuf);
-    crypto.getRandomValues(salt);
-    const hash = await deriveKey(password, salt);
-    return `pbkdf2:${toHex(saltBuf)}:${toHex(hash)}`;
+    return await bcrypt.hash(password, 10);
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-    // Support PBKDF2 format
-    if (stored.startsWith('pbkdf2:')) {
-        const parts = stored.split(':');
-        if (parts.length !== 3) return false;
-        const salt = fromHex(parts[1]);
-        const expectedHash = parts[2];
-        const derivedHash = toHex(await deriveKey(password, salt));
-        // Constant-time comparison
-        if (derivedHash.length !== expectedHash.length) return false;
-        let diff = 0;
-        for (let i = 0; i < derivedHash.length; i++) {
-            diff |= derivedHash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
+    if (!password || !stored) return false;
+
+    // Standard bcrypt format ($2a$, $2b$, $2y$, etc.)
+    if (stored.startsWith('$2')) {
+        try {
+            return await bcrypt.compare(password, stored);
+        } catch (e) {
+            console.error('Bcrypt comparison error:', e);
+            return false;
         }
-        return diff === 0;
     }
-    // Legacy bcrypt hashes — not supported in Edge Runtime
-    // Users with bcrypt hashes must reset their password
+
+    // Fallback: PBKDF2 format (for any accounts hashed during interim)
+    if (stored.startsWith('pbkdf2:')) {
+        try {
+            const parts = stored.split(':');
+            if (parts.length !== 3) return false;
+            const salt = fromHex(parts[1]);
+            const expectedHash = parts[2];
+            const derivedHash = toHex(await deriveKey(password, salt));
+            if (derivedHash.length !== expectedHash.length) return false;
+            let diff = 0;
+            for (let i = 0; i < derivedHash.length; i++) {
+                diff |= derivedHash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
+            }
+            return diff === 0;
+        } catch {
+            return false;
+        }
+    }
+
     return false;
 }
 
