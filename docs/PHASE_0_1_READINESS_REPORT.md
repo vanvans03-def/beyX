@@ -109,16 +109,25 @@ $ docker exec beyx-postgres psql -U beyx_admin -d beyx -c "SELECT r.rolname, s.s
 | Command | Exit Code | Duration | Status & Summary |
 | :--- | :---: | :---: | :--- |
 | `npm run build` | **0** | **33.4s** | ล้าง `.next` แล้วรัน Build ใหม่ผ่าน 100% (31/31 Static pages และ Dynamic routes ทั้งหมด ไม่มี Route type error) |
-| `npm run test:functional` | **0** | **15.0s** | **3 passed, 9 skipped** (**Supported Command** รันผ่าน `scripts/testing/test-server-harness.cjs` ด้วย `shell: false`, ควบคุม Lifecycle ของ Next dev, ทำ Controlled Process-Tree Termination, ตรวจสอบ Port Release และคืน Exit Code 0 ทันที) |
+| `npm run test:functional` | **0** | **15.6s** | **3 passed, 9 skipped** (**Supported Command** รันผ่าน `scripts/testing/test-server-harness.cjs` ด้วย `shell: false`, Preflight port check, ควบคุม Lifecycle ของ Next dev, ทำ Controlled Process-Tree Termination, ตรวจสอบ Port Release และคืน Exit Code 0 ทันที) |
+| `node scripts/testing/test-server-harness.cjs --grep "health endpoint"` | **0** | **1.3s** | **1 passed** (รองรับการส่ง Argument สำหรับเลือก Test เฉพาะจุด พร้อม Preflight และ Teardown สมบูรณ์) |
 | `npm run lint` | **1** | ~20s | บันทึก Technical Debt เดิม 264 errors (ส่วนใหญ่เป็น `@typescript-eslint/no-explicit-any`) และ 156 warnings (ไม่มี error ใหม่) |
 | `npm run setup:local-db-env` | **0** | <1s | ตรวจสอบ `.env.local-db` ไม่ regenerate secrets ซ้ำ และรายงาน `[ACL CHECK] Result: PASS` |
 | `node scripts/setup/audit-supabase-files.cjs` | **0** | <1s | รายงานจำแนกประเภทไฟล์ 4 หมวดหมู่ (29 ไฟล์เรียก `supabaseAdmin.from(...)` โดยตรง) ถูกต้องตามหลักฐานโค้ด |
 
-### 4.1 รายละเอียด Functional E2E Test Results
-- **Supported Execution Method**: `npm run test:functional` (รันผ่าน `scripts/testing/test-server-harness.cjs` ซึ่งครอบคลุม Lifecycle: Start Server -> Poll Health -> Run Playwright via `shell: false` -> Controlled Process-Tree Termination -> Verify Port 3333 Release -> Forward Real Exit Code)
+### 4.1 รายละเอียด Functional E2E Test Results & Supported Commands
+- **Supported Test Execution**:
+  - รัน Full Suite: `npm run test:functional`
+  - รันเลือกเฉพาะ Test: `node scripts/testing/test-server-harness.cjs --grep "health endpoint"` หรือ `npm run test:functional -- --grep "health endpoint"`
+- **Harness Guarantees**:
+  1. **Preflight**: ตรวจสอบว่าพอร์ต 3333 ว่าง หากมี Server อื่นค้างอยู่จะ Fail ทันทีเพื่อป้องกันการรันบน Unowned Server
+  2. **Process Execution**: รัน Next.js dev server และ Playwright CLI ผ่าน Node Binary (`shell: false`) โดยตรง
+  3. **Controlled Teardown**: สั่ง `taskkill /PID <PID> /T /F` (Windows) หรือ `SIGKILL` (Unix) บน Process Tree ที่ Harness เป็นเจ้าของ
+  4. **Verification**: รอจน Server Process emit `exit/close` และ probe socket ยืนยันว่าพอร์ต 3333 ถูก Release ก่อนส่ง Exit Code
+  5. **Signal Cleanup**: มี Async Handler สำหรับ `SIGINT` / `SIGTERM` จัดการ Teardown ครบถ้วนก่อนออก
 - **Passed (3)**:
-  1. `health endpoint is ready` (487ms)
-  2. `protected organizer page redirects without a session` (10.3s)
+  1. `health endpoint is ready` (411ms)
+  2. `protected organizer page redirects without a session` (10.7s)
   3. `scoreboard supports scoring and correction` (11.6s)
 - **Skipped (9)**:
   1. `six judges can open one organizer account concurrently` (ขาด `TEST_ORGANIZER_TOURNAMENT_ID`, `TEST_SESSION_COOKIE`)
