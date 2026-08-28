@@ -14,7 +14,8 @@
     "test:load": "node scripts/performance/capacity-test.mjs",
     "test:realtime": "node scripts/performance/realtime-capacity.mjs",
     "test:predeploy": "npm run build && npm run test:functional && npm run test:load",
-    "test:e2e:challonge": "node scratch/test_e2e_all_conditions.js"
+    "test:e2e:challonge": "node scratch/test_e2e_all_conditions.js",
+    "setup:local-db-env": "node scripts/setup/generate-local-db-env.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",
