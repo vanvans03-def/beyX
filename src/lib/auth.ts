@@ -10,8 +10,11 @@ import {
     SESSION_TTL_SECONDS,
 } from '@/lib/session-config';
 
-const SECRET_KEY = new TextEncoder().encode(getSessionSecret());
 const ALG = 'HS256';
+
+function getSecretKey(): Uint8Array {
+    return new TextEncoder().encode(getSessionSecret());
+}
 
 export type SessionPayload = {
     userId: string;
@@ -31,7 +34,7 @@ export async function createSession(userId: string, username: string, role: stri
         .setJti(randomUUID())
         .setIssuedAt()
         .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
-        .sign(SECRET_KEY);
+        .sign(getSecretKey());
 
     // Set cookie
     (await cookies()).set(SESSION_COOKIE_NAME, token, {
@@ -48,7 +51,7 @@ export async function getSession() {
     if (!session) return null;
 
     try {
-        const { payload } = await jwtVerify(session, SECRET_KEY, {
+        const { payload } = await jwtVerify(session, getSecretKey(), {
             algorithms: [ALG],
             issuer: SESSION_ISSUER,
             audience: SESSION_AUDIENCE,

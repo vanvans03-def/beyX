@@ -244,8 +244,22 @@ function createSupabaseAdmin() {
   return createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-// Keep the established query-builder type contract while the PostgreSQL
-// implementation replaces the transport underneath it.
-export const adminDb = (process.env.DATA_BACKEND === 'postgres'
-  ? createPostgresAdmin()
-  : createSupabaseAdmin()) as unknown as AdminContract;
+let postgresAdmin: AdminContract | undefined;
+let supabaseAdmin: AdminContract | undefined;
+
+function getAdminDb(): AdminContract {
+  if (process.env.DATA_BACKEND === 'postgres') {
+    postgresAdmin ||= createPostgresAdmin();
+    return postgresAdmin;
+  }
+  supabaseAdmin ||= createSupabaseAdmin() as unknown as AdminContract;
+  return supabaseAdmin;
+}
+
+// Resolve credentials and the selected transport only when a request actually
+// performs database work. Next.js can then collect route metadata during an
+// image build without requiring either production credential set.
+export const adminDb: AdminContract = {
+  from(table: string) { return getAdminDb().from(table); },
+  rpc(name: string, args?: Record<string, unknown>) { return getAdminDb().rpc(name, args); },
+};
