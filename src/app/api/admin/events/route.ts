@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEvents, createEvent, deleteEvent, updateEvent } from "@/lib/repository";
-import { supabaseAdmin } from "@/lib/supabase";
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 
 async function checkEventMode(req: Request) {
     const userId = req.headers.get('x-user-id');

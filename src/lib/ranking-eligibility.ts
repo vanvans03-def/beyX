@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 
 export const EXCLUDED_RANKING_USERNAMES = new Set(['test', 'admin2', 'admin', 'superadmin']);
 

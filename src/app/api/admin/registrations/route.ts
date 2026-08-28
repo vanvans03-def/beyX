@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRegistrations, deleteRegistration, createRegistration, getTournament } from "@/lib/repository";
 import { v4 as uuidv4 } from 'uuid';
-import { supabaseAdmin } from "@/lib/supabase";
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { invalidateTournamentCache } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';

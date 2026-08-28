@@ -4,10 +4,9 @@ import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe, Loader2, Monitor
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import InternalBracket from "@/components/InternalBracket";
 import StandingsTable from "@/components/StandingsTable";
-import { createClient } from "@/utils/supabase/client";
 
 type PublicTournamentViewProps = {
     tournament: any;
@@ -29,8 +28,6 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
     // Bracket State
     const [matches, setMatches] = useState<any[]>([]);
     const [loadingBracket, setLoadingBracket] = useState(true);
-    const channelRef = useRef<any>(null);
-    const supabaseClient = createClient();
 
     // Standings State
     const [standings, setStandings] = useState<any[]>([]);
@@ -75,22 +72,14 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
             if (tournament.provider === 'INTERNAL') {
                 fetchInternalMatches(matches.length > 0);
 
-                const channel = supabaseClient.channel(`public_bracket_${tournament.id}`)
-                    .on('broadcast', { event: 'match-update' }, () => {
-                        fetchInternalMatches(true);
-                        if (activeTab === 'standings') fetchStandings();
-                    })
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_matches', filter: `tournament_id=eq.${tournament.id}` }, () => {
-                        fetchInternalMatches(true);
-                        if (activeTab === 'standings') fetchStandings();
-                    })
-                    .subscribe();
-
-                channelRef.current = channel;
+                const events = new EventSource(`/api/realtime/tournaments/${encodeURIComponent(tournament.id)}`);
+                events.addEventListener('tournament-update', () => {
+                    void fetchInternalMatches(true);
+                    if (activeTab === 'standings') void fetchStandings();
+                });
 
                 return () => {
-                    supabaseClient.removeChannel(channel);
-                    channelRef.current = null;
+                    events.close();
                 };
             } else {
                 setLoadingBracket(false); // Challonge uses iframe

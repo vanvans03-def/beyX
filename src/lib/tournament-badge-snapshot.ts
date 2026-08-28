@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { getRankingBadgesForNames, type RankingBadges } from '@/lib/ranking-badges';
 import { normalizePlayerName } from '@/lib/player-rankings';
 

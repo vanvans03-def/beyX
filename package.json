@@ -10,9 +10,12 @@
     "lint": "eslint",
     "test": "npm run test:functional",
     "test:functional": "node scripts/testing/test-server-harness.cjs",
+    "test:functional:postgres": "node scripts/testing/run-postgres-functional.cjs",
     "test:functional:headed": "node scripts/testing/test-server-harness.cjs --headed",
     "test:load": "node scripts/performance/capacity-test.mjs",
     "test:realtime": "node scripts/performance/realtime-capacity.mjs",
+    "backup:postgres": "node scripts/backup/create-encrypted-backup.cjs",
+    "restore:postgres": "node scripts/backup/restore-encrypted-backup.cjs",
     "test:predeploy": "npm run build && npm run test:functional && npm run test:load",
     "test:e2e:challonge": "node scratch/test_e2e_all_conditions.js",
     "setup:local-db-env": "node scripts/setup/generate-local-db-env.cjs"

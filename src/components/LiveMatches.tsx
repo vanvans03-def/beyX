@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/utils/supabase/client';
 
 interface Match {
     id: number;
@@ -20,59 +19,35 @@ interface LiveMatchesProps {
 }
 
 export default function LiveMatches({ tournamentId }: LiveMatchesProps) {
-    const supabase = createClient();
     const [matches, setMatches] = useState<Match[]>([]);
     const [status, setStatus] = useState<string>('Connecting...');
 
     useEffect(() => {
         // Initial fetch (optional, if we want to show current state before updates)
         const fetchMatches = async () => {
-            let query = supabase.from('matches').select('*').order('updated_at', { ascending: false }).limit(20);
-            if (tournamentId) {
-                query = query.eq('tournament_id', tournamentId);
-            }
-            const { data, error } = await query;
-            if (data) setMatches(data);
-            if (error) console.error("Error fetching initial matches:", error);
+            const query = tournamentId ? `?tournamentId=${encodeURIComponent(tournamentId)}` : '';
+            const response = await fetch(`/api/public/live-matches${query}`, { cache: 'no-store' });
+            const result = await response.json();
+            if (response.ok) setMatches(result.matches || []);
+            else console.error("Error fetching matches:", result.error);
         };
 
-        fetchMatches();
+        void fetchMatches();
+        if (!tournamentId) {
+            setStatus('POLLING');
+            const timer = window.setInterval(() => void fetchMatches(), 10_000);
+            return () => window.clearInterval(timer);
+        }
 
-        // Realtime subscription
-        const channel = supabase
-            .channel('realtime-matches')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches' },
-                (payload: any) => {
-                    console.log('Realtime update received:', payload);
-                    const updatedMatch = payload.new as Match;
-
-                    setMatches(prev => {
-                        // Check if match already exists in our list
-                        const exists = prev.find(m => m.id === updatedMatch.id);
-                        if (exists) {
-                            return prev.map(m => m.id === updatedMatch.id ? updatedMatch : m);
-                        } else {
-                            // Add to top if not exists
-                            return [updatedMatch, ...prev];
-                        }
-                    });
-                }
-            )
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches' },
-                (payload: any) => {
-                    console.log('Realtime insert received:', payload);
-                    const newMatch = payload.new as Match;
-                    setMatches(prev => [newMatch, ...prev]);
-                }
-            )
-            .subscribe((status: any) => {
-                setStatus(status);
-            });
+        const events = new EventSource(`/api/realtime/tournaments/${encodeURIComponent(tournamentId)}`);
+        events.addEventListener('ready', () => setStatus('SUBSCRIBED'));
+        events.addEventListener('tournament-update', () => void fetchMatches());
+        events.onerror = () => setStatus('RECONNECTING');
 
         return () => {
-            supabase.removeChannel(channel);
+            events.close();
         };
-    }, [tournamentId, supabase]);
+    }, [tournamentId]);
 
     return (
         <div className="p-4 space-y-4">

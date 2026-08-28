@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { SESSION_AUDIENCE, SESSION_COOKIE_NAME, SESSION_ISSUER } from '@/lib/session-config';
 
 //export const runtime = 'edge';
 
-const SECRET = process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key-change-me';
+const SECRET = process.env.APP_SESSION_SECRET || process.env.SUPABASE_JWT_SECRET;
 
 // Native Web Crypto JWT verification — no library, zero bundle cost
 async function verifyJWT(token: string): Promise<Record<string, any> | null> {
     try {
+        if (!SECRET || SECRET.length < 32) return null;
         const parts = token.split('.');
         if (parts.length !== 3) return null;
 
@@ -40,6 +42,8 @@ async function verifyJWT(token: string): Promise<Record<string, any> | null> {
 
         // Check token expiry
         if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) return null;
+        if (decoded.iss !== SESSION_ISSUER || decoded.aud !== SESSION_AUDIENCE) return null;
+        if (!decoded.userId || !decoded.username || !['admin', 'user'].includes(decoded.role)) return null;
 
         return decoded;
     } catch {
@@ -54,7 +58,7 @@ export async function middleware(request: NextRequest) {
     const isAdminApiRoute = pathname.startsWith('/api/admin') || pathname.startsWith('/api/generate-bracket');
 
     if (isAdminRoute || isAdminApiRoute) {
-        const session = request.cookies.get('session')?.value;
+        const session = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
         if (!session) {
             if (isAdminApiRoute) {
@@ -70,7 +74,7 @@ export async function middleware(request: NextRequest) {
                 return NextResponse.json({ error: 'Invalid Token' }, { status: 401 });
             }
             const response = NextResponse.redirect(new URL('/login', request.url));
-            response.cookies.delete('session');
+            response.cookies.delete(SESSION_COOKIE_NAME);
             return response;
         }
 

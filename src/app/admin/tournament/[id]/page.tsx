@@ -18,7 +18,6 @@ import Scoreboard from "@/components/Scoreboard";
 import { toast } from "sonner";
 import StandingsTable from "@/components/StandingsTable";
 import RegistrationTable from "@/components/RegistrationTable";
-import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
 import { speakText, DEFAULT_ANNOUNCER_SETTINGS, type AnnouncerSettings } from "@/utils/announcer";
 
@@ -74,8 +73,6 @@ const captureImageSrc = (src?: string) => {
 
     return src;
 };
-
-const supabaseClient = createClient();
 
 const MUSIC_TRACKS = [
     { name: "Godong Song", filename: "godong-song.mp3" },
@@ -857,15 +854,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         // Start loading state for this match
         setUpdatingMatchIds(prev => [...prev, matchId]);
 
-        // Broadcast start loading
-        if (channelRef.current) {
-            channelRef.current.send({
-                type: 'broadcast',
-                event: 'match-updating',
-                payload: { matchId, isUpdating: true }
-            });
-        }
-
         // Save previous matches for rollback if needed
         const prevMatches = [...matches];
 
@@ -933,14 +921,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             // Remove from loading state
             setUpdatingMatchIds(prev => prev.filter(id => id !== matchId));
 
-            // Broadcast stop loading
-            if (channelRef.current) {
-                channelRef.current.send({
-                    type: 'broadcast',
-                    event: 'match-updating',
-                    payload: { matchId, isUpdating: false }
-                });
-            }
         }
     }, [bracketUrl, tournament, matches, id, fetchInternalMatches, fetchMatches]);
 
@@ -1481,10 +1461,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     const fetchLocks = useCallback(async () => {
         if (!id) return;
-        const { data, error } = await supabaseClient
-            .from('match_locks')
-            .select('*')
-            .eq('tournament_id', id);
+        const response = await fetch(`/api/admin/match-locks?tournamentId=${encodeURIComponent(id)}`, { cache: 'no-store' });
+        const result = await response.json();
+        const data = response.ok ? result.locks : null;
+        const error = response.ok ? null : result;
 
         if (data) {
             const newLocks: Record<string | number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }> = {};
@@ -1689,10 +1669,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
     // Locked Matches State (Realtime Presence)
     const [lockedMatches, setLockedMatches] = useState<Record<string | number, { judgeName: string, judgeShop?: string, userId: string, arena?: number }>>({});
-    const channelRef = useRef<ReturnType<typeof supabaseClient.channel> | null>(null);
-
-
-
     useEffect(() => {
         if (id) fetchLocks();
     }, [id, fetchLocks]);
@@ -1724,11 +1700,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 });
 
                 // 2. Perform Network Call
-                const { error } = await supabaseClient
-                    .from('match_locks')
-                    .delete()
-                    .eq('match_id', matchId)
-                    .eq('tournament_id', id);
+                const response = await fetch('/api/admin/match-locks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'unlock', tournamentId: id, matchId }),
+                });
+                const error = response.ok ? null : await response.json();
 
                 if (error) {
                     setLockedMatches(prevLocks); // Rollback
@@ -1747,16 +1724,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                 }));
 
                 // 2. Perform Network Call
-                const { error } = await supabaseClient
-                    .from('match_locks')
-                    .insert({
-                        match_id: matchId,
-                        tournament_id: id,
-                        judge_name: currentUser.username,
-                        judge_shop: currentUser.shop_name,
-                        user_id: currentUser.username,
-                        arena_number: arenaId || null
-                    });
+                const response = await fetch('/api/admin/match-locks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'lock', tournamentId: id, matchId, arenaId }),
+                });
+                const error = response.ok ? null : await response.json();
 
                 if (error) {
                     if (error.code === '23505') {
@@ -1779,91 +1752,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     useEffect(() => {
         if (!id) return;
 
-        const channel = supabaseClient
-            .channel(`admin-tournament-${id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'registrations',
-                    filter: `tournament_id=eq.${id}`
-                },
-                (payload) => {
-                    console.log('Realtime registration change:', payload);
-                    fetchData(true);
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'tournaments',
-                    filter: `id=eq.${id}`
-                },
-                (payload) => {
-                    console.log('Realtime tournament update:', payload);
-                    fetchData(true);
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'match_locks'
-                },
-                (payload) => {
-                    fetchLocks();
-                }
-            )
-            .on(
-                'broadcast',
-                { event: 'match-update' },
-                (payload) => {
-                    console.log('Realtime match update received:', payload);
-                    fetchMatches(bracketUrl, true);
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'internal_matches',
-                    filter: `tournament_id=eq.${id}`
-                },
-                () => {
-                    fetchInternalMatches(true);
-                }
-            )
-            .on(
-                'broadcast',
-                { event: 'match-updating' },
-                (payload) => {
-                    const { matchId, isUpdating } = payload.payload;
-                    setUpdatingMatchIds(prev => {
-                        if (isUpdating) {
-                            return [...prev, matchId];
-                        } else {
-                            return prev.filter(id => id !== matchId);
-                        }
-                    });
-                }
-            )
-            .subscribe((status) => {
-                console.log("Realtime subscription status:", status);
-                if (status === 'SUBSCRIBED') {
-                    // toast.success("Realtime connected");
-                }
-            });
-
-        channelRef.current = channel;
+        const events = new EventSource(`/api/realtime/tournaments/${encodeURIComponent(id)}`);
+        events.addEventListener('tournament-update', (message) => {
+            const payload = JSON.parse((message as MessageEvent).data);
+            if (payload.table === 'registrations' || payload.table === 'tournaments') void fetchData(true);
+            if (payload.table === 'match_locks') void fetchLocks();
+            if (payload.table === 'internal_matches') void fetchInternalMatches(true);
+            if (payload.table === 'matches' || payload.event === 'match-update') void fetchMatches(bracketUrl, true);
+        });
 
         return () => {
-            supabaseClient.removeChannel(channel);
-            channelRef.current = null;
+            events.close();
         };
     }, [id, fetchData, bracketUrl, fetchLocks, fetchInternalMatches]);
 

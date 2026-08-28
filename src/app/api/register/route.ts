@@ -3,7 +3,7 @@ import { createRegistration, upsertRegistration } from "@/lib/repository";
 import gameData from "@/data/game-data.json";
 import gameDataStandard from "@/data/game-data-standard.json";
 import gameDataSouth from "@/data/game-data-south.json";
-import { supabaseAdmin } from "@/lib/supabase";
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import beySeries from "@/data/bey-series.json";
 
 export const dynamic = 'force-dynamic';

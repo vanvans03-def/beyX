@@ -1,12 +1,16 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
+import {
+    getSessionSecret,
+    SESSION_AUDIENCE,
+    SESSION_COOKIE_NAME,
+    SESSION_ISSUER,
+    SESSION_TTL_SECONDS,
+} from '@/lib/session-config';
 
-const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET;
-if (!SUPABASE_JWT_SECRET) {
-    throw new Error('SUPABASE_JWT_SECRET is not defined in environment variables');
-}
-const SECRET_KEY = new TextEncoder().encode(SUPABASE_JWT_SECRET);
+const SECRET_KEY = new TextEncoder().encode(getSessionSecret());
 const ALG = 'HS256';
 
 export type SessionPayload = {
@@ -17,15 +21,20 @@ export type SessionPayload = {
 }
 
 export async function createSession(userId: string, username: string, role: string = 'user') {
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 1 day
-    const token = await new SignJWT({ userId, username, role })
+    const expires = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+    const safeRole: SessionPayload['role'] = role === 'admin' ? 'admin' : 'user';
+    const token = await new SignJWT({ userId, username, role: safeRole })
         .setProtectedHeader({ alg: ALG })
+        .setIssuer(SESSION_ISSUER)
+        .setAudience(SESSION_AUDIENCE)
+        .setSubject(userId)
+        .setJti(randomUUID())
         .setIssuedAt()
-        .setExpirationTime('24h')
+        .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
         .sign(SECRET_KEY);
 
     // Set cookie
-    (await cookies()).set('session', token, {
+    (await cookies()).set(SESSION_COOKIE_NAME, token, {
         expires,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -35,12 +44,14 @@ export async function createSession(userId: string, username: string, role: stri
 }
 
 export async function getSession() {
-    const session = (await cookies()).get('session')?.value;
+    const session = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
     if (!session) return null;
 
     try {
         const { payload } = await jwtVerify(session, SECRET_KEY, {
             algorithms: [ALG],
+            issuer: SESSION_ISSUER,
+            audience: SESSION_AUDIENCE,
         });
         return payload as SessionPayload;
     } catch (error) {
@@ -49,7 +60,7 @@ export async function getSession() {
 }
 
 export async function clearSession() {
-    (await cookies()).delete('session');
+    (await cookies()).delete(SESSION_COOKIE_NAME);
 }
 
 // --- PBKDF2 helper functions for backward-compatibility fallback ---

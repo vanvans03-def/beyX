@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { isTournamentExcludedFromRankings } from '@/lib/ranking-eligibility';
 
 export type TournamentStanding = {

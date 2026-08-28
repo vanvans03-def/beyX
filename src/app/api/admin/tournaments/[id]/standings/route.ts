@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { getTournament, getUserApiKey } from "@/lib/repository";
 import { getTournamentStandings } from "@/lib/challonge";
-import { supabaseAdmin } from "@/lib/supabase";
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 
 export const dynamic = 'force-dynamic';
 

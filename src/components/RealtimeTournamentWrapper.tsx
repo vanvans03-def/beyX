@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import TournamentViewerButton from "@/components/TournamentViewerButton";
 import RegistrationForm from "@/components/RegistrationForm";
 import StandingsTable from "@/components/StandingsTable";
@@ -33,32 +32,17 @@ export default function RealtimeTournamentWrapper({ initialTournament, tournamen
     const [standings, setStandings] = useState<any>(initialStandings);
 
     useEffect(() => {
-        // Subscribe to changes for this specific tournament
-        const channel = supabase
-            .channel(`tournament-${tournamentId}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'tournaments',
-                    filter: `id=eq.${tournamentId}`
-                },
-                (payload) => {
-                    console.log('Realtime update received:', payload);
-                    const newData = payload.new as any;
-
-                    setTournament(prev => ({
-                        ...prev,
-                        ...newData, // Apply updates (status, challonge_url, etc.)
-                        // Ensure arrays are handled if payload returns generic json
-                    }));
-                }
-            )
-            .subscribe();
+        const refreshTournament = async () => {
+            const response = await fetch(`/api/public/tournaments/${encodeURIComponent(tournamentId)}`, { cache: 'no-store' });
+            if (!response.ok) return;
+            const result = await response.json();
+            if (result.tournament) setTournament(result.tournament);
+        };
+        const events = new EventSource(`/api/realtime/tournaments/${encodeURIComponent(tournamentId)}`);
+        events.addEventListener('tournament-update', () => void refreshTournament());
 
         return () => {
-            supabase.removeChannel(channel);
+            events.close();
         };
     }, [tournamentId]);
 

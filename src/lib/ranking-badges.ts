@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { getExcludedTournamentIds } from '@/lib/ranking-eligibility';
 import { normalizePlayerName } from '@/lib/player-rankings';
 import { assignCompetitionRanks } from '@/lib/competition-ranking';

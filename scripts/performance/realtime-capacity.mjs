@@ -1,13 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
 import { mkdir, writeFile } from "node:fs/promises";
 import dotenv from "dotenv";
 
 dotenv.config({ path: ".env.local", quiet: true });
 dotenv.config({ path: ".env", quiet: true });
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL and publishable/anon key");
+const baseUrl = (process.env.TEST_BASE_URL || "http://127.0.0.1:3333").replace(/\/$/, "");
 
 const tournamentId = process.env.TEST_BUCKET_TOURNAMENT_ID || process.env.TEST_ORGANIZER_TOURNAMENT_ID;
 if (!tournamentId) throw new Error("Set TEST_BUCKET_TOURNAMENT_ID or TEST_ORGANIZER_TOURNAMENT_ID");
@@ -19,33 +16,28 @@ const holdSeconds = Number(process.env.REALTIME_HOLD_SECONDS || 10);
 const results = [];
 
 async function connectOne(index) {
-  const client = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    realtime: { params: { eventsPerSecond: 2 } },
-  });
-  const channel = client
-    .channel(`capacity-${Date.now()}-${index}`)
-    .on("postgres_changes", {
-      event: "*",
-      schema: "public",
-      table: "internal_matches",
-      filter: `tournament_id=eq.${tournamentId}`,
-    }, () => {});
-
+  const controller = new AbortController();
   const started = performance.now();
-  const outcome = await new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve({ ok: false, status: "TIMEOUT" }), subscribeTimeoutMs);
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        clearTimeout(timeout);
-        resolve({ ok: true, status });
-      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        clearTimeout(timeout);
-        resolve({ ok: false, status });
-      }
+  const timeout = setTimeout(() => controller.abort(), subscribeTimeoutMs);
+  try {
+    const response = await fetch(`${baseUrl}/api/realtime/tournaments/${encodeURIComponent(tournamentId)}`, {
+      signal: controller.signal,
+      headers: { accept: "text/event-stream", "x-capacity-client": String(index) },
     });
-  });
-  return { client, channel, connectMs: performance.now() - started, ...outcome };
+    if (!response.ok || !response.body) return { controller, ok: false, status: String(response.status), connectMs: performance.now() - started };
+    const reader = response.body.getReader();
+    let buffer = "";
+    while (!buffer.includes("event: ready")) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error("stream closed before ready");
+      buffer += new TextDecoder().decode(value);
+    }
+    clearTimeout(timeout);
+    return { controller, reader, ok: true, status: "SUBSCRIBED", connectMs: performance.now() - started };
+  } catch (error) {
+    clearTimeout(timeout);
+    return { controller, ok: false, status: error.name === "AbortError" ? "TIMEOUT" : "ERROR", connectMs: performance.now() - started };
+  }
 }
 
 for (const users of levels) {
@@ -63,9 +55,9 @@ for (const users of levels) {
   results.push(result);
   console.log(`${result.passed ? "PASS" : "FAIL"} realtime users=${users} connected=${successful.length} p95=${result.p95ConnectMs}ms`);
   await new Promise((resolve) => setTimeout(resolve, holdSeconds * 1000));
-  await Promise.all(connections.map(async ({ client, channel }) => {
-    await client.removeChannel(channel);
-    await client.realtime.disconnect();
+  await Promise.all(connections.map(async ({ controller, reader }) => {
+    controller.abort();
+    await reader?.cancel().catch(() => {});
   }));
   if (!result.passed) break;
 }

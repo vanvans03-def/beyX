@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { adminDb } from '@/lib/db/admin';
 import { setupAndStartTournament } from '@/lib/challonge';
 import { getUserApiKey, getTournament, getRegistrations, getParticipantOrder } from '@/lib/repository';
 import { generateSingleElimination, generateDoubleElimination, type InternalMatch } from '@/lib/brackets';
 import { createTournamentBadgeSnapshot } from '@/lib/tournament-badge-snapshot';
 import { invalidateTournamentCache } from '@/lib/redis';
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabase = adminDb;
 
 export const dynamic = 'force-dynamic';
 

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import { createClient } from '@/utils/supabase/client';
 
 export default function LoginPage() {
     const [username, setUsername] = useState('');
@@ -13,20 +12,8 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const router = useRouter();
 
-    const handleGoogleLogin = async () => {
-        try {
-            const supabase = createClient();
-            const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || window.location.origin).replace(/\/$/, '');
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                    redirectTo: `${baseUrl}/api/auth/callback?next=/admin`,
-                },
-            });
-            if (error) throw error;
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to sign in with Google");
-        }
+    const handleGoogleLogin = () => {
+        window.location.assign('/api/auth/google');
     };
 
     const [errorShown, setErrorShown] = useState(false);
@@ -40,6 +27,9 @@ export default function LoginPage() {
                 setErrorShown(true);
             } else if (error === 'oauth_failed') {
                 toast.error("เข้าสู่ระบบผ่าน Google ล้มเหลว กรุณาลองใหม่อีกครั้ง");
+                setErrorShown(true);
+            } else if (error === 'oauth_unavailable') {
+                toast.error("Google Login ยังไม่ได้ตั้งค่า");
                 setErrorShown(true);
             }
         }

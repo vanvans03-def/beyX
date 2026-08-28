@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { invalidateRegisterConfigCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getMatches, updateMatch } from '@/lib/challonge';
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { getTournament, getUserApiKey, getMatchesFromDB } from "@/lib/repository";
+import { publishTournamentUpdate } from '@/lib/realtime-server';
 import { propagateWinners, type InternalMatch } from "@/lib/brackets";
 import { invalidateTournamentCache } from "@/lib/redis";
 
@@ -211,13 +212,7 @@ export async function PUT(request: Request) {
         if (tournamentId) {
             await invalidateTournamentCache(tournamentId);
 
-            await supabaseAdmin
-                .channel(`admin-tournament-${tournamentId}`)
-                .send({
-                    type: 'broadcast',
-                    event: 'match-update',
-                    payload: { matchId },
-                });
+            await publishTournamentUpdate({ tournamentId, event: 'match-update', matchId });
         }
 
         return NextResponse.json({ success: true });

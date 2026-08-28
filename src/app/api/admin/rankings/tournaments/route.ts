@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isExcludedRankingUsername } from '@/lib/ranking-eligibility';
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { refreshPlayerWinRateTotals } from '@/lib/player-win-rate-totals';
 
 export const dynamic = 'force-dynamic';

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { getTournament } from "@/lib/repository";
 import { getCachedData, setCachedData } from "@/lib/redis";
 

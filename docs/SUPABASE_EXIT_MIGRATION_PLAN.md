@@ -91,14 +91,14 @@ vault
 
 ## 3. Infrastructure gates
 
-เครื่องเป้าหมายเดิมมี RAM 2 GB และ disk 49 GB ซึ่งใช้สำหรับ development/rehearsal ได้ แต่ไม่ผ่าน Production gate
+เครื่องเป้าหมายจริงมี 1 vCPU / RAM 2 GB จึงรองรับได้เฉพาะ single-instance แบบจำกัดทรัพยากร และต้องผ่าน load test บนเครื่องจริงก่อน Production cutover
 
 Production gate ก่อน cutover:
 
-- RAM อย่างน้อย 4 GB; แนะนำ 8 GB
-- ยืนยันจำนวน vCPU ด้วย `nproc`; อย่างน้อย 2 vCPU และแนะนำ 4 vCPU
+- Minimum แบบมีเงื่อนไข: 1 vCPU / RAM 2 GB เมื่อใช้ resource limits ตาม compose และ measured load ผ่าน
+- Recommended: อย่างน้อย 2 vCPU / RAM 4 GB; หาก measured load ไม่ผ่านให้ย้ายเครื่องก่อน
 - SSD/NVMe และพื้นที่ว่างอย่างน้อย 20 GB ก่อน migration; แนะนำ disk 80 GB+
-- swap 2–4 GB
+- swap อย่างน้อย 2 GB บนเครื่อง RAM 2 GB
 - Docker image ต้อง build นอก Production host หรือยืนยันว่า build ไม่ทำให้ OOM
 - PostgreSQL port 5432 bind เฉพาะ localhost/internal Docker network
 - backup ต้องออกนอกเครื่องและ restore test ผ่าน
@@ -140,7 +140,7 @@ Exit criteria:
 - [ ] สร้าง PostgreSQL 17 persistent volume
 - [ ] สร้าง roles `beyx_admin`, `beyx_app`, `beyx_backup`
 - [ ] เปิด `pgcrypto`, `uuid-ossp`, `pg_stat_statements`
-- [ ] จำกัด PostgreSQL `max_connections=30`
+- [x] จำกัด PostgreSQL `max_connections=20`
 - [ ] ตั้ง `work_mem=2MB`, `shared_buffers=128MB`, slow-query log 500 ms
 - [ ] เพิ่ม healthcheck และ log rotation
 - [ ] ยืนยันว่า 5432 ไม่เปิดออก Internet
@@ -399,4 +399,3 @@ docker compose --env-file .env --env-file .env.local-db `
 ```
 
 อย่าสั่ง `down -v` บน Production เพราะจะลบ PostgreSQL volume
-

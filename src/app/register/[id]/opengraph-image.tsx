@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og';
-import { createClient } from '@supabase/supabase-js';
+import { adminDb } from '@/lib/db/admin';
 
 
 // Image metadata
@@ -18,13 +18,7 @@ export default async function Image({ params }: { params: { id: string } }) {
     let status = 'OPEN';
 
     try {
-        // Direct lightweight fetch to avoid loading heavy dependencies (Google Sheets, etc.)
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
-
-        const { data } = await supabase
+        const { data } = await adminDb
             .from('tournaments')
             .select('name, status')
             .eq('id', id)

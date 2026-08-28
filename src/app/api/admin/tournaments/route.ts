@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createTournament, getTournaments, getTournament, updateTournamentStatus, getUserApiKey } from "@/lib/repository";
 import { finalizeTournament, getTournamentStandings } from "@/lib/challonge";
-import { supabaseAdmin } from "@/lib/supabase";
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { getInternalTopFour, recordTournamentResults } from "@/lib/player-rankings";
 import { refreshPlayerWinRateTotals } from '@/lib/player-win-rate-totals';
 
@@ -131,14 +131,11 @@ export async function PATCH(req: Request) {
 
         // Handle bracket_type or arena_count updates standalone
         if ((body.bracket_type || body.arena_count !== undefined) && !body.status) {
-            const { createClient } = await import('@supabase/supabase-js');
-            const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-            
             const updateFields: any = {};
             if (body.bracket_type) updateFields.bracket_type = body.bracket_type;
             if (body.arena_count !== undefined) updateFields.arena_count = body.arena_count;
             
-            const { error } = await sb.from('tournaments').update(updateFields).eq('id', body.tournamentId);
+            const { error } = await supabaseAdmin.from('tournaments').update(updateFields).eq('id', body.tournamentId);
             if (error) throw new Error(error.message);
             return NextResponse.json({ success: true, data: updateFields });
         }

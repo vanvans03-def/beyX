@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 
 /** Rebuilds the small cache used by the public all-time Win Rate leaderboard. */
 export async function refreshPlayerWinRateTotals() {

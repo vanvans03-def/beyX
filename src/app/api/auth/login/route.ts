@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { verifyPassword, createSession } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 

@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
-import { createClient } from '@supabase/supabase-js';
+import { adminDb } from '@/lib/db/admin';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
     try {
@@ -12,12 +12,7 @@ export async function GET(request: Request) {
             return new ImageResponse(<>No Event ID</>, { width: 1200, height: 630 });
         }
 
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
-
-        const { data: event } = await supabase
+        const { data: event } = await adminDb
             .from('events')
             .select('*')
             .eq('id', id)
