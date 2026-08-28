@@ -5,6 +5,8 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import PublicTournamentView from "@/components/public/PublicTournamentView";
 
+export const dynamic = 'force-dynamic';
+
 export async function generateMetadata({ params }: { params: Promise<{ shopName: string, id: string }> }) {
     const { shopName, id } = await params;
     const tournament = await getTournamentByShortId(shopName, id);

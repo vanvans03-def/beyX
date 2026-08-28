@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     description: 'BeyX System — Beyblade X Tournament Registration & Management',
 };
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 export default async function Home() {
     const isEventsActive = await getSystemSetting('event_system_active', true);
