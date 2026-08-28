@@ -109,16 +109,17 @@ $ docker exec beyx-postgres psql -U beyx_admin -d beyx -c "SELECT r.rolname, s.s
 | Command | Exit Code | Duration | Status & Summary |
 | :--- | :---: | :---: | :--- |
 | `npm run build` | **0** | **33.4s** | ล้าง `.next` แล้วรัน Build ใหม่ผ่าน 100% (31/31 Static pages และ Dynamic routes ทั้งหมด ไม่มี Route type error) |
-| `npm run test:functional` | **0** | **22.8s** | **3 passed, 9 skipped** (Playwright รันตรง, Teardown dev server สะอาด `Terminating the WebServer` -> `Terminated the WebServer`, คืน Exit Code 0 ทันที) |
+| `npm run test:functional` | **0** | **18.6s** | **3 passed, 9 skipped** (รันผ่าน `scripts/testing/test-server-harness.cjs` จัดการ Lifecycle ของ Next dev และ Teardown process tree สะอาด คืน Exit Code 0 ทันที) |
+| `$env:DEBUG='pw:webserver'; npx playwright test tests/e2e/core.spec.ts -g "health endpoint" --reporter=line` | **0** | **11.2s** | **1 passed** (Playwright direct webServer teardown สำเร็จ `Terminating the WebServer` -> `Terminated the WebServer`) |
 | `npm run lint` | **1** | ~20s | บันทึก Technical Debt เดิม 264 errors (ส่วนใหญ่เป็น `@typescript-eslint/no-explicit-any`) และ 156 warnings (ไม่มี error ใหม่) |
 | `npm run setup:local-db-env` | **0** | <1s | ตรวจสอบ `.env.local-db` ไม่ regenerate secrets ซ้ำ และรายงาน `[ACL CHECK] Result: PASS` |
 | `node scripts/setup/audit-supabase-files.cjs` | **0** | <1s | รายงานจำแนกประเภทไฟล์ 4 หมวดหมู่ (29 ไฟล์เรียก `supabaseAdmin.from(...)` โดยตรง) ถูกต้องตามหลักฐานโค้ด |
 
 ### 4.1 รายละเอียด Functional E2E Test Results
 - **Passed (3)**:
-  1. `health endpoint is ready` (280ms)
-  2. `protected organizer page redirects without a session` (10.6s)
-  3. `scoreboard supports scoring and correction` (12.2s)
+  1. `health endpoint is ready` (205ms)
+  2. `protected organizer page redirects without a session` (13.5s)
+  3. `scoreboard supports scoring and correction` (14.5s)
 - **Skipped (9)**:
   1. `six judges can open one organizer account concurrently` (ขาด `TEST_ORGANIZER_TOURNAMENT_ID`, `TEST_SESSION_COOKIE`)
   2. `registration page works for NMM` (ขาด `TEST_TOURNAMENT_NMM_ID`)
