@@ -42,6 +42,16 @@ const DEFAULT_CONFLICT_COLUMNS: Record<string, string[]> = {
   user_beyblade_points: ['user_id', 'beyblade_id'],
   player_win_rate_totals: ['period_month', 'player_id'],
 };
+const JSON_COLUMNS: Record<string, Set<string>> = {
+  registrations: new Set(['main_deck', 'reserve_decks']),
+  system_settings: new Set(['value']),
+  tournaments: new Set(['ranking_badges_snapshot', 'settings']),
+};
+
+function postgresValue(table: string, column: string, value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  return JSON_COLUMNS[table]?.has(column) ? JSON.stringify(value) : value;
+}
 
 function identifier(value: string): string {
   if (!IDENTIFIER.test(value)) throw new Error(`Unsafe SQL identifier: ${value}`);
@@ -177,14 +187,17 @@ class PostgresQueryBuilder implements PromiseLike<Result> {
     if (this.operation === 'update') {
       const entries = Object.entries(rows[0]);
       if (!entries.length) throw new Error('update requires at least one defined column');
-      const set = entries.map(([key, value]) => { values.push(value); return `${identifier(key)} = $${values.length}`; });
+      const set = entries.map(([key, value]) => {
+        values.push(postgresValue(this.table, key, value));
+        return `${identifier(key)} = $${values.length}`;
+      });
       text = `UPDATE public.${table} SET ${set.join(', ')}${this.where(values)}${this.returning()}`;
       return { text, values };
     }
 
     const insertColumns = [...new Set(rows.flatMap((row) => Object.keys(row)))];
     const tuples = rows.map((row) => `(${insertColumns.map((key) => {
-      values.push(row[key] ?? null);
+      values.push(postgresValue(this.table, key, row[key]));
       return `$${values.length}`;
     }).join(', ')})`);
     text = `INSERT INTO public.${table} (${insertColumns.map(identifier).join(', ')}) VALUES ${tuples.join(', ')}`;

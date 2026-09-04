@@ -3,9 +3,10 @@ import { getExcludedTournamentIds } from '@/lib/ranking-eligibility';
 import { normalizePlayerName } from '@/lib/player-rankings';
 import { assignCompetitionRanks } from '@/lib/competition-ranking';
 
-type ResultRow = { tournament_id: string; tournament_completed_at: string; points: number; placement: number; player_id: string };
+type DatabaseDate = string | Date;
+type ResultRow = { tournament_id: string; tournament_completed_at: DatabaseDate; points: number; placement: number; player_id: string };
 type PlayerRow = { id: string; display_name: string };
-type WinRateRow = { player_id: string; period_month: string; win_rate: number; wins: number; matches: number };
+type WinRateRow = { player_id: string; period_month: DatabaseDate; win_rate: number; wins: number; matches: number };
 type MatchTotals = Map<string, { wins: number; matches: number }>;
 type PointsRanking = {
     playerId: string;
@@ -111,6 +112,11 @@ function groupByPeriod<T>(rows: T[], getPeriod: (row: T) => string): Map<string,
     return grouped;
 }
 
+function databaseDatePrefix(value: DatabaseDate, length: 4 | 7): string {
+    const normalized = value instanceof Date ? value.toISOString() : String(value);
+    return normalized.slice(0, length);
+}
+
 function addHistoryEntry(historyByPlayer: Map<string, BadgeHistoryEntry[]>, playerId: string, entry: BadgeHistoryEntry) {
     historyByPlayer.set(playerId, [...(historyByPlayer.get(playerId) || []), entry]);
 }
@@ -141,10 +147,10 @@ export async function getRankingBadgesForNames(rawNames: string[]): Promise<Reco
 
     const names = new Map((players || []).map((player: PlayerRow) => [player.id, player.display_name]));
     const excludedIds = await getExcludedTournamentIds(resultRows.map(row => row.tournament_id));
-    const resultsByMonth = groupByPeriod(resultRows, row => row.tournament_completed_at.slice(0, 7));
-    const resultsByYear = groupByPeriod(resultRows, row => row.tournament_completed_at.slice(0, 4));
-    const winRatesByMonth = groupByPeriod(winRateRows, row => row.period_month.slice(0, 7));
-    const winRatesByYear = groupByPeriod(winRateRows, row => row.period_month.slice(0, 4));
+    const resultsByMonth = groupByPeriod(resultRows, row => databaseDatePrefix(row.tournament_completed_at, 7));
+    const resultsByYear = groupByPeriod(resultRows, row => databaseDatePrefix(row.tournament_completed_at, 4));
+    const winRatesByMonth = groupByPeriod(winRateRows, row => databaseDatePrefix(row.period_month, 7));
+    const winRatesByYear = groupByPeriod(winRateRows, row => databaseDatePrefix(row.period_month, 4));
     const historyByPlayer = new Map<string, BadgeHistoryEntry[]>();
 
     resultsByMonth.forEach((periodRows, period) => {
