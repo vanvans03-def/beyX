@@ -56,3 +56,4 @@ docker-compose.override.yml
 next-env.d.ts
 
 .agent
+.neon
