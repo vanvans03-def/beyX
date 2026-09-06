@@ -2,7 +2,11 @@ import Redis from 'ioredis';
 
 const globalForRedis = globalThis as unknown as {
     redis: Redis | null;
+    cacheFills?: Map<string, Promise<unknown>>;
 };
+
+const cacheFills = globalForRedis.cacheFills ?? new Map<string, Promise<unknown>>();
+globalForRedis.cacheFills = cacheFills;
 
 function createRedisInstance(): Redis | null {
     const redisUrl = process.env.REDIS_URL;
@@ -70,6 +74,16 @@ export async function setCachedData(key: string, data: any, ttlSeconds: number =
     } catch (error: any) {
         console.warn(`[Redis Set Error] key ${key}:`, error.message);
     }
+}
+
+/** Coalesce concurrent cache misses in this app process into one database read. */
+export async function singleFlight<T>(key: string, work: () => Promise<T>): Promise<T> {
+    const active = cacheFills.get(key) as Promise<T> | undefined;
+    if (active) return active;
+
+    const pending = work().finally(() => cacheFills.delete(key));
+    cacheFills.set(key, pending);
+    return pending;
 }
 
 /**

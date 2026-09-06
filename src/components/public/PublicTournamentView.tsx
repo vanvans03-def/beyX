@@ -4,7 +4,7 @@ import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe, Loader2, Monitor
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import InternalBracket from "@/components/InternalBracket";
 import StandingsTable from "@/components/StandingsTable";
 
@@ -28,6 +28,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
     // Bracket State
     const [matches, setMatches] = useState<any[]>([]);
     const [loadingBracket, setLoadingBracket] = useState(true);
+    const bracketVersion = useRef('');
 
     // Standings State
     const [standings, setStandings] = useState<any[]>([]);
@@ -42,6 +43,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
             const json = await res.json();
             if (json.matches) {
                 setMatches(prev => JSON.stringify(prev) === JSON.stringify(json.matches) ? prev : json.matches);
+                bracketVersion.current = json.version || bracketVersion.current;
             }
         } catch (e) {
             console.error("Failed to fetch matches", e);
@@ -73,12 +75,41 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                 fetchInternalMatches(matches.length > 0);
 
                 const events = new EventSource(`/api/realtime/tournaments/${encodeURIComponent(tournament.id)}`);
-                events.addEventListener('tournament-update', () => {
-                    void fetchInternalMatches(true);
-                    if (activeTab === 'standings') void fetchStandings();
+                let readyCount = 0;
+                let standingsTimer: ReturnType<typeof setTimeout> | null = null;
+                events.addEventListener('ready', () => {
+                    // EventSource emits ready again after reconnect. Reconcile once
+                    // in case this browser missed a delta while disconnected.
+                    readyCount += 1;
+                    if (readyCount > 1) void fetchInternalMatches(true);
+                });
+                events.addEventListener('tournament-update', (message) => {
+                    try {
+                        const payload = JSON.parse((message as MessageEvent).data);
+                        if (Array.isArray(payload.matches) && payload.matches.length > 0) {
+                            const changed = new Map(payload.matches.map((match: any) => [String(match.id), match]));
+                            setMatches(previous => previous.map(match => {
+                                const delta = changed.get(String(match.id));
+                                return delta ? { ...match, ...delta } : match;
+                            }));
+                            bracketVersion.current = payload.version || bracketVersion.current;
+                        }
+                        // Row-level trigger messages are followed by an app delta.
+                        // Other event types reconcile from the Redis snapshot.
+                        else if (payload.table !== 'internal_matches') {
+                            void fetchInternalMatches(true);
+                        }
+                        if (activeTab === 'standings') {
+                            if (standingsTimer) clearTimeout(standingsTimer);
+                            standingsTimer = setTimeout(() => void fetchStandings(), 500);
+                        }
+                    } catch (error) {
+                        console.warn('Ignored malformed tournament update', error);
+                    }
                 });
 
                 return () => {
+                    if (standingsTimer) clearTimeout(standingsTimer);
                     events.close();
                 };
             } else {

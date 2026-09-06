@@ -4,7 +4,7 @@ import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { getTournament, getUserApiKey, getMatchesFromDB } from "@/lib/repository";
 import { publishTournamentUpdate } from '@/lib/realtime-server';
 import { propagateWinners, type InternalMatch } from "@/lib/brackets";
-import { invalidateTournamentCache } from "@/lib/redis";
+import { invalidateCacheKeys, invalidateTournamentCache, setCachedData } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
@@ -148,21 +148,33 @@ export async function PUT(request: Request) {
             // ── 3. Run propagation ───────────────────────────────────────────
             propagateWinners(ms);
 
-            // ── 4. Persist all mutated matches in one bulk upsert ─────────────
+            // ── 4. Persist only rows changed by this result/propagation ───────
             const now = new Date().toISOString();
-            const { error: upsertErr } = await supabaseAdmin
-                .from('internal_matches')
-                .upsert(
-                    ms.map(m => {
-                        const original = rows.find(r => r.id === m.id);
-                        const hasChanged = !original || 
-                            original.state !== m.state || 
-                            original.winner_id !== m.winner_id || 
-                            original.scores_csv !== m.scores_csv ||
-                            original.player1_id !== m.player1_id ||
-                            original.player2_id !== m.player2_id;
+            const originalById = new Map(rows.map(row => [row.id, row]));
+            const changedMatches = ms.filter(m => {
+                const original = originalById.get(m.id);
+                return !original ||
+                    original.state !== m.state ||
+                    original.winner_id !== m.winner_id ||
+                    original.scores_csv !== m.scores_csv ||
+                    original.player1_id !== m.player1_id ||
+                    original.player2_id !== m.player2_id;
+            });
+            const changedIds = new Set(changedMatches.map(match => match.id));
+            const { data: regs, error: registrationsError } = await supabaseAdmin
+                .from('registrations')
+                .select('id, player_name')
+                .eq('tournament_id', tournamentId);
+            if (registrationsError) throw new Error(registrationsError.message);
 
-                        return {
+            const playerMap = new Map((regs || []).map(r => [r.id, r.player_name]));
+            const missingPlayer = ms.some(match =>
+                (match.player1_id && !playerMap.has(match.player1_id)) ||
+                (match.player2_id && !playerMap.has(match.player2_id))
+            );
+            if (missingPlayer) throw new Error('Player data is incomplete; match result was not saved');
+
+            const persistedRows = changedMatches.map(m => ({
                             id: m.id,
                             tournament_id: m.tournament_id,
                             player1_id: m.player1_id,
@@ -179,22 +191,63 @@ export async function PUT(request: Request) {
                             is_grand_final: m.is_grand_final,
                             is_reset_match: m.is_reset_match,
                             suggested_play_order: m.suggested_play_order,
-                            updated_at: hasChanged ? now : original.updated_at,
-                        };
-                    }),
-                    { onConflict: 'id' },
-                );
+                            updated_at: now,
+                        }));
+
+            const { error: upsertErr } = persistedRows.length
+                ? await supabaseAdmin.from('internal_matches').upsert(persistedRows, { onConflict: 'id' })
+                : { error: null };
 
             if (upsertErr) {
                 throw new Error(`Failed to save propagated matches: ${upsertErr.message}`);
             }
 
-            // Invalidate Redis cache for matches and standings
-            if (tournamentId) {
-                await invalidateTournamentCache(tournamentId);
+            // Build the new snapshot once. All public viewers receive deltas and
+            // new/reconnecting viewers read this snapshot from Redis.
+            const enrich = (match: any) => ({
+                ...match,
+                player1: { name: match.player1_id ? (playerMap.get(match.player1_id) || 'Unknown Player') : null },
+                player2: { name: match.player2_id ? (playerMap.get(match.player2_id) || 'Unknown Player') : null },
+                updated_at: changedIds.has(match.id)
+                    ? now
+                    : originalById.get(match.id)?.updated_at,
+            });
+            const snapshot = ms.map(enrich);
+            // Keep NOTIFY payload comfortably below PostgreSQL's 8KB limit.
+            // The browser merges these mutable fields into its existing snapshot.
+            const deltas = changedMatches.map(match => {
+                const enriched = enrich(match);
+                return {
+                    id: enriched.id,
+                    player1_id: enriched.player1_id,
+                    player2_id: enriched.player2_id,
+                    winner_id: enriched.winner_id,
+                    state: enriched.state,
+                    scores_csv: enriched.scores_csv,
+                    player1: enriched.player1,
+                    player2: enriched.player2,
+                    updated_at: enriched.updated_at,
+                };
+            });
+            await setCachedData(`tournament:${tournamentId}:matches`, { matches: snapshot, version: now }, 3600);
+            await invalidateCacheKeys(`tournament:${tournamentId}:standings`);
+
+            try {
+                for (let index = 0; index < deltas.length; index += 5) {
+                    await publishTournamentUpdate({
+                        tournamentId,
+                        event: 'match-update',
+                        matchId,
+                        matches: deltas.slice(index, index + 5),
+                        version: now,
+                    });
+                }
+            } catch (notifyError) {
+                // The score is already committed; do not invite a duplicate admin retry.
+                console.error('[realtime] Failed to broadcast match delta', notifyError);
             }
 
-            return NextResponse.json({ success: true });
+            return NextResponse.json({ success: true, changedMatches: deltas.length, version: now });
         }
 
         // --- CHALLONGE ---

@@ -8,6 +8,8 @@ export type TournamentUpdate = {
   tournamentId: string;
   event: 'match-update' | 'bracket-update' | 'registration-update';
   matchId?: string | number;
+  matches?: Record<string, unknown>[];
+  version?: string;
   occurredAt: string;
 };
 

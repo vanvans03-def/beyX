@@ -4,6 +4,8 @@ import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg
 declare global {
   // eslint-disable-next-line no-var
   var __beyxPostgresPool: Pool | undefined;
+  // eslint-disable-next-line no-var
+  var __beyxRealtimePostgresPool: Pool | undefined;
 }
 
 function positiveInteger(value: string | undefined, fallback: number): number {
@@ -11,8 +13,7 @@ function positiveInteger(value: string | undefined, fallback: number): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function createPool(): Pool {
-  const connectionString = process.env.DATABASE_URL;
+function createPool(connectionString = process.env.DATABASE_URL, max?: number): Pool {
   if (!connectionString) {
     throw new Error('DATA_BACKEND=postgres requires DATABASE_URL');
   }
@@ -20,7 +21,7 @@ function createPool(): Pool {
   const sslMode = process.env.DATABASE_SSL?.toLowerCase() || 'disable';
   return new Pool({
     connectionString,
-    max: positiveInteger(process.env.DATABASE_POOL_MAX, 5),
+    max: max ?? positiveInteger(process.env.DATABASE_POOL_MAX, 5),
     min: 0,
     idleTimeoutMillis: positiveInteger(process.env.DATABASE_IDLE_TIMEOUT_MS, 30_000),
     connectionTimeoutMillis: positiveInteger(process.env.DATABASE_CONNECT_TIMEOUT_MS, 5_000),
@@ -29,6 +30,24 @@ function createPool(): Pool {
     application_name: process.env.DATABASE_APPLICATION_NAME || 'beyx-nextjs',
     ssl: sslMode === 'disable' ? false : { rejectUnauthorized: sslMode !== 'no-verify' },
   });
+}
+
+/**
+ * LISTEN requires a direct PostgreSQL connection (not a transaction pooler).
+ * The pool contains at most one connection and is only used while SSE viewers
+ * are connected.
+ */
+export function getRealtimePool(): Pool {
+  if (!globalThis.__beyxRealtimePostgresPool) {
+    globalThis.__beyxRealtimePostgresPool = createPool(
+      process.env.REALTIME_DATABASE_URL || process.env.DATABASE_URL,
+      1,
+    );
+    globalThis.__beyxRealtimePostgresPool.on('error', (error) => {
+      console.error('[postgres-realtime] idle client error', error);
+    });
+  }
+  return globalThis.__beyxRealtimePostgresPool;
 }
 
 export function getPool(): Pool {
