@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 import { getTournament, getUserApiKey } from "@/lib/repository";
 import { getTournamentStandings } from "@/lib/challonge";
 import { adminDb as supabaseAdmin } from '@/lib/db/admin';
-import { getCachedData, setCachedData } from "@/lib/redis";
+import { getCachedData, setCachedData, singleFlight } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
+
+class PublicStandingsError extends Error {
+    constructor(message: string, readonly status: number) {
+        super(message);
+    }
+}
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -16,17 +22,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             return NextResponse.json(cachedResponse);
         }
 
-        const tournament = await getTournament(id);
+        const responseData = await singleFlight(cacheKey, async () => {
+            const filled = await getCachedData<{ success: boolean; data: any[] }>(cacheKey);
+            if (filled) return filled;
 
-        if (!tournament) {
-            return NextResponse.json({ success: false, message: "Tournament not found" }, { status: 404 });
-        }
+            const tournament = await getTournament(id);
 
-        if (tournament.provider === 'INTERNAL') {
-            const { data: matches } = await supabaseAdmin
-                .from('internal_matches')
-                .select('*')
-                .eq('tournament_id', id);
+            if (!tournament) throw new PublicStandingsError("Tournament not found", 404);
+
+            if (tournament.provider === 'INTERNAL') {
+                const { data: matches } = await supabaseAdmin
+                    .from('internal_matches')
+                    .select('*')
+                    .eq('tournament_id', id);
             
             const { data: registrations } = await supabaseAdmin
                 .from('registrations')
@@ -35,9 +43,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             
             const playerMap = new Map((registrations || []).map((r: any) => [r.id, r.player_name] as [string, string]));
 
-            if (!matches || matches.length === 0) {
-                return NextResponse.json({ success: true, data: [] });
-            }
+                if (!matches || matches.length === 0) {
+                    const empty = { success: true, data: [] as any[] };
+                    await setCachedData(cacheKey, empty, 3600);
+                    return empty;
+                }
 
             const standings: any[] = [];
             const processedIds = new Set<string>();
@@ -117,31 +127,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                 }
             }
 
-            const responseData = { success: true, data: standings };
-            await setCachedData(cacheKey, responseData, 3600);
-            return NextResponse.json(responseData);
-        }
+                const internalResponse = { success: true, data: standings };
+                await setCachedData(cacheKey, internalResponse, 3600);
+                return internalResponse;
+            }
 
-        if (!tournament.challonge_url) {
-            return NextResponse.json({ success: false, message: "Tournament not linked to Challonge" }, { status: 404 });
-        }
+            if (!tournament.challonge_url) {
+                throw new PublicStandingsError("Tournament not linked to Challonge", 404);
+            }
 
         const challongeUrl = tournament.challonge_url as string;
         const identifier = challongeUrl.split('/').pop();
-        if (!identifier) {
-            return NextResponse.json({ success: false, message: "Invalid Challonge URL" }, { status: 400 });
-        }
+            if (!identifier) throw new PublicStandingsError("Invalid Challonge URL", 400);
 
-        if (!tournament.user_id) {
-            return NextResponse.json({ success: false, message: "Tournament owner not found" }, { status: 400 });
-        }
+            if (!tournament.user_id) throw new PublicStandingsError("Tournament owner not found", 400);
 
         const apiKey = await getUserApiKey(tournament.user_id);
         if (!apiKey) throw new Error("Challonge API Key not found for user");
 
-        const standings = await getTournamentStandings(apiKey, identifier);
-        const responseData = { success: true, data: standings };
-        await setCachedData(cacheKey, responseData, 3600);
+            const standings = await getTournamentStandings(apiKey, identifier);
+            const challongeResponse = { success: true, data: standings };
+            await setCachedData(cacheKey, challongeResponse, 3600);
+            return challongeResponse;
+        });
         return NextResponse.json(responseData);
 
     } catch (error: any) {
@@ -151,6 +159,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             success: false,
             message: error.message,
             details: errorDetail
-        }, { status: 500 });
+        }, { status: error instanceof PublicStandingsError ? error.status : 500 });
     }
 }

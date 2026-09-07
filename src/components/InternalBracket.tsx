@@ -133,8 +133,8 @@ function cardTopY(slotIdx: number, roundIdx: number, UNIT: number): number {
     return cardCenterY(slotIdx, roundIdx, UNIT) - CARD_H / 2;
 }
 
-function isBracketMatchHidden(match: InternalMatch, allMatches: InternalMatch[]): boolean {
-    const winnerBracketFeeders = allMatches.filter(candidate => candidate.loser_to_match_id === match.id);
+function isBracketMatchHidden(match: InternalMatch, loserFeedersByTarget: Map<string, InternalMatch[]>): boolean {
+    const winnerBracketFeeders = loserFeedersByTarget.get(match.id) ?? [];
     const isSingleDropBye = winnerBracketFeeders.length === 1
         && !match.player1_prereq_match_id
         && !match.player2_prereq_match_id;
@@ -286,8 +286,16 @@ function BracketSection({
     const r1Count = rounds[0]?.matches.length ?? 0;
     const totalH = r1Count * UNIT + 40;
     const sectionMatchIds = new Set(rounds.flatMap(round => round.matches.map(match => match.id)));
+    const allMatchesById = new Map(allMatches.map(match => [match.id, match]));
+    const loserFeedersByTarget = new Map<string, InternalMatch[]>();
+    allMatches.forEach(match => {
+        if (!match.loser_to_match_id) return;
+        const feeders = loserFeedersByTarget.get(match.loser_to_match_id) ?? [];
+        feeders.push(match);
+        loserFeedersByTarget.set(match.loser_to_match_id, feeders);
+    });
     const visibleSectionMatchIds = new Set(rounds.flatMap(round => round.matches)
-        .filter(match => !isBracketMatchHidden(match, allMatches))
+        .filter(match => !isBracketMatchHidden(match, loserFeedersByTarget))
         .map(match => match.id));
     const connectorPrefix = rounds.some(round => round.matches.some(match => match.round < 0)) ? 'losers' : 'winners';
 
@@ -326,12 +334,11 @@ function BracketSection({
                                     // not SVG paths, because their Y values belong to a different canvas.
                                     const prerequisiteFeeders = [m.player1_prereq_match_id, m.player2_prereq_match_id]
                                         .filter((id): id is string => Boolean(id))
-                                        .map(id => allMatches.find(candidate => candidate.id === id))
+                                        .map(id => allMatchesById.get(id))
                                         .filter((candidate): candidate is InternalMatch => Boolean(candidate))
                                         .filter(candidate => sectionMatchIds.has(candidate.id)
                                             && visibleSectionMatchIds.has(candidate.id));
-                                    const loserFeeders = allMatches.filter(pm =>
-                                        pm.loser_to_match_id === m.id &&
+                                    const loserFeeders = (loserFeedersByTarget.get(m.id) ?? []).filter(pm =>
                                         sectionMatchIds.has(pm.id) &&
                                         visibleSectionMatchIds.has(pm.id)
                                     );
@@ -411,13 +418,14 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
     const [searchLane, setSearchLane] = useState<'upper' | 'lower'>('upper');
     const [badgesByName, setBadgesByName] = useState<Record<string, PlayerRankingBadges>>({});
     const [selectedBadgeHistory, setSelectedBadgeHistory] = useState<{ name: string; badges: PlayerRankingBadges } | null>(null);
-    const badgePlayerKey = JSON.stringify(
-        [...new Set((participantNames?.length
+    const badgeNames = [...new Set((participantNames?.length
             ? participantNames
             : matches.flatMap(match => [match.player1?.name, match.player2?.name])
         ).filter((name): name is string => Boolean(name?.trim())))]
-            .sort((a, b) => normalizeBadgeName(a).localeCompare(normalizeBadgeName(b), 'th')),
-    );
+            .sort((a, b) => normalizeBadgeName(a).localeCompare(normalizeBadgeName(b), 'th'));
+    // Badge history is optional decoration. Avoid a huge URL/request and extra DB work
+    // on large public brackets where rendering the competition is the priority.
+    const badgePlayerKey = JSON.stringify(badgeNames.length <= 128 ? badgeNames : []);
 
     useEffect(() => {
         const names = JSON.parse(badgePlayerKey) as string[];
@@ -754,6 +762,14 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
 
         const ws = matches.filter(m => m.round > 0 || m.is_grand_final).sort((a, b) => a.round - b.round);
         const ls = matches.filter(m => m.round < 0).sort((a, b) => Math.abs(a.round) - Math.abs(b.round));
+        const matchById = new Map(matches.map(match => [match.id, match]));
+        const loserFeedersByTarget = new Map<string, InternalMatch[]>();
+        matches.forEach(match => {
+            if (!match.loser_to_match_id) return;
+            const feeders = loserFeedersByTarget.get(match.loser_to_match_id) ?? [];
+            feeders.push(match);
+            loserFeedersByTarget.set(match.loser_to_match_id, feeders);
+        });
 
         const wRoundNums = [...new Set(ws.map(m => m.round))].sort((a, b) => a - b);
         const lRoundNums = [...new Set(ls.map(m => m.round))].sort((a, b) => Math.abs(a) - Math.abs(b));
@@ -780,14 +796,14 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
                 if (visited.has(id)) continue;
                 visited.add(id);
 
-                const m = winnersMatches.find(xm => xm.id === id);
+                const m = matchById.get(id);
                 if (!m) continue;
 
                 // Set slot for all matches (including BYEs) to maintain correct tree alignment
                 slotMap.set(id, slot);
 
                 if (m.player1_prereq_match_id) {
-                    const p1m = winnersMatches.find(x => x.id === m.player1_prereq_match_id);
+                    const p1m = matchById.get(m.player1_prereq_match_id);
                     if (p1m?.scores_csv?.includes('BYE')) {
                         // BYE match — ใช้ slot เดิม ไม่ขยาย
                         queue.push({ id: m.player1_prereq_match_id, slot: slot * 2 });
@@ -815,7 +831,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
 
                 if (gi === 0) {
                     // LB R1: sort by the slots of their WB Round 1 feeders to preserve correct spatial order
-                    const wbFeeders = ws.filter(wm => wm.loser_to_match_id === m.id);
+                    const wbFeeders = loserFeedersByTarget.get(m.id) ?? [];
                     const slots = wbFeeders.map(wm => slotMap.get(wm.id)).filter(s => s !== undefined) as number[];
                     if (slots.length > 0) {
                         sortKey = Math.min(...slots);
@@ -887,7 +903,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
                 if (m.scores_csv?.includes('BYE')) return;
 
                 const loserOfNums: [number | undefined, number | undefined] = [undefined, undefined];
-                const feeds = ws.filter(wm => wm.loser_to_match_id === m.id);
+                const feeds = loserFeedersByTarget.get(m.id) ?? [];
 
                 feeds.forEach((wm) => {
                     const num = wMatchNumMap.get(wm.id);
@@ -938,7 +954,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
         let currentLabelNum = 1;
         const losersRounds = lGroups.map((group) => {
             const hasVisible = group.some(m => {
-                const wbFeedersForMatch = matches.filter(wm => wm.loser_to_match_id === m.id);
+                const wbFeedersForMatch = loserFeedersByTarget.get(m.id) ?? [];
                 const isOnlyOneLBFeeder = wbFeedersForMatch.length === 1 && !m.player1_prereq_match_id && !m.player2_prereq_match_id;
                 const isBye = m.scores_csv?.includes('BYE') ||
                     (m.state?.toUpperCase() === 'COMPLETE' && (!m.player1_id || !m.player2_id) && !m.is_grand_final) ||
@@ -954,20 +970,6 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
                 isQualify: false,
             };
         }).filter((r): r is NonNullable<typeof r> => r !== null);
-        console.log('=== LB SLOT DEBUG ===');
-        lGroups.forEach((group, gi) => {
-            console.log(`LB Round ${gi + 1}:`);
-            group.forEach(m => {
-                const slot = slotMap.get(m.id);
-                const order = m.suggested_play_order;
-                const p1prereq = m.player1_prereq_match_id?.slice(0, 8);
-                const p2prereq = m.player2_prereq_match_id?.slice(0, 8);
-                const wbFeeders = matches.filter(wm => wm.loser_to_match_id === m.id)
-                    .map(wm => `WB#${wm.suggested_play_order}(slot${slotMap.get(wm.id)})`);
-                console.log(`  Match#${order} slot=${slot} p1prereq=${p1prereq} p2prereq=${p2prereq} wbFeeders=[${wbFeeders}]`);
-            });
-        });
-
         // Create Y map for PERFECT spatial formatting without line overlaps
         const yMap = new Map<string, number>();
 
@@ -976,7 +978,7 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
             group.forEach(m => {
                 if (m.is_reset_match) {
                     // Reset match always aligns vertically with the Grand Final match!
-                    const gfMatch = matches.find(xm => xm.is_grand_final);
+                    const gfMatch = grandFinalMatch;
                     const gfY = gfMatch ? yMap.get(gfMatch.id) : undefined;
                     if (gfY !== undefined) {
                         yMap.set(m.id, gfY);
@@ -1009,11 +1011,6 @@ const InternalBracket: React.FC<Props> = ({ matches, onReportWin, tournamentId, 
                     yMap.set(m.id, cardCenterY(slot, 0, UNIT_BASE));
                 }
             });
-        });
-
-        console.log("=== CLIENT Y MAP DEBUG ===");
-        matches.forEach(m => {
-            console.log(`  Match #${m.suggested_play_order} (ID: ${m.id.slice(0, 8)}) -> Y: ${yMap.get(m.id)}, slot: ${slotMap.get(m.id)}`);
         });
 
         return { winnersRounds, losersRounds, slotMap, UNIT: UNIT_BASE, numMap, yMap };

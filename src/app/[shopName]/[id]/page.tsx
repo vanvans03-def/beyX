@@ -1,16 +1,16 @@
-import { getTournamentByShortId, getRegistrations } from "@/lib/repository";
+import { getPublicTournamentPage } from '@/lib/public-tournament-cache';
+import { cache } from 'react';
 import { notFound } from "next/navigation";
-import { Users, Trophy, Clock, ChevronLeft, ShieldCheck } from "lucide-react";
-import Link from "next/link";
-import { cn } from "@/lib/utils";
 import PublicTournamentView from "@/components/public/PublicTournamentView";
 
 export const dynamic = 'force-dynamic';
+const getPagePayload = cache(getPublicTournamentPage);
 
 export async function generateMetadata({ params }: { params: Promise<{ shopName: string, id: string }> }) {
     const { shopName, id } = await params;
-    const tournament = await getTournamentByShortId(shopName, id);
-    if (!tournament) return { title: "Tournament Not Found" };
+    const payload = await getPagePayload(shopName, id);
+    if (!payload) return { title: "Tournament Not Found" };
+    const { tournament } = payload;
 
     return {
         title: `${tournament.name} | ${tournament.organizer_name}`,
@@ -20,13 +20,11 @@ export async function generateMetadata({ params }: { params: Promise<{ shopName:
 
 export default async function PublicTournamentPage({ params }: { params: Promise<{ shopName: string, id: string }> }) {
     const { shopName, id } = await params;
-    const tournament = await getTournamentByShortId(shopName, id);
-
-    if (!tournament) {
+    const payload = await getPagePayload(shopName, id);
+    if (!payload) {
         notFound();
     }
-
-    const registrations = await getRegistrations(tournament.id);
+    const { tournament, registrations } = payload;
 
     return (
         <PublicTournamentView 

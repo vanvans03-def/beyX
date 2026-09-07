@@ -93,8 +93,6 @@ export function useRegistration({
     const [existingPlayers, setExistingPlayers] = useState<string[]>([]);
     const [loadingPlayers, setLoadingPlayers] = useState(false);
 
-    console.log('[useRegistration DEBUG] tournamentType:', tournamentType, 'mode:', getModeFromType(tournamentType));
-
     const [profiles, setProfiles] = useState<Profile[]>([
         {
             internalId: 1,

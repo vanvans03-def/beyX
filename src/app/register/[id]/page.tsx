@@ -1,12 +1,12 @@
-import TournamentViewerButton from "@/components/TournamentViewerButton";
-import RegistrationForm from "@/components/RegistrationForm";
-import { getTournament, getUserApiKey } from "@/lib/repository";
+import { getUserApiKey } from "@/lib/repository";
+import { getPublicRegistrationTournament } from '@/lib/public-tournament-cache';
+import { cache } from 'react';
 import type { Metadata, ResolvingMetadata } from "next";
-import StandingsTable from "@/components/StandingsTable";
 import { getTournamentStandings } from "@/lib/challonge";
 import RealtimeTournamentWrapper from "@/components/RealtimeTournamentWrapper";
 
 export const dynamic = 'force-dynamic';
+const getPageTournament = cache(getPublicRegistrationTournament);
 
 type Props = {
     params: Promise<{ id: string }>
@@ -17,7 +17,7 @@ export async function generateMetadata(
     parent: ResolvingMetadata
 ): Promise<Metadata> {
     const { id } = await params;
-    const tournament = await getTournament(id);
+    const tournament = await getPageTournament(id);
 
     // optionally access and extend (rather than replace) parent metadata
     const previousImages = (await parent).openGraph?.images || []
@@ -48,7 +48,7 @@ export async function generateMetadata(
 
 export default async function RegisterPage({ params }: Props) {
     const { id } = await params;
-    const tournament = await getTournament(id);
+    const tournament = await getPageTournament(id);
 
     if (!tournament) {
         return <div>Tournament not found</div>;

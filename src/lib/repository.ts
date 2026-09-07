@@ -160,22 +160,47 @@ export async function getTournamentByShortId(shopName: string, shortId: string):
 
     const user = users[0];
 
-    // 2. Fetch all tournaments for this user to match short ID
+    const cleanShortId = shortId.trim().toLowerCase();
+    const isFullUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanShortId);
+
+    // Full public URLs contain the UUID. Resolve those with one indexed lookup
+    // instead of loading every tournament owned by this organizer.
+    if (isFullUuid) {
+        const { data: exact, error } = await supabaseAdmin
+            .from('tournaments')
+            .select('*')
+            .eq('id', cleanShortId)
+            .eq('user_id', user.id)
+            .maybeSingle();
+        if (error || !exact) return null;
+        return {
+            id: exact.id,
+            name: exact.name,
+            status: exact.status,
+            created_at: new Date(exact.created_at),
+            type: exact.type || 'U10',
+            ban_list: exact.ban_list || [],
+            challonge_url: exact.challonge_url,
+            arena_count: exact.arena_count,
+            user_id: exact.user_id,
+            organizer_name: user.shop_name || user.username || 'Unknown Organizer',
+            provider: exact.provider || 'CHALLONGE',
+            bracket_type: exact.bracket_type || 'SINGLE',
+            settings: exact.settings || {},
+        };
+    }
+
+    // Legacy short URLs need suffix matching and retain the compatibility path.
     const { data: tournaments, error: tourError } = await supabaseAdmin
-        .from('tournaments')
-        .select('*')
-        .eq('user_id', user.id);
+        .from('tournaments').select('*').eq('user_id', user.id);
 
     if (tourError || !tournaments) {
         console.log(`[Repo] Tournaments error:`, tourError);
         return null;
     }
 
-    console.log(`[Repo] Found ${tournaments.length} tournaments for user`);
-
     // 3. Find match (Full UUID or End of UUID)
     // Supports 8-character short ID or full UUID
-    const cleanShortId = shortId.trim().toLowerCase();
     const match = tournaments.find(t => {
         const fullId = t.id.toLowerCase();
         const strippedId = fullId.replace(/-/g, '');

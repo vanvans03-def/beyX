@@ -109,7 +109,8 @@ export async function invalidateTournamentCache(tournamentId: string): Promise<v
     await invalidateCacheKeys(
         `tournament:${tournamentId}:matches`,
         `tournament:${tournamentId}:standings`,
-        `register:config:${tournamentId}`
+        `register:config:${tournamentId}`,
+        `public:registration:tournament:${tournamentId.toLowerCase()}`
     );
 }
 

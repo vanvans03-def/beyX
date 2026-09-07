@@ -25,10 +25,10 @@ function createPool(connectionString = process.env.DATABASE_URL, max?: number): 
   const sslMode = process.env.DATABASE_SSL?.toLowerCase() || urlSslMode || 'disable';
   return new Pool({
     connectionString,
-    max: max ?? positiveInteger(process.env.DATABASE_POOL_MAX, 3),
+    max: max ?? positiveInteger(process.env.DATABASE_POOL_MAX, 8),
     min: 0,
     idleTimeoutMillis: positiveInteger(process.env.DATABASE_IDLE_TIMEOUT_MS, 30_000),
-    connectionTimeoutMillis: positiveInteger(process.env.DATABASE_CONNECT_TIMEOUT_MS, 5_000),
+    connectionTimeoutMillis: positiveInteger(process.env.DATABASE_CONNECT_TIMEOUT_MS, 15_000),
     statement_timeout: positiveInteger(process.env.DATABASE_STATEMENT_TIMEOUT_MS, 15_000),
     query_timeout: positiveInteger(process.env.DATABASE_QUERY_TIMEOUT_MS, 20_000),
     application_name: process.env.DATABASE_APPLICATION_NAME || 'beyx-nextjs',

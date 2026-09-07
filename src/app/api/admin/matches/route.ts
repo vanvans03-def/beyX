@@ -5,6 +5,7 @@ import { getTournament, getUserApiKey, getMatchesFromDB } from "@/lib/repository
 import { publishTournamentUpdate } from '@/lib/realtime-server';
 import { propagateWinners, type InternalMatch } from "@/lib/brackets";
 import { invalidateCacheKeys, invalidateTournamentCache, setCachedData } from "@/lib/redis";
+import { withTournamentMutationLock } from '@/lib/tournament-mutation-lock';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,6 +125,7 @@ export async function PUT(request: Request) {
         const tournament = await getTournament(tournamentId);
 
         if (tournament?.provider === 'INTERNAL') {
+            return await withTournamentMutationLock(tournamentId, async () => {
             // ── 1. Load all matches for this tournament ───────────────────────
             const { data: rows, error: fetchErr } = await supabaseAdmin
                 .from('internal_matches')
@@ -248,6 +250,7 @@ export async function PUT(request: Request) {
             }
 
             return NextResponse.json({ success: true, changedMatches: deltas.length, version: now });
+            });
         }
 
         // --- CHALLONGE ---
