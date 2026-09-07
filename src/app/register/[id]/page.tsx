@@ -5,7 +5,9 @@ import type { Metadata, ResolvingMetadata } from "next";
 import { getTournamentStandings } from "@/lib/challonge";
 import RealtimeTournamentWrapper from "@/components/RealtimeTournamentWrapper";
 
-export const dynamic = 'force-dynamic';
+// Registration details are shared by every visitor. A short ISR window prevents
+// 100 simultaneous visitors from making the 1-CPU server render the same page.
+export const revalidate = 5;
 const getPageTournament = cache(getPublicRegistrationTournament);
 
 type Props = {
