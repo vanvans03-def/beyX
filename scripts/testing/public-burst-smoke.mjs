@@ -44,23 +44,25 @@ async function burst(total, worker) {
 await timedFetch(`/register/${encodeURIComponent(registrationId)}`);
 await timedFetch(`/api/register/config?tournamentId=${encodeURIComponent(registrationId)}`);
 const registration = await burst(100, async () => {
-  const [page, config] = await Promise.all([
-    timedFetch(`/register/${encodeURIComponent(registrationId)}`),
+  const page = await timedFetch(`/register/${encodeURIComponent(registrationId)}`);
+  const apiTimings = await Promise.all([
+    timedFetch(`/api/public/tournaments/${encodeURIComponent(registrationId)}`),
     timedFetch(`/api/register/config?tournamentId=${encodeURIComponent(registrationId)}`),
   ]);
-  return Math.max(page, config);
+  return page + Math.max(...apiTimings);
 });
 
 await timedFetch(publicPath);
 await timedFetch(`/api/public/tournaments/${publicTournamentId}/matches`);
 await timedFetch(`/api/public/tournaments/${publicTournamentId}/standings`);
 const spectators = await burst(300, async () => {
-  const timings = await Promise.all([
-    timedFetch(publicPath),
+  const page = await timedFetch(publicPath);
+  const tournament = await timedFetch(`/api/public/tournaments/${publicTournamentId}`);
+  const dataTimings = await Promise.all([
     timedFetch(`/api/public/tournaments/${publicTournamentId}/matches`),
     timedFetch(`/api/public/tournaments/${publicTournamentId}/standings`),
   ]);
-  return Math.max(...timings);
+  return page + tournament + Math.max(...dataTimings);
 });
 
 console.log(JSON.stringify({ registration, spectators }, null, 2));
