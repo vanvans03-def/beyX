@@ -24,6 +24,8 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
         }
         return 'players';
     });
+    const [playerRegistrations, setPlayerRegistrations] = useState<any[]>(registrations);
+    const [loadingPlayers, setLoadingPlayers] = useState(registrations.length === 0);
     
     // Bracket State
     const [matches, setMatches] = useState<any[]>([]);
@@ -33,6 +35,18 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
     // Standings State
     const [standings, setStandings] = useState<any[]>([]);
     const [loadingStandings, setLoadingStandings] = useState(false);
+
+    useEffect(() => {
+        if (activeTab !== 'players' || playerRegistrations.length > 0) return;
+        const controller = new AbortController();
+        setLoadingPlayers(true);
+        fetch(`/api/public/tournaments/${encodeURIComponent(tournament.id)}/registrations`, { signal: controller.signal })
+            .then(response => response.ok ? response.json() : { registrations: [] })
+            .then(result => setPlayerRegistrations(result.registrations || []))
+            .catch(error => { if (error.name !== 'AbortError') setPlayerRegistrations([]); })
+            .finally(() => setLoadingPlayers(false));
+        return () => controller.abort();
+    }, [activeTab, playerRegistrations.length, tournament.id]);
 
     // Initial fetch for Internal Tournaments
     const fetchInternalMatches = async (silent = false) => {
@@ -234,7 +248,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                                     <span className="text-[10px] font-black uppercase tracking-[0.1em] text-muted-foreground">{t('public.players')}</span>
                                 </div>
                                 <p className="text-3xl font-black italic text-white tracking-tighter">
-                                    {registrations.length}
+                                    {playerRegistrations.length}
                                 </p>
                             </div>
                             <div className={cn(
@@ -275,7 +289,9 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                             </div>
 
                             <div className="bg-white/[0.01] border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl shadow-2xl shadow-black/20">
-                                {registrations.length === 0 ? (
+                                {loadingPlayers ? (
+                                    <div className="py-24 text-center text-muted-foreground"><Loader2 className="w-8 h-8 animate-spin mx-auto" /></div>
+                                ) : playerRegistrations.length === 0 ? (
                                     <div className="py-24 text-center px-10">
                                         <div className="p-4 bg-white/5 rounded-full w-fit mx-auto mb-4">
                                             <Trophy className="h-8 w-8 text-muted-foreground/20" />
@@ -285,7 +301,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                                     </div>
                                 ) : (
                                     <div className="divide-y divide-white/[0.05]">
-                                        {registrations.map((player, idx) => (
+                                        {playerRegistrations.map((player, idx) => (
                                             <div key={player.id} className="p-5 flex items-center justify-between group hover:bg-white/[0.03] transition-all cursor-default">
                                                 <div className="flex items-center gap-5">
                                                     <div className="flex items-center justify-center w-8 text-center">
@@ -334,7 +350,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                                         matches={matches}
                                         provider={tournament.provider}
                                         tournamentId={tournament.id}
-                                        participantNames={registrations.map(player => player.player_name)}
+                                        participantNames={playerRegistrations.map(player => player.player_name)}
                                     />
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground">

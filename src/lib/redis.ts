@@ -110,7 +110,8 @@ export async function invalidateTournamentCache(tournamentId: string): Promise<v
         `tournament:${tournamentId}:matches`,
         `tournament:${tournamentId}:standings`,
         `register:config:${tournamentId}`,
-        `public:registration:tournament:${tournamentId.toLowerCase()}`
+        `public:registration:tournament:${tournamentId.toLowerCase()}`,
+        `public:tournament:${tournamentId}:registrations`
     );
 }
 
