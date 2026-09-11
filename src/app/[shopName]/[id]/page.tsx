@@ -6,6 +6,6 @@ export const metadata = {
 };
 
 export default async function PublicTournamentPage({ params }: { params: Promise<{ shopName: string; id: string }> }) {
-    const { id } = await params;
-    return <PublicTournamentPageLoader tournamentId={id} />;
+    const { shopName, id } = await params;
+    return <PublicTournamentPageLoader shopName={shopName} tournamentId={id} />;
 }
