@@ -19,6 +19,11 @@ verification and cleanup continued into 2026-10-21.
   Existing production session signing secret and storage integrations preserved.
 - Cloudflare gateway `beyx-gcp-gateway` routes apex and www to Cloud Run over
   HTTPS. Maintenance is off. workers.dev and preview URLs are disabled.
+- The apex domain is live. Final DNS checks found no existing `www` DNS record
+  (`ENOTFOUND`); the www Worker route and certificate coverage are prepared, but
+  www is NOT a working alias yet. Enabling it requires a proxied CNAME `www` to
+  `beyx-system.com`. DNS editing was not granted to the current CLI credential;
+  no DNS records were changed during this migration.
 - Cloudflare Universal SSL was confirmed Active by the owner. Public TLS
   validation and HTTP-to-HTTPS redirect passed. Cloudflare manages edge renewals;
   Google manages the run.app origin certificate. No Certbot is needed on the VM.
