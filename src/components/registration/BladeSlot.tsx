@@ -93,6 +93,7 @@ export const BladeSlot = ({
             <div
                 onClick={onPress}
                 role="button"
+                data-testid={`blade-slot-${slotIndex}`}
                 tabIndex={0}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {

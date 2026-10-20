@@ -9,6 +9,7 @@
     "start": "next start -p 3333",
     "lint": "eslint",
     "test": "npm run test:functional",
+    "test:minigame": "node scripts/testing/beyblade-game.test.mjs",
     "test:functional": "node scripts/testing/test-server-harness.cjs",
     "test:functional:postgres": "node scripts/testing/run-postgres-functional.cjs",
     "test:functional:headed": "node scripts/testing/test-server-harness.cjs --headed",
@@ -17,7 +18,15 @@
     "backup:postgres": "node scripts/backup/create-encrypted-backup.cjs",
     "restore:postgres": "node scripts/backup/restore-encrypted-backup.cjs",
     "test:predeploy": "npm run build && npm run test:functional && npm run test:load",
-    "test:e2e:challonge": "node scratch/test_e2e_all_conditions.js",
+    "test:e2e:migration": "node scripts/testing/run-migration-e2e.mjs",
+    "test:e2e:ui": "node scripts/testing/run-migration-e2e.mjs --ui",
+    "test:e2e:challonge": "node scripts/testing/run-migration-e2e.mjs --challonge",
+    "test:e2e:list": "playwright test -c playwright.migration.config.ts --list",
+    "test:e2e:inventory": "node scripts/testing/e2e-route-inventory.mjs",
+    "test:e2e:report": "playwright show-report playwright-report/migration",
+    "test:e2e:compare": "node scripts/testing/compare-e2e-reports.mjs",
+    "test:e2e:tools": "node --test scripts/testing/compare-e2e-reports.test.mjs",
+    "test:brackets": "node --test scripts/testing/bracket-invariants.test.mjs",
     "setup:local-db-env": "node scripts/setup/generate-local-db-env.cjs"
   },
   "dependencies": {
@@ -51,6 +60,7 @@
     "sharp": "^0.35.2",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
+    "three": "^0.186.1",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
@@ -64,6 +74,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/supertest": "^6.0.3",
+    "@types/three": "^0.186.0",
     "@types/uuid": "^10.0.0",
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",

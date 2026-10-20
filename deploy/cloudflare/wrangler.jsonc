@@ -1,0 +1,11 @@
+{
+  "name": "beyx-gcp-rehearsal",
+  "account_id": "eff865d8a7f448a0eb061bae4af1dd56",
+  "main": "gateway.mjs",
+  "compatibility_date": "2026-10-20",
+  "workers_dev": true,
+  "vars": {
+    "ORIGIN": "https://beyx-rehearsal-638873004771.us-central1.run.app",
+    "RELEASE": "gcp-rehearsal-v1"
+  }
+}

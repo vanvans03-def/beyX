@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+const source = fs.readFileSync(new URL('../../src/lib/beyblade-game.ts', import.meta.url), 'utf8');
+const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const gameModule = { exports: {} };
+new Function('exports', 'module', compiled)(gameModule.exports, gameModule);
+const { BeybladeGame, ARENA_RADIUS } = gameModule.exports;
+const advance = (game, seconds) => { for (let i = 0; i < Math.round(seconds * 120); i++) game.step(1 / 120); };
+const startBattle = (selected = 0, timing = 3) => {
+    const game = new BeybladeGame(); game.reset(selected); game.start();
+    advance(game, timing); game.launch(); advance(game, 3.81 - timing);
+    assert.equal(game.phase, 'battle'); return game;
+};
+
+const perfect = startBattle();
+const early = startBattle(1, 1);
+assert.ok(perfect.quality > 0.99);
+assert.ok(perfect.fighters[0].stamina > early.fighters[1].stamina + 50);
+const quality = perfect.quality; perfect.launch(); assert.equal(perfect.quality, quality);
+const unattended = new BeybladeGame(); unattended.start(); advance(unattended, 3.82);
+assert.equal(unattended.phase, 'battle'); assert.equal(unattended.quality, 0);
+const steering = startBattle(); const oldX = steering.fighters[0].x;
+steering.keys.add('d'); advance(steering, 0.3); assert.ok(steering.fighters[0].x > oldX);
+steering.keys.clear(); steering.target = { x: -3, z: -3 }; advance(steering, 0.5);
+assert.ok(steering.fighters[0].vz < 0);
+const collision = startBattle();
+assert.equal(collision.special(), false);
+for (let i = 0; i < 4; i++) {
+    Object.assign(collision.fighters[0], { x: -0.44, z: 0, vx: 0, vz: 0 });
+    Object.assign(collision.fighters[1], { x: 0.44, z: 0, vx: 0, vz: 0 });
+    collision.collisionCooldown = 0; collision.step(1 / 120);
+}
+assert.equal(collision.hits, 4); assert.equal(collision.fighters[0].charge, 100);
+assert.equal(collision.special(), true); assert.equal(collision.fighters[0].charge, 0);
+assert.equal(collision.special(), false);
+const botBefore = collision.fighters[1].stamina;
+collision.collisionCooldown = 0;
+Object.assign(collision.fighters[0], { x: -0.44, z: 0 });
+Object.assign(collision.fighters[1], { x: 0.44, z: 0 }); collision.step(1 / 120);
+assert.ok(collision.fighters[1].stamina < botBefore - 20);
+const ringout = startBattle(); ringout.fighters[1].x = ARENA_RADIUS + 0.8; ringout.step(1 / 120);
+assert.equal(ringout.phase, 'finished'); assert.equal(ringout.winner, 0); assert.equal(ringout.reason, 'over');
+const exhausted = startBattle(1); exhausted.fighters[0].stamina = 0; exhausted.step(1 / 120);
+assert.equal(exhausted.winner, 1); assert.equal(exhausted.reason, 'spin');
+const fullRound = startBattle(); advance(fullRound, 70);
+assert.equal(fullRound.phase, 'finished');
+assert.ok(fullRound.hits > 0, 'Bot must seek and collide with the player');
+for (const fighter of fullRound.fighters) for (const value of Object.values(fighter)) assert.ok(Number.isFinite(value));
+fullRound.reset(1); assert.equal(fullRound.phase, 'idle'); assert.equal(fullRound.selected, 1);
+assert.equal(fullRound.hits, 0); assert.equal(fullRound.skill, 0); assert.equal(fullRound.target, null);
+assert.equal(fullRound.fighters[1].stamina, 100);
+console.log('PASS: timing affects stamina; missed launch; both selections; steering; bot pursuit; collisions; special charge/damage; spin/over finishes; full round; reset.');

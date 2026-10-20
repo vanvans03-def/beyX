@@ -69,13 +69,18 @@ export default function PlayerManagementPage() {
     const merge = async () => {
         if (!primaryId || !mergeId || primaryId === mergeId) return toast.error('เลือกชื่อหลักและชื่อที่จะรวมให้ต่างกัน');
         setBusy(true);
-        const res = await fetch('/api/admin/players', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'merge', targetPlayerId: primaryId, sourcePlayerId: mergeId }) });
-        const data = await res.json();
-        setBusy(false);
-        if (!res.ok) return toast.error(data.error || 'รวมชื่อไม่สำเร็จ');
-        setMergeId('');
-        toast.success('รวมชื่อและคะแนนเข้าชื่อหลักแล้ว');
-        load(query);
+        try {
+            const res = await fetch('/api/admin/players', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'merge', targetPlayerId: primaryId, sourcePlayerId: mergeId }) });
+            const data = await res.json();
+            if (!res.ok) return toast.error(data.error || 'รวมชื่อไม่สำเร็จ');
+            setMergeId('');
+            toast.success('รวมชื่อและคะแนนเข้าชื่อหลักแล้ว');
+            void load(query);
+        } catch {
+            toast.error('เชื่อมต่อระบบไม่สำเร็จ กรุณาลองใหม่');
+        } finally {
+            setBusy(false);
+        }
     };
 
     const selectPlayer = (player: Player) => {

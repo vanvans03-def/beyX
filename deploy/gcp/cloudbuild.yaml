@@ -1,0 +1,21 @@
+# Build from the current working directory, including the uncommitted 3D assets.
+# No database credentials or session secrets are supplied to the build.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - NEXT_PUBLIC_BUILD_ID=${_RELEASE}
+      - --build-arg
+      - NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=false
+      - --tag
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/beyx/web:${_RELEASE}
+      - .
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/beyx/web:${_RELEASE}
+substitutions:
+  _REGION: us-central1
+  _RELEASE: candidate
+timeout: 1200s
+options:
+  logging: CLOUD_LOGGING_ONLY

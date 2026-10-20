@@ -16,6 +16,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         // 1. อ่านไฟล์จาก Request Stream แปลงเป็น Buffer มาตรฐาน
         const arrayBuffer = await request.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
+        if (buffer.length === 0) {
+            return NextResponse.json({ error: 'No file body' }, { status: 400 });
+        }
 
         // 2. บีบอัดรูปภาพด้วย Sharp เป็นฟอร์แมต WebP พร้อมแก้ปัญหา SharedArrayBuffer
         let webpBuffer: Buffer;

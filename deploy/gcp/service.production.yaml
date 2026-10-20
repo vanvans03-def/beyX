@@ -1,0 +1,57 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: beyx-web
+  labels:
+    cloud.googleapis.com/location: us-central1
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/maxScale: '6'
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: '3'
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: 'true'
+        run.googleapis.com/startup-cpu-boost: 'true'
+        run.googleapis.com/network-interfaces: '[{"network":"beyx-vpc","subnetwork":"beyx-run"}]'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+    spec:
+      serviceAccountName: beyx-web@beyx-production-20261020.iam.gserviceaccount.com
+      containerConcurrency: 400
+      timeoutSeconds: 3600
+      containers:
+        - image: us-central1-docker.pkg.dev/beyx-production-20261020/beyx/web@sha256:9428082b2cc12ddf2a24175dd8b9dc50873844402592a39573ff026ba5e4c722
+          command: [node]
+          args:
+            - -e
+            - Object.assign(process.env,JSON.parse(require('fs').readFileSync('/var/run/secrets/beyx/runtime.json','utf8')));require('./server.js');
+          ports:
+            - containerPort: 80
+          env:
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=512
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+          volumeMounts:
+            - name: runtime
+              mountPath: /var/run/secrets/beyx
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 80
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 48
+      volumes:
+        - name: runtime
+          secret:
+            secretName: beyx-runtime-production
+            items:
+              - key: '1'
+                path: runtime.json

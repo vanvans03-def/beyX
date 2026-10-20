@@ -3,6 +3,7 @@ import { getMatches, updateMatch } from '@/lib/challonge';
 import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { getTournament, getUserApiKey, getMatchesFromDB } from "@/lib/repository";
 import { publishTournamentUpdate } from '@/lib/realtime-server';
+import { tournamentOwnershipError } from '@/lib/tournament-access';
 import { propagateWinners, type InternalMatch } from "@/lib/brackets";
 import { invalidateCacheKeys, invalidateTournamentCache, setCachedData } from "@/lib/redis";
 import { withTournamentMutationLock } from '@/lib/tournament-mutation-lock';
@@ -123,6 +124,9 @@ export async function PUT(request: Request) {
         const { tournamentUrl, matchId, scoresCsv, winnerId, tournamentId } = await request.json();
 
         const tournament = await getTournament(tournamentId);
+
+        const ownershipError = tournamentOwnershipError(request, tournament);
+        if (ownershipError) return ownershipError;
 
         if (tournament?.provider === 'INTERNAL') {
             return await withTournamentMutationLock(tournamentId, async () => {

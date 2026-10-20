@@ -4,6 +4,9 @@ import { hashPassword } from '@/lib/auth';
 
 
 export async function POST(request: Request) {
+    if (request.headers.get('x-user-role') !== 'superadmin') {
+        return NextResponse.json({ error: 'Superadmin required' }, { status: 403 });
+    }
     try {
         const body = await request.json();
         const { username, password, challongeApiKey, shopName } = body;
@@ -53,6 +56,9 @@ export async function POST(request: Request) {
 
 // Reset password — re-hashes using PBKDF2 (Edge-compatible format)
 export async function PUT(request: Request) {
+    if (request.headers.get('x-user-role') !== 'superadmin') {
+        return NextResponse.json({ error: 'Superadmin required' }, { status: 403 });
+    }
     try {
         const body = await request.json();
         const { username, newPassword } = body;

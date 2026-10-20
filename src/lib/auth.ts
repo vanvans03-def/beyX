@@ -8,6 +8,8 @@ import {
     SESSION_COOKIE_NAME,
     SESSION_ISSUER,
     SESSION_TTL_SECONDS,
+    isSessionRole,
+    type SessionRole,
 } from '@/lib/session-config';
 
 const ALG = 'HS256';
@@ -19,13 +21,13 @@ function getSecretKey(): Uint8Array {
 export type SessionPayload = {
     userId: string;
     username: string;
-    role: 'admin' | 'user';
+    role: SessionRole;
     exp: number; // Expiry
 }
 
 export async function createSession(userId: string, username: string, role: string = 'user') {
     const expires = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
-    const safeRole: SessionPayload['role'] = role === 'admin' ? 'admin' : 'user';
+    const safeRole: SessionRole = isSessionRole(role) ? role : 'user';
     const token = await new SignJWT({ userId, username, role: safeRole })
         .setProtectedHeader({ alg: ALG })
         .setIssuer(SESSION_ISSUER)

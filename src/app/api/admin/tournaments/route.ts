@@ -4,6 +4,7 @@ import { finalizeTournament, getTournamentStandings } from "@/lib/challonge";
 import { adminDb as supabaseAdmin } from '@/lib/db/admin';
 import { getInternalTopFour, recordTournamentResults } from "@/lib/player-rankings";
 import { refreshPlayerWinRateTotals } from '@/lib/player-win-rate-totals';
+import { tournamentOwnershipError } from '@/lib/tournament-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -129,6 +130,11 @@ export async function PATCH(req: Request) {
         const body = await req.json();
         if (!body.tournamentId) throw new Error("Tournament ID required");
 
+        const tournament = await getTournament(body.tournamentId);
+        const ownershipError = tournamentOwnershipError(req, tournament);
+        if (ownershipError) return ownershipError;
+        if (!tournament) throw new Error('Tournament not found');
+
         // Handle bracket_type or arena_count updates standalone
         if ((body.bracket_type || body.arena_count !== undefined) && !body.status) {
             const updateFields: any = {};
@@ -141,13 +147,6 @@ export async function PATCH(req: Request) {
         }
 
         if (!body.status) throw new Error("Status required");
-
-        // Verify Ownership
-        const tournament = await getTournament(body.tournamentId);
-        if (!tournament) throw new Error("Tournament not found");
-        if (tournament.user_id && tournament.user_id !== userId) {
-            return NextResponse.json({ success: false, message: "Unauthorized access to tournament" }, { status: 403 });
-        }
 
         if (body.status === 'CLOSED') {
             // Check if there is a Challonge URL associated

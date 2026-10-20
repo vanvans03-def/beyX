@@ -19,6 +19,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+    if (req.headers.get('x-user-role') !== 'superadmin') {
+        return NextResponse.json({ error: 'Superadmin required' }, { status: 403 });
+    }
     try {
         const body = await req.json();
         const { key, value } = body;

@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+  typescript: { tsconfigPath: process.env.NEXT_TYPESCRIPT_CONFIG || 'tsconfig.json' },
   output: 'standalone',
   generateBuildId: async () => {
     return process.env.NEXT_PUBLIC_BUILD_ID || 'v1.0.0';
@@ -28,4 +30,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

@@ -69,7 +69,7 @@ export default function LoginPage() {
             <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] animate-pulse-slow" />
             <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] animate-pulse-slow delay-1000" />
 
-            <div className="w-full max-w-md space-y-6 sm:space-y-8 relative z-10">
+            <div className="relative z-10 mx-auto w-full min-w-0 max-w-md space-y-6 py-6 sm:space-y-8">
                 <Link
                     href="/"
                     className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-gray-300 backdrop-blur-sm transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary"

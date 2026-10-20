@@ -1,4 +1,9 @@
 node_modules
+.next
+.next-e2e
+test-results
+playwright-report
+performance-results
 .git
 .gitignore
 *.md

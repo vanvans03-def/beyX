@@ -7,6 +7,9 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { useState, useEffect, useRef } from "react";
 import InternalBracket from "@/components/InternalBracket";
 import StandingsTable from "@/components/StandingsTable";
+import dynamic from 'next/dynamic';
+
+const BeybladeArena = dynamic(() => import('@/components/BeybladeArena'), { ssr: false });
 
 type PublicTournamentViewProps = {
     tournament: any;
@@ -228,6 +231,10 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         </button>
                     )}
                 </div>
+            </div>
+
+            <div className="relative z-10 mx-auto max-w-4xl px-4 pt-5 sm:px-6">
+                <BeybladeArena compact lang={lang} />
             </div>
 
             <main className={cn(

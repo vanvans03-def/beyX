@@ -1,0 +1,16 @@
+{
+  "name": "beyx-gcp-gateway",
+  "account_id": "eff865d8a7f448a0eb061bae4af1dd56",
+  "main": "gateway.mjs",
+  "compatibility_date": "2026-10-20",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "beyx-system.com/*", "zone_name": "beyx-system.com" },
+    { "pattern": "www.beyx-system.com/*", "zone_name": "beyx-system.com" }
+  ],
+  "vars": {
+    "ORIGIN": "https://beyx-web-638873004771.us-central1.run.app",
+    "RELEASE": "gcp-20261020-candidate5",
+    "MAINTENANCE": "0"
+  }
+}

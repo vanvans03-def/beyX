@@ -11,6 +11,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
   const encoder = new TextEncoder();
   let heartbeat: ReturnType<typeof setInterval> | null = null;
+  let lifetime: ReturnType<typeof setTimeout> | null = null;
   let unsubscribe: (() => void) | null = null;
   let closed = false;
 
@@ -20,12 +21,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         if (closed) return;
         closed = true;
         if (heartbeat) clearInterval(heartbeat);
+        if (lifetime) clearTimeout(lifetime);
         unsubscribe?.();
         unsubscribe = null;
         try { controller.close(); } catch { /* stream already closed */ }
       };
 
       request.signal.addEventListener('abort', () => { void close(); }, { once: true });
+      if (request.signal.aborted) { await close(); return; }
       try {
         unsubscribe = await subscribeToTournamentUpdates((rawPayload) => {
           if (closed) return;
@@ -35,10 +38,18 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
             controller.enqueue(encoder.encode(`event: tournament-update\ndata: ${JSON.stringify(payload)}\n\n`));
           } catch { /* ignore malformed payloads */ }
         });
+        if (closed) { unsubscribe(); unsubscribe = null; return; }
         controller.enqueue(encoder.encode('event: ready\ndata: {}\n\n'));
         heartbeat = setInterval(() => {
-          if (!closed) controller.enqueue(encoder.encode(': heartbeat\n\n'));
+          if (!closed) {
+            try { controller.enqueue(encoder.encode(': heartbeat\n\n')); }
+            catch { void close(); }
+          }
         }, 20_000);
+        // A proxy may retain an upstream request after its browser disconnects.
+        // Bound that slot/resource lifetime. EventSource reconnects automatically;
+        // the public UI reconciles the snapshot on each subsequent ready event.
+        lifetime = setTimeout(() => { void close(); }, 5 * 60_000);
       } catch (error) {
         controller.error(error);
         await close();
@@ -47,6 +58,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     async cancel() {
       closed = true;
       if (heartbeat) clearInterval(heartbeat);
+      if (lifetime) clearTimeout(lifetime);
       unsubscribe?.();
       unsubscribe = null;
     },

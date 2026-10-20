@@ -39,6 +39,7 @@
   "exclude": [
     "node_modules",
     "scratch",
-    "temp"
+    "temp",
+    ".next-e2e"
   ]
 }

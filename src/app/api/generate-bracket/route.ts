@@ -5,6 +5,7 @@ import { getUserApiKey, getTournament, getRegistrations, getParticipantOrder } f
 import { generateSingleElimination, generateDoubleElimination, type InternalMatch } from '@/lib/brackets';
 import { createTournamentBadgeSnapshot } from '@/lib/tournament-badge-snapshot';
 import { invalidateTournamentCache } from '@/lib/redis';
+import { tournamentOwnershipError } from '@/lib/tournament-access';
 
 const supabase = adminDb;
 
@@ -22,6 +23,9 @@ export async function POST(request: Request) {
         // 1. Fetch Tournament to check provider
         const tournament = await getTournament(tournamentId);
         if (!tournament) return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
+
+        const ownershipError = tournamentOwnershipError(request, tournament);
+        if (ownershipError) return ownershipError;
 
         if (tournament.provider === 'INTERNAL') {
             // --- INTERNAL GENERATION ---

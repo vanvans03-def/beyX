@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { adminDb as supabaseAdmin } from '@/lib/db/admin';
-import { refreshPlayerWinRateTotals } from '@/lib/player-win-rate-totals';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +9,14 @@ function isSuperAdmin(request: Request) {
 
 function normalizePlayerName(name: string) {
     return name.normalize('NFKC').trim().toLocaleLowerCase('th-TH').replace(/\s+/g, ' ');
+}
+
+async function renameWinRateCache(playerId: string, displayName: string) {
+    const { error } = await supabaseAdmin
+        .from('player_win_rate_totals')
+        .update({ display_name: displayName, updated_at: new Date().toISOString() })
+        .eq('player_id', playerId);
+    if (error) console.error('Unable to rename cached Win Rate totals:', error.message);
 }
 
 export async function GET(request: Request) {
@@ -38,7 +45,10 @@ export async function PATCH(request: Request) {
                 target_player_id: body.targetPlayerId,
             });
             if (error) throw new Error(error.message);
-            await refreshPlayerWinRateTotals();
+            // Cache rows are folded inside merge_player_profiles.  Do not run
+            // refresh_player_win_rate_totals here: a full historical rebuild
+            // can take several minutes and would make a successful merge look
+            // like it failed to the Super Admin.
             return NextResponse.json({ success: true });
         }
         if (body.action === 'rename') {
@@ -49,7 +59,7 @@ export async function PATCH(request: Request) {
                 .update({ display_name: name, updated_at: new Date().toISOString() })
                 .eq('id', body.playerId);
             if (error) throw new Error(error.message);
-            await refreshPlayerWinRateTotals();
+            await renameWinRateCache(body.playerId, name);
             return NextResponse.json({ success: true });
         }
         if (body.action === 'split_result') {
@@ -92,7 +102,6 @@ export async function PATCH(request: Request) {
                     .update({ player_id: newPlayer.id, updated_at: new Date().toISOString() })
                     .eq('id', result.id);
                 if (moveError) throw new Error(moveError.message);
-                await refreshPlayerWinRateTotals();
             } catch (error) {
                 await supabaseAdmin.from('player_aliases').delete().eq('player_id', newPlayer.id);
                 await supabaseAdmin.from('players').delete().eq('id', newPlayer.id);

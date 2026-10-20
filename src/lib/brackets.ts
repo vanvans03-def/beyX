@@ -175,7 +175,7 @@ export function generateDoubleElimination(
     // LB R1 — Cross-pair ALL WB R1 matches (full bracket structure)
     {
         const allR1 = wbr.get(1) || [];
-        const numLBR1 = allR1.length / 2; // bracketSize / 4
+        const numLBR1 = Math.floor(allR1.length / 2); // No LB round with only two entrants.
         const slots: InternalMatch[] = [];
 
         for (let i = 0; i < numLBR1; i++) {
@@ -248,10 +248,13 @@ export function generateDoubleElimination(
         id: uuidv4(), tournament_id: tournamentId,
         player1_id: null, player2_id: null, winner_id: null,
         player1_prereq_match_id: winnersFinal.id,
-        player2_prereq_match_id: losersFinal.id,
+        player2_prereq_match_id: losersFinal?.id ?? null,
         round: nWR + 1, state: 'PENDING', scores_csv: '',
         is_grand_final: true,
     };
+    // With two entrants the first match supplies both finalists: its winner
+    // remains undefeated and its loser takes the losers-bracket finalist slot.
+    if (!losersFinal) winnersFinal.loser_to_match_id = grandFinal.id;
     const grandFinalReset: InternalMatch = {
         id: uuidv4(), tournament_id: tournamentId,
         player1_id: null, player2_id: null, winner_id: null,

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, RotateCcw, Minus, Users, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
+import { useHydrated } from '@/hooks/useHydrated';
 
 type Player = {
     id: number;
@@ -29,6 +30,7 @@ interface ScoreboardProps {
 }
 
 export default function Scoreboard({ onBack, player1Name = "RED", player2Name = "BLUE", onReport, isReporting }: ScoreboardProps) {
+    const hydrated = useHydrated();
     const [playerCount, setPlayerCount] = useState<2 | 3>(2);
     const [players, setPlayers] = useState<Player[]>([
         {
@@ -301,7 +303,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                                     <button
                                         onClick={() => handleScore(player.id, 1, "Spin Finish")}
                                         aria-label={`Add 1 point to ${player.name}`}
-                                        disabled={animatingPlayerId !== null}
+                                        disabled={!hydrated || animatingPlayerId !== null}
                                         className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group relative overflow-hidden"
                                     >
                                         <span className="text-lg landscape:text-xl md:text-2xl font-bold group-hover:text-primary transition-colors">+1</span>
@@ -311,7 +313,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                                     <button
                                         onClick={() => handleScore(player.id, 2, "Burst Finish")}
                                         aria-label={`Add 2 points to ${player.name} by Burst`}
-                                        disabled={animatingPlayerId !== null}
+                                        disabled={!hydrated || animatingPlayerId !== null}
                                         className={cn(
                                             "relative overflow-hidden bg-gradient-to-br p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 shadow-lg group border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed",
                                             player.bgClass
@@ -325,7 +327,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                                     <button
                                         onClick={() => handleScore(player.id, 2, "Over Finish")}
                                         aria-label={`Add 2 points to ${player.name} by Over`}
-                                        disabled={animatingPlayerId !== null}
+                                        disabled={!hydrated || animatingPlayerId !== null}
                                         className="bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border border-white/5 text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group relative overflow-hidden"
                                     >
                                         <span className="text-lg landscape:text-xl md:text-2xl font-bold group-hover:text-yellow-400 transition-colors">+2</span>
@@ -335,7 +337,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                                     <button
                                         onClick={() => handleScore(player.id, 3, "Xtreme Finish")}
                                         aria-label={`Add 3 points to ${player.name} by Xtreme`}
-                                        disabled={animatingPlayerId !== null}
+                                        disabled={!hydrated || animatingPlayerId !== null}
                                         className="bg-neutral-900 border border-white/10 hover:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 landscape:p-2 md:p-3 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 group shadow-inner relative overflow-hidden"
                                     >
                                         <span className="text-lg landscape:text-xl md:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 group-hover:scale-110 transition-transform">+3</span>
@@ -346,7 +348,7 @@ export default function Scoreboard({ onBack, player1Name = "RED", player2Name = 
                                     <button
                                         onClick={() => decrementScore(player.id)}
                                         aria-label={`Remove 1 point from ${player.name}`}
-                                        disabled={animatingPlayerId !== null}
+                                        disabled={!hydrated || animatingPlayerId !== null}
                                         className="col-span-2 landscape:col-span-1 bg-white/5 hover:bg-red-500/20 active:bg-red-500/30 border border-white/5 hover:border-red-500/30 text-muted-foreground hover:text-red-500 p-2 landscape:p-2 md:p-3 rounded-lg flex flex-row landscape:flex-col items-center justify-center gap-2 transition-all active:scale-95 group mt-2 landscape:mt-4"
                                     >
                                         <Minus className="h-4 w-4" />

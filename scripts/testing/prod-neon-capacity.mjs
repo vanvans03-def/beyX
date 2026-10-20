@@ -1,14 +1,28 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import { spawnSync } from 'node:child_process';
+import { dirname } from 'node:path';
 
 const baseUrl = (process.env.TEST_BASE_URL || 'https://beyx-system.com').replace(/\/$/, '');
 const session = process.env.TEST_SESSION_COOKIE;
 const publicShop = process.env.TEST_PUBLIC_SHOP || 'admin';
+const tournamentType = process.env.PERF_TOURNAMENT_TYPE || 'Standard';
+const registrationMode = process.env.PERF_REGISTRATION_MODE || 'Standard';
+const mainBeys = JSON.parse(process.env.PERF_MAIN_BEYS_JSON || '["DranSword","HellsScythe","WizardArrow"]');
+const playerPrefix = process.env.PERF_PLAYER_PREFIX || 'CAPACITY_PLAYER_';
+const reportPath = process.env.PERF_REPORT_PATH || 'performance-results/prod-neon-capacity.json';
 if (!session) throw new Error('TEST_SESSION_COOKIE is required');
 
 const cookie = `session=${session}`;
 const report = { startedAt: new Date().toISOString(), target: baseUrl, results: {} };
+// Bound TLS connection churn in a single Node load generator. There are still
+// 300 concurrent viewer jobs, and deadlines include time queued by this agent.
+// SSE deliberately uses a separate dispatcher so streams cannot starve reads.
+const httpClient = process.env.PERF_FETCH_CONNECTIONS ? await import('undici') : undefined;
+const httpDispatcher = httpClient
+  ? new httpClient.Agent({ connections: Number(process.env.PERF_FETCH_CONNECTIONS) }) : undefined;
+const httpFetch = httpClient?.fetch || fetch;
+report.transport = { concurrentViewerJobs: 300, httpConnections: Number(process.env.PERF_FETCH_CONNECTIONS) || 'default' };
 let tournamentId = '';
 let realtimeClients = [];
 let adminPolling = true;
@@ -21,18 +35,27 @@ function percentile(values, fraction) {
 async function request(path, options = {}) {
   const started = performance.now();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs || 20_000);
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`${options.method || 'GET'} ${path}: deadline exceeded`));
+    }, options.timeoutMs || 20_000);
+  });
   try {
-    const response = await fetch(`${baseUrl}${path}`, {
-      ...options,
-      headers: { ...(options.headers || {}) },
-      signal: controller.signal,
-    });
-    const text = await response.text();
-    let body;
-    try { body = JSON.parse(text); } catch { body = text; }
-    if (!response.ok) throw new Error(`${options.method || 'GET'} ${path}: ${response.status} ${text.slice(0, 300)}`);
-    return { body, ms: performance.now() - started, status: response.status };
+    return await Promise.race([deadline, (async () => {
+      const response = await httpFetch(`${baseUrl}${path}`, {
+        ...options,
+        ...(httpDispatcher ? { dispatcher: httpDispatcher } : {}),
+        headers: { ...(options.headers || {}) },
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      let body;
+      try { body = JSON.parse(text); } catch { body = text; }
+      if (!response.ok) throw new Error(`${options.method || 'GET'} ${path}: ${response.status} ${text.slice(0, 300)}`);
+      return { body, ms: performance.now() - started, status: response.status };
+    })()]);
   } finally {
     clearTimeout(timer);
   }
@@ -67,32 +90,66 @@ function summarize(results) {
 
 async function connectRealtime(index) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
   const started = performance.now();
-  const response = await fetch(`${baseUrl}/api/realtime/tournaments/${tournamentId}`, {
-    headers: { accept: 'text/event-stream', 'x-capacity-client': String(index) },
-    signal: controller.signal,
-  });
-  if (!response.ok || !response.body) throw new Error(`SSE ${response.status}`);
-  const reader = response.body.getReader();
-  let buffer = '';
-  while (!buffer.includes('event: ready')) {
-    const { value, done } = await reader.read();
-    if (done) throw new Error('SSE closed before ready');
-    buffer += new TextDecoder().decode(value);
-  }
-  clearTimeout(timeout);
-  const client = { controller, reader, ms: performance.now() - started, events: 0 };
-  client.pump = (async () => {
+  async function openStream() {
+    const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-      while (true) {
+      const response = await fetch(`${baseUrl}/api/realtime/tournaments/${tournamentId}`, {
+        headers: { accept: 'text/event-stream', 'x-capacity-client': String(index) }, signal: controller.signal,
+      });
+      if (!response.ok || !response.body) throw new Error(`SSE ${response.status}`);
+      const reader = response.body.getReader(), decoder = new TextDecoder();
+      let buffer = '';
+      while (!buffer.includes('event: ready')) {
         const { value, done } = await reader.read();
-        if (done) break;
-        const chunk = new TextDecoder().decode(value);
-        client.events += (chunk.match(/event: match-update/g) || []).length;
+        if (done) throw new Error('SSE closed before ready');
+        buffer += decoder.decode(value, { stream: true });
       }
-    } catch (error) {
-      if (error.name !== 'AbortError') client.error = error.message;
+      return { reader, decoder, buffer };
+    } finally { clearTimeout(timeout); }
+  }
+  let stream = await openStream();
+  const client = { controller, ms: performance.now() - started, events: 0,
+    disconnects: 0, reconnects: 0, reconciliations: 0, disconnectReasons: [], winners: new Map() };
+  client.pump = (async () => {
+    while (!controller.signal.aborted && adminPolling) {
+      try {
+        while (true) {
+          const { value, done } = await stream.reader.read();
+          if (done) throw new Error('SSE closed before tournament completion');
+          stream.buffer += stream.decoder.decode(value, { stream: true });
+          let boundary;
+          while ((boundary = stream.buffer.indexOf('\n\n')) >= 0) {
+            const frame = stream.buffer.slice(0, boundary); stream.buffer = stream.buffer.slice(boundary + 2);
+            const data = frame.split('\n').find(line => line.startsWith('data: '));
+            if (frame.includes('event: tournament-update') && data) {
+              const update = JSON.parse(data.slice(6));
+              if (update.event === 'match-update' && update.matches?.length) {
+                client.events++;
+                for (const match of update.matches) client.winners.set(String(match.id), match.winner_id);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        if (controller.signal.aborted || !adminPolling) break;
+        client.disconnects++;
+        client.disconnectReasons.push(error.message);
+        await stream.reader.cancel().catch(() => {});
+        let recovered = false;
+        // Match native EventSource behavior, and the UI's ready-event reconciliation.
+        // Keep transient disconnects visible; unrecovered streams still fail the gate.
+        for (let attempt = 0; attempt < 3 && adminPolling && !controller.signal.aborted; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          try {
+            stream = await openStream();
+            const snapshot = await request(`/api/public/tournaments/${tournamentId}/matches`);
+            for (const match of snapshot.body.matches || []) client.winners.set(String(match.id), match.winner_id);
+            client.reconnects++; client.reconciliations++; recovered = true; break;
+          } catch (retryError) { client.disconnectReasons.push(retryError.message); }
+        }
+        if (!recovered && adminPolling) { client.error = 'SSE reconnect/reconciliation failed'; break; }
+      }
     }
   })();
   return client;
@@ -134,7 +191,7 @@ try {
     method: 'POST', headers: { cookie, 'content-type': 'application/json' },
     body: JSON.stringify({
       name: `CODEX_NEON_CAPACITY_${Date.now()}`,
-      type: 'Standard', provider: 'INTERNAL', bracket_type: 'DOUBLE', ban_list: [],
+      type: tournamentType, provider: 'INTERNAL', bracket_type: 'DOUBLE', ban_list: [],
     }),
   });
   tournamentId = created.body.data.id;
@@ -154,8 +211,8 @@ try {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         deviceUUID: `codex-neon-${Date.now()}-${index}`,
-        playerName: `CAPACITY_PLAYER_${String(index + 1).padStart(3, '0')}`,
-        mode: 'Standard', mainBeys: ['DranSword', 'HellsScythe', 'WizardArrow'],
+        playerName: `${playerPrefix}${String(index + 1).padStart(3, '0')}`,
+        mode: registrationMode, mainBeys,
         totalPoints: 0, tournamentId,
       }),
     });
@@ -211,6 +268,7 @@ try {
 
   const pollers = Array.from({ length: 10 }, () => adminPoller());
   let completed = 0;
+  let lastPlayedMatch;
   let rounds = 0;
   const started = performance.now();
   while (rounds++ < 1500) {
@@ -232,6 +290,7 @@ try {
     })));
     const failed = updates.filter(result => result.status === 'rejected');
     if (failed.length) throw new Error(`Match update failures: ${failed[0].reason}`);
+    lastPlayedMatch = { id: String(open.at(-1).id), winner: open.at(-1).player1_id };
     completed += open.length;
   }
   adminPolling = false;
@@ -243,6 +302,11 @@ try {
     durationMs: Number((performance.now() - started).toFixed(1)),
   };
 
+  const deliveryDeadline = performance.now() + 10_000;
+  while (realtimeClients.some(client => client.events === 0 || (lastPlayedMatch && client.winners.get(lastPlayedMatch.id) !== lastPlayedMatch.winner)) && performance.now() < deliveryDeadline) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
   const finalMatches = await request(`/api/public/tournaments/${tournamentId}/matches`);
   const finalJson = JSON.stringify(finalMatches.body);
   const matches = finalMatches.body.matches || [];
@@ -251,6 +315,11 @@ try {
     complete: matches.filter(match => String(match.state).toUpperCase() === 'COMPLETE').length,
     unknownPlayers: (finalJson.match(/Unknown Player/g) || []).length,
     realtimeClientsWithUpdates: realtimeClients.filter(client => client.events > 0).length,
+    realtimeClientsCaughtUp: realtimeClients.filter(client => lastPlayedMatch && client.winners.get(lastPlayedMatch.id) === lastPlayedMatch.winner).length,
+    transientDisconnects: realtimeClients.reduce((sum, client) => sum + client.disconnects, 0),
+    reconnects: realtimeClients.reduce((sum, client) => sum + client.reconnects, 0),
+    reconciliations: realtimeClients.reduce((sum, client) => sum + client.reconciliations, 0),
+    disconnectReasons: [...new Set(realtimeClients.flatMap(client => client.disconnectReasons))].slice(0, 5),
     realtimeErrors: realtimeClients.filter(client => client.error).length,
   };
   report.passed = report.results.playwright.exitCode === 0
@@ -258,6 +327,8 @@ try {
     && report.results.adminPollers10.errors === 0
     && report.results.finalIntegrity.complete === report.results.finalIntegrity.totalMatches
     && report.results.finalIntegrity.unknownPlayers === 0
+    && report.results.finalIntegrity.realtimeClientsWithUpdates === 300
+    && report.results.finalIntegrity.realtimeClientsCaughtUp === 300
     && report.results.finalIntegrity.realtimeErrors === 0;
 } catch (error) {
   report.passed = false;
@@ -266,9 +337,10 @@ try {
 } finally {
   await cleanup();
   report.finishedAt = new Date().toISOString();
-  await mkdir('performance-results', { recursive: true });
-  await writeFile('performance-results/prod-neon-capacity.json', JSON.stringify(report, null, 2));
-  console.log('Report: performance-results/prod-neon-capacity.json');
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, JSON.stringify(report, null, 2));
+  console.log(`Report: ${reportPath}`);
+  if (httpDispatcher) await httpDispatcher.close();
 }
 
 if (!report.passed) process.exitCode = 1;

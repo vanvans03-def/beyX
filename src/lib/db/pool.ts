@@ -6,6 +6,8 @@ declare global {
   var __beyxPostgresPool: Pool | undefined;
   // eslint-disable-next-line no-var
   var __beyxRealtimePostgresPool: Pool | undefined;
+  // eslint-disable-next-line no-var
+  var __beyxMutationPostgresPool: Pool | undefined;
 }
 
 function positiveInteger(value: string | undefined, fallback: number): number {
@@ -62,6 +64,19 @@ export function getPool(): Pool {
     });
   }
   return globalThis.__beyxPostgresPool;
+}
+
+/** Session-level advisory locks require a direct connection and a separate pool
+ * so waiting mutations cannot exhaust the connections their work needs. */
+export function getMutationPool(): Pool {
+  if (!globalThis.__beyxMutationPostgresPool) {
+    globalThis.__beyxMutationPostgresPool = createPool(
+      process.env.DATABASE_URL_UNPOOLED || process.env.REALTIME_DATABASE_URL || process.env.DATABASE_URL,
+      1,
+    );
+    globalThis.__beyxMutationPostgresPool.on('error', error => console.error('[postgres-mutation]', error));
+  }
+  return globalThis.__beyxMutationPostgresPool;
 }
 
 export async function query<T extends QueryResultRow = QueryResultRow>(

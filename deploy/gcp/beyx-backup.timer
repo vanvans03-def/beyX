@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily BeyX database backup
+
+[Timer]
+OnCalendar=*-*-* 18:00:00 UTC
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { SESSION_AUDIENCE, SESSION_COOKIE_NAME, SESSION_ISSUER } from '@/lib/session-config';
+import { isSessionRole, SESSION_AUDIENCE, SESSION_COOKIE_NAME, SESSION_ISSUER } from '@/lib/session-config';
 
 //export const runtime = 'edge';
 
@@ -43,7 +43,7 @@ async function verifyJWT(token: string): Promise<Record<string, any> | null> {
         // Check token expiry
         if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) return null;
         if (decoded.iss !== SESSION_ISSUER || decoded.aud !== SESSION_AUDIENCE) return null;
-        if (!decoded.userId || !decoded.username || !['admin', 'user'].includes(decoded.role)) return null;
+        if (!decoded.userId || !decoded.username || !isSessionRole(decoded.role)) return null;
 
         return decoded;
     } catch {
@@ -55,7 +55,8 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     const isAdminRoute = pathname.startsWith('/admin');
-    const isAdminApiRoute = pathname.startsWith('/api/admin') || pathname.startsWith('/api/generate-bracket');
+    const isSettingsWrite = pathname === '/api/settings' && !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
+    const isAdminApiRoute = pathname.startsWith('/api/admin') || pathname.startsWith('/api/generate-bracket') || isSettingsWrite;
 
     if (isAdminRoute || isAdminApiRoute) {
         const session = request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -90,5 +91,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/admin/:path*', '/api/admin/:path*', '/api/generate-bracket'],
+    matcher: ['/admin/:path*', '/api/admin/:path*', '/api/generate-bracket', '/api/settings'],
 };
