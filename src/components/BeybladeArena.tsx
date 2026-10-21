@@ -23,7 +23,7 @@ export default function BeybladeArena({ compact = false, lang = 'th' }: { compac
     const english = lang.toLowerCase() === 'en';
     const sync = () => {
         const g = game.current;
-        setHud({ phase: g.phase, count: g.elapsed < 3 ? String(Math.max(1, 3 - Math.floor(g.elapsed))) : 'GO SHOOT!', progress: Math.min(100, g.elapsed / 3.8 * 100), player: g.fighters[g.selected].stamina, bot: g.fighters[1 - g.selected].stamina, charge: g.fighters[g.selected].charge, quality: g.quality, hits: g.hits, winner: g.winner, reason: g.reason, skill: g.skill > 0 });
+        setHud({ phase: g.phase, count: g.elapsed < 3 ? String(Math.max(1, 3 - Math.floor(g.elapsed))) : 'GO SHOOT!', progress: g.launchProgress, player: g.fighters[g.selected].stamina, bot: g.fighters[1 - g.selected].stamina, charge: g.fighters[g.selected].charge, quality: g.quality, hits: g.hits, winner: g.winner, reason: g.reason, skill: g.skill > 0 });
     };
 
     useEffect(() => {
@@ -188,7 +188,7 @@ export default function BeybladeArena({ compact = false, lang = 'th' }: { compac
             };
             const publish = () => {
                 const g = game.current;
-                setHud({ phase: g.phase, count: g.elapsed < 3 ? String(Math.max(1, 3 - Math.floor(g.elapsed))) : 'GO SHOOT!', progress: Math.min(100, g.elapsed / 3.8 * 100), player: g.fighters[g.selected].stamina, bot: g.fighters[1 - g.selected].stamina, charge: g.fighters[g.selected].charge, quality: g.quality, hits: g.hits, winner: g.winner, reason: g.reason, skill: g.skill > 0 });
+                setHud({ phase: g.phase, count: g.elapsed < 3 ? String(Math.max(1, 3 - Math.floor(g.elapsed))) : 'GO SHOOT!', progress: g.launchProgress, player: g.fighters[g.selected].stamina, bot: g.fighters[1 - g.selected].stamina, charge: g.fighters[g.selected].charge, quality: g.quality, hits: g.hits, winner: g.winner, reason: g.reason, skill: g.skill > 0 });
             };
             const frame = (now: number) => {
                 const dt = Math.min(0.06, Math.max(0, (now - previousTime) / 1000)); previousTime = now;

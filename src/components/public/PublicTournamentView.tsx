@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe, Loader2, MonitorPlay } from "lucide-react";
+import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe, Loader2, MonitorPlay, Gamepad2, X } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -10,6 +10,7 @@ import StandingsTable from "@/components/StandingsTable";
 import dynamic from 'next/dynamic';
 
 const BeybladeArena = dynamic(() => import('@/components/BeybladeArena'), { ssr: false });
+const HomeBeybladePlayground = dynamic(() => import('@/components/HomeBeybladePlayground'), { ssr: false, loading: () => <div className="h-[170px] w-full" /> });
 
 type PublicTournamentViewProps = {
     tournament: any;
@@ -18,6 +19,7 @@ type PublicTournamentViewProps = {
 
 export default function PublicTournamentView({ tournament, registrations }: PublicTournamentViewProps) {
     const { t, lang, toggleLang } = useTranslation();
+    const [showMinigame, setShowMinigame] = useState(false);
     const [activeTab, setActiveTab] = useState<'players' | 'bracket' | 'standings'>(() => {
         if (tournament?.status === 'STARTED') {
             return 'bracket';
@@ -234,7 +236,16 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
             </div>
 
             <div className="relative z-10 mx-auto max-w-4xl px-4 pt-5 sm:px-6">
-                <BeybladeArena compact lang={lang} />
+                {!showMinigame && <HomeBeybladePlayground lang={lang} />}
+                <div className="mb-4 flex justify-center">
+                    <button type="button" aria-expanded={showMinigame} aria-controls={`shared-minigame-${tournament.id}`} onClick={() => setShowMinigame(open => !open)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-5 py-3 text-sm font-bold text-primary transition hover:border-primary/60 hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-primary">
+                        {showMinigame ? <X size={18} /> : <Gamepad2 size={18} />}
+                        {showMinigame ? (lang === 'EN' ? 'Close mini game' : 'ปิดมินิเกม') : (lang === 'EN' ? 'Enter mini game' : 'เข้ามินิเกม')}
+                    </button>
+                </div>
+                <div id={`shared-minigame-${tournament.id}`}>
+                    {showMinigame && <BeybladeArena compact lang={lang} />}
+                </div>
             </div>
 
             <main className={cn(

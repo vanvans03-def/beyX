@@ -5,7 +5,7 @@ if (!['https://beyx-rehearsal-638873004771.us-central1.run.app', 'https://beyx-s
 
 export default defineConfig({
   testDir: './tests/migration',
-  testMatch: 'public-ui.spec.ts',
+  testMatch: ['public-ui.spec.ts', 'shared-game.spec.ts'],
   workers: 1,
   retries: 0,
   timeout: 120_000,

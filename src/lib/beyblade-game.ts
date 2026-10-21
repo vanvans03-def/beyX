@@ -26,6 +26,8 @@ export class BeybladeGame {
     selected = 0;
     elapsed = 0;
     quality = -1;
+    launchTime = -1;
+    get launchProgress() { return Math.min(100, (this.launchTime >= 0 ? this.launchTime : this.elapsed) / 3.8 * 100); }
     winner: number | null = null;
     reason: 'spin' | 'over' | 'xtreme' = 'spin';
     finishTime = 0;
@@ -39,6 +41,7 @@ export class BeybladeGame {
     constructor() { this.reset(); }
     reset(selected = this.selected) {
         this.selected = selected; this.phase = 'idle'; this.elapsed = 0; this.quality = -1;
+        this.launchTime = -1;
         this.winner = null; this.hits = 0; this.skill = 0; this.collisionCooldown = 0;
         this.impact = null;
         this.finishTime = 0; this.reason = 'spin';
@@ -48,6 +51,7 @@ export class BeybladeGame {
     start() { this.reset(); this.phase = 'countdown'; }
     launch() {
         if (this.phase !== 'countdown' || this.quality >= 0) return;
+        this.launchTime = this.elapsed;
         this.quality = Math.max(0, 1 - Math.abs(this.elapsed - 3) / 0.65);
     }
     special() {
