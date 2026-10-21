@@ -23,7 +23,7 @@ spec:
       containerConcurrency: 400
       timeoutSeconds: 3600
       containers:
-        - image: us-central1-docker.pkg.dev/beyx-production-20261020/beyx/web@sha256:9428082b2cc12ddf2a24175dd8b9dc50873844402592a39573ff026ba5e4c722
+        - image: us-central1-docker.pkg.dev/beyx-production-20261020/beyx/web@sha256:e505d65e3c0e62f8546a2f5da2c280f77eaaed8735f872f99f62554b75b90be3
           command: [node]
           args:
             - -e
