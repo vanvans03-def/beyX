@@ -10,7 +10,7 @@
   ],
   "vars": {
     "ORIGIN": "https://beyx-web-638873004771.us-central1.run.app",
-    "RELEASE": "gcp-20261021-3d-v1",
+    "RELEASE": "gcp-20261021-3d-v2",
     "MAINTENANCE": "0"
   }
 }

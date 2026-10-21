@@ -27,3 +27,18 @@ gcloud run services update-traffic beyx-web --project=beyx-production-20261020 -
 ```
 
 Reconcile the production image manifest and Cloudflare release key if rollback is used. Do not restore an older database: the existing production database continues receiving live writes.
+
+## Follow-up release: 3d-v2
+
+- Source checkpoint: `0db14aa`. Includes the previously pending shared-tournament game toggle and launch meter freeze/reset regression fix.
+- Cloud Build `af3912ab-7ce2-4449-a12b-45ac5ed86414`: SUCCESS.
+- Image: `us-central1-docker.pkg.dev/beyx-production-20261020/beyx/web@sha256:417dd4a12b42e0bc91c0e3fb65516f13004a9776ad61e8779584e3a052ad50f3`.
+- Promoted revision: `beyx-web-00005-tej`, 100% traffic. Previous application revision `beyx-web-00002-kom` retained for rollback.
+- Cloudflare release key `gcp-20261021-3d-v2`, Worker version `ce64894a-4faa-42a4-9bb0-e3a5ee4d4474`.
+- TypeScript passed; unit/regression suite passed all 85 cases.
+- Preview Playwright passed 12/12 desktop/mobile cases in 4.8 minutes, including opening/closing the game on the existing public tournament page without leaving it. No tournament records were edited.
+- Preview results preserved locally in ignored `backups/gcp/3d-v2-preview-results.json`.
+- Post-promotion shared-page Playwright passed 2/2 desktop/mobile cases on the production domain; `/api/health` returned HTTP 200.
+- No database, runtime secret or Redis changes; no maintenance mode used.
+
+For application-only rollback of this follow-up, use the command above with `--to-revisions=beyx-web-00002-kom=100` instead, and reconcile the image manifest/cache release key.
