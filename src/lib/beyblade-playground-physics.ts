@@ -1,5 +1,11 @@
 export type PlaygroundBody = { x: number; y: number; vx: number; vy: number; held: boolean; returnAfter: number };
 export const PLAYGROUND_RADIUS = 36;
+export const PLAYGROUND_MAX_SPEED = 700;
+
+function limitSpeed(body: PlaygroundBody) {
+    const speed = Math.hypot(body.vx, body.vy);
+    if (speed > PLAYGROUND_MAX_SPEED) { body.vx *= PLAYGROUND_MAX_SPEED / speed; body.vy *= PLAYGROUND_MAX_SPEED / speed; }
+}
 
 export function bounceAtEdges(body: PlaygroundBody, width: number, height: number) {
     const margin = PLAYGROUND_RADIUS + 8;
@@ -25,13 +31,36 @@ export function collidePlaygroundBodies(a: PlaygroundBody, b: PlaygroundBody, ti
         const impulse = -(1 + 0.85) * closingSpeed / total;
         a.vx -= impulse * nx * inverseA; a.vy -= impulse * ny * inverseA;
         b.vx += impulse * nx * inverseB; b.vy += impulse * ny * inverseB;
+        if (!a.held) limitSpeed(a);
+        if (!b.held) limitSpeed(b);
     }
     a.returnAfter = b.returnAfter = time + 4;
     return true;
 }
 
+export function resolvePlaygroundContacts(a: PlaygroundBody, b: PlaygroundBody, time: number, width: number, height: number) {
+    let contact = false;
+    for (let pass = 0; pass < 3; pass++) {
+        contact = collidePlaygroundBodies(a, b, time) || contact;
+        bounceAtEdges(a, width, height); bounceAtEdges(b, width, height);
+        // A held top cannot push another through the wall. Stop the drag at contact
+        // instead of letting the contact normal flip and teleport the other top behind it.
+        if (a.held !== b.held) {
+            const held = a.held ? a : b, free = a.held ? b : a;
+            const dx = held.x - free.x, dy = held.y - free.y, distance = Math.hypot(dx, dy);
+            if (distance < PLAYGROUND_RADIUS * 2 && distance > 0.001) {
+                const overlap = PLAYGROUND_RADIUS * 2 - distance;
+                held.x += dx / distance * overlap; held.y += dy / distance * overlap;
+                bounceAtEdges(held, width, height);
+            }
+        }
+    }
+    return contact;
+}
+
 export function advancePlaygroundBody(body: PlaygroundBody, dt: number, width: number, height: number) {
     if (!body.held) {
+        limitSpeed(body);
         body.x += body.vx * dt; body.y += body.vy * dt;
         const damping = Math.exp(-0.8 * dt);
         body.vx *= damping; body.vy *= damping;

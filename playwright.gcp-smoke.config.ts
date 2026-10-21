@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.GCP_UI_BASE_URL || 'https://beyx-rehearsal-638873004771.us-central1.run.app';
-if (!['https://beyx-rehearsal-638873004771.us-central1.run.app', 'https://beyx-system.com'].includes(baseURL)) throw new Error('Unexpected public UI smoke target.');
+if (!['https://beyx-rehearsal-638873004771.us-central1.run.app', 'https://beyx-system.com', 'https://preview-3d---beyx-web-638873004771.us-central1.run.app'].includes(baseURL)) throw new Error('Unexpected public UI smoke target.');
 
 export default defineConfig({
   testDir: './tests/migration',

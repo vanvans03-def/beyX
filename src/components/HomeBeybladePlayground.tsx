@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { BEYBLADE_MODELS } from '@/data/beyblade-models';
-import { advancePlaygroundBody, bounceAtEdges, collidePlaygroundBodies } from '@/lib/beyblade-playground-physics';
+import { advancePlaygroundBody, bounceAtEdges, resolvePlaygroundContacts } from '@/lib/beyblade-playground-physics';
+import { createBeybladeImpacts } from '@/lib/beyblade-impact-effects';
 
 type Actions = { drag: (index: number, x: number, y: number) => void; release: (index: number) => void; move: (index: number, x: number, y: number) => void; reset: () => void; refresh: () => void };
 
@@ -40,8 +41,10 @@ export default function HomeBeybladePlayground({ lang }: { lang: string }) {
             const fill = new T.DirectionalLight(0x91ffe4, 2); fill.position.set(200, -100, 200); scene.add(fill);
             const resources = new Set<{ dispose: () => void }>();
             const abort = new AbortController();
-            let width = window.innerWidth, height = window.innerHeight, time = 0, previous = 0, inView = true;
+            let width = window.innerWidth, height = window.innerHeight, time = 0, previous = 0, inView = true, running = false;
             const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+            const impacts = createBeybladeImpacts(T, scene, resources, 'xy', 55);
+            let lastImpactTime = -Infinity, effectTime = performance.now();
             const bodies = BEYBLADE_MODELS.map(() => {
                 const tilt = new T.Group(); tilt.rotation.x = 1; scene.add(tilt);
                 const spin = new T.Group(); tilt.add(spin);
@@ -52,13 +55,16 @@ export default function HomeBeybladePlayground({ lang }: { lang: string }) {
                 bodies.forEach((body, index) => { body.x = rect.left + rect.width * (index === 0 ? 0.28 : 0.72); body.y = rect.top + 64; body.vx = body.vy = 0; body.returnAfter = 0; body.held = false; bounceAtEdges(body, width, height); });
             };
             const resolveContacts = () => {
-                // Repeat separation so a pushed body cannot get trapped against a wall.
-                for (let pass = 0; pass < 3; pass++) {
-                    collidePlaygroundBodies(bodies[0], bodies[1], time);
-                    bodies.forEach(body => bounceAtEdges(body, width, height));
+                const contact = resolvePlaygroundContacts(bodies[0], bodies[1], time, width, height);
+                const now = performance.now();
+                if (contact && now - lastImpactTime > 140) {
+                    lastImpactTime = now;
+                    // Each top gets its own flash, including the one currently held.
+                    bodies.forEach(body => impacts.burst(body.x - width / 2, height / 2 - body.y, 0.8));
                 }
             };
             const draw = () => {
+                const now = performance.now(); impacts.update(Math.min(0.05, (now - effectTime) / 1000), motion.matches); effectTime = now;
                 bodies.forEach((body, index) => {
                     body.tilt.visible = body.ready && inView;
                     body.tilt.position.set(body.x - width / 2, height / 2 - body.y, 0);
@@ -68,7 +74,7 @@ export default function HomeBeybladePlayground({ lang }: { lang: string }) {
                 renderer.render(scene, camera);
             };
             const frame = (now: number) => {
-                const dt = Math.min((now - previous) / 1000, 0.05); previous = now;
+                const dt = Math.max(0, Math.min((now - previous) / 1000, 0.05)); previous = now;
                 time += dt;
                 const rect = area.getBoundingClientRect();
                 bodies.forEach((body, index) => {
@@ -88,16 +94,22 @@ export default function HomeBeybladePlayground({ lang }: { lang: string }) {
                     }
                 }
                 draw();
+                if ((paused.current || motion.matches) && !impacts.active) { renderer.setAnimationLoop(null); running = false; }
             };
             const refresh = () => {
-                previous = performance.now();
-                renderer.setAnimationLoop(inView && !document.hidden && !paused.current && !motion.matches ? frame : null);
+                const shouldRun = inView && !document.hidden && ((!paused.current && !motion.matches) || impacts.active);
+                if (shouldRun !== running) {
+                    previous = performance.now(); running = shouldRun;
+                    renderer.setAnimationLoop(shouldRun ? frame : null);
+                }
                 draw();
             };
             const resize = () => {
                 width = window.innerWidth; height = window.innerHeight;
                 renderer.setSize(width, height); camera.left = -width / 2; camera.right = width / 2; camera.top = height / 2; camera.bottom = -height / 2; camera.updateProjectionMatrix();
-                placeInZone(); draw();
+                if (!bodies.some(body => body.ready)) placeInZone();
+                else bodies.forEach(body => bounceAtEdges(body, width, height));
+                draw();
             };
             actions.current = {
                 drag: (index, x, y) => {
@@ -109,14 +121,14 @@ export default function HomeBeybladePlayground({ lang }: { lang: string }) {
                     // Sweep the drag path, including large pointer jumps, to avoid tunnelling.
                     const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 12));
                     for (let step = 0; step < steps; step++) { body.x += dx / steps; body.y += dy / steps; bounceAtEdges(body, width, height); resolveContacts(); }
-                    draw();
+                    refresh();
                 },
                 release: index => { const body = bodies[index]; if (!body.held) return; body.held = false; body.returnAfter = time + 4; if (performance.now() - body.lastDrag > 100) body.vx = body.vy = 0; },
-                move: (index, x, y) => { const body = bodies[index]; body.x += x; body.y += y; body.vx = x * 12; body.vy = y * 12; body.returnAfter = time + 4; bounceAtEdges(body, width, height); resolveContacts(); draw(); },
-                reset: () => { placeInZone(); draw(); }, refresh,
+                move: (index, x, y) => { const body = bodies[index]; body.x += x; body.y += y; body.vx = x * 12; body.vy = y * 12; body.returnAfter = time + 4; bounceAtEdges(body, width, height); resolveContacts(); refresh(); },
+                reset: () => { impacts.clear(); placeInZone(); refresh(); }, refresh,
             };
             const observer = new IntersectionObserver(([entry]) => { inView = entry.isIntersecting; refresh(); }); observer.observe(area);
-            const scroll = () => { if (!dragging.current) placeInZone(); refresh(); };
+            const scroll = () => { refresh(); };
             window.addEventListener('resize', resize); window.addEventListener('scroll', scroll, { passive: true });
             document.addEventListener('visibilitychange', refresh); motion.addEventListener('change', refresh);
             cleanup = () => {
