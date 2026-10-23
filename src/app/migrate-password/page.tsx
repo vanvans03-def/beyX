@@ -63,7 +63,7 @@ export default function MigratePasswordPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="min-h-svh bg-[#050505] text-white flex items-start sm:items-center justify-center px-4 py-6 relative overflow-hidden">
             <div className="absolute top-[-10%] left-[30%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[140px] pointer-events-none" />
             <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-600/5 rounded-full blur-[100px] pointer-events-none" />
 
@@ -93,7 +93,7 @@ export default function MigratePasswordPage() {
                             <div className="w-16 h-16 bg-primary/10 border border-primary/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
                                 <KeyRound className="w-8 h-8 text-primary" />
                             </div>
-                            <h1 className="text-2xl font-extrabold tracking-tight">Set New Password</h1>
+                            <h1 data-motion="reveal" className="text-2xl font-extrabold tracking-tight">Set New Password</h1>
                             <p className="text-gray-400 text-sm leading-relaxed">
                                 Enter your username and choose a new password
                             </p>

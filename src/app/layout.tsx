@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { shareMetadata, siteOrigin } from '@/lib/share-metadata';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "https://www.beyx-system.com"),
+  metadataBase: new URL(siteOrigin),
   title: {
     default: "BeyX System | เว็บจัดการทัวร์นาเมนต์เบย์เบลด (Beyblade X Tournament)",
     template: "%s | BeyX System",
@@ -32,38 +33,16 @@ export const metadata: Metadata = {
     "Beyblade X bracket generator",
     "tournament registration beyblade",
   ],
-  openGraph: {
-    title: "BeyX System | ระบบจัดทัวร์นาเมนต์เบย์เบลด Beyblade X",
-    description:
-      "จัดการแข่งขัน Beyblade X ของคุณให้เป็นเรื่องง่าย สร้างสายแข่งอัตโนมัติ จัดการผู้เล่น และสรุปผลได้ในเว็บเดียว",
-    url: "https://www.beyx-system.com",
-    siteName: "BeyX System",
-    images: [
-      {
-        url: "/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: "BeyX System - ระบบจัดการแข่งขัน Beyblade X",
-      },
-    ],
-    locale: "th_TH",
-    type: "website",
-  },
+  openGraph: shareMetadata('BeyX System | ระบบจัดทัวร์นาเมนต์เบย์เบลด Beyblade X', 'สร้างสายแข่ง จัดการผู้เล่น และติดตามผลการแข่งขัน Beyblade X ในเว็บเดียว', '/').openGraph,
   icons: {
     icon: "/bey-x-logo-circle.png",
     shortcut: "/bey-x-logo-circle.png",
     apple: "/bey-x-logo-circle.png",
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "BeyX System | ระบบจัดทัวร์นาเมนต์เบย์เบลด Beyblade X",
-    description:
-      "จัดการแข่งขัน Beyblade X ของคุณให้เป็นเรื่องง่าย สร้างสายแข่งอัตโนมัติ",
-    images: ["/og-image.jpg"],
-  },
+  twitter: shareMetadata('BeyX System', 'Play. Organize. Compete. ระบบจัดการแข่งขัน Beyblade X', '/').twitter,
 };
 
-import { AOSInit } from "@/components/AOSInit";
+import { MotionExperience } from "@/components/MotionExperience";
 import { Toaster } from "sonner";
 
 export default function RootLayout({
@@ -77,7 +56,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <AOSInit />
+        <MotionExperience />
         {children}
         <Toaster theme="dark" position="top-center" />
       </body>

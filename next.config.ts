@@ -4,6 +4,13 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   typescript: { tsconfigPath: process.env.NEXT_TYPESCRIPT_CONFIG || 'tsconfig.json' },
   output: 'standalone',
+  async redirects() {
+    // Keep previously scraped image URLs working, without overriding page OG metadata.
+    return [
+      { source: '/opengraph-image', destination: '/beyx-share-v2.png', permanent: false },
+      { source: '/register/:id/opengraph-image', destination: '/beyx-bracket-v2.png', permanent: false },
+    ];
+  },
   generateBuildId: async () => {
     return process.env.NEXT_PUBLIC_BUILD_ID || 'v1.0.0';
   },

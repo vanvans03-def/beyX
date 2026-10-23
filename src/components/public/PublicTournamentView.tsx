@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe, Loader2, MonitorPlay, Gamepad2, X } from "lucide-react";
+import { Users, Trophy, Clock, ChevronLeft, ShieldCheck, Globe, Loader2, MonitorPlay, Gamepad2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -8,9 +8,10 @@ import { useState, useEffect, useRef } from "react";
 import InternalBracket from "@/components/InternalBracket";
 import StandingsTable from "@/components/StandingsTable";
 import dynamic from 'next/dynamic';
+import { BeybladeModelCredits } from '@/components/BeybladeModelCredits';
 
 const BeybladeArena = dynamic(() => import('@/components/BeybladeArena'), { ssr: false });
-const HomeBeybladePlayground = dynamic(() => import('@/components/HomeBeybladePlayground'), { ssr: false, loading: () => <div className="h-[170px] w-full" /> });
+const HomeBeybladePlayground = dynamic(() => import('@/components/HomeBeybladePlayground'), { ssr: false, loading: () => <div className="h-[88px] w-full" /> });
 
 type PublicTournamentViewProps = {
     tournament: any;
@@ -19,8 +20,7 @@ type PublicTournamentViewProps = {
 
 export default function PublicTournamentView({ tournament, registrations }: PublicTournamentViewProps) {
     const { t, lang, toggleLang } = useTranslation();
-    const [showMinigame, setShowMinigame] = useState(false);
-    const [activeTab, setActiveTab] = useState<'players' | 'bracket' | 'standings'>(() => {
+    const [activeTab, setActiveTab] = useState<'players' | 'bracket' | 'standings' | 'minigame'>(() => {
         if (tournament?.status === 'STARTED') {
             return 'bracket';
         }
@@ -168,7 +168,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                         <ChevronLeft className="h-6 w-6" />
                     </Link>
                     <div className="text-center flex-1">
-                        <h1 className="font-black italic text-xl tracking-tighter uppercase leading-tight text-white">
+                        <h1 data-motion="reveal" className="font-black italic text-xl tracking-tighter uppercase leading-tight text-white">
                             {tournament.name}
                         </h1>
                         <div className="flex items-center justify-center gap-2 mt-1">
@@ -191,9 +191,10 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                 </div>
 
                 {/* Tabs */}
-                <div className="max-w-4xl mx-auto px-6 flex items-center gap-8 border-t border-white/5 relative z-10">
+                <nav aria-label="Tournament sections" className="max-w-4xl mx-auto px-4 sm:px-6 flex items-center gap-5 sm:gap-8 overflow-x-auto border-t border-white/5 relative z-10 [&>button]:shrink-0">
                     <button 
                         onClick={() => setActiveTab('players')}
+                        aria-pressed={activeTab === 'players'}
                         className={cn(
                             "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative z-20 flex items-center gap-1.5",
                             activeTab === 'players' ? "text-primary" : "text-muted-foreground hover:text-white"
@@ -205,6 +206,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                     {tournament.status !== 'OPEN' && (
                         <button 
                             onClick={() => setActiveTab('bracket')}
+                            aria-pressed={activeTab === 'bracket'}
                             className={cn(
                                 "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative z-20 flex items-center gap-1.5",
                                 activeTab === 'bracket' ? "text-primary" : (tournament.status === 'CLOSED' || tournament.status === 'STARTED') ? "text-white drop-shadow-[0_0_5px_rgba(var(--primary-rgb),0.8)]" : "text-muted-foreground hover:text-white"
@@ -223,6 +225,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                     {(tournament.status === 'COMPLETED' || tournament.status === 'CLOSED') && (
                         <button 
                             onClick={() => setActiveTab('standings')}
+                            aria-pressed={activeTab === 'standings'}
                             className={cn(
                                 "py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative z-20 flex items-center gap-1.5",
                                 activeTab === 'standings' ? "text-primary" : "text-muted-foreground hover:text-white"
@@ -232,21 +235,14 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                             {activeTab === 'standings' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />}
                         </button>
                     )}
-                </div>
+                    <button type="button" onClick={() => setActiveTab('minigame')} aria-pressed={activeTab === 'minigame'} aria-controls={`shared-minigame-${tournament.id}`} className={cn('relative flex min-h-12 items-center gap-1.5 py-4 text-[10px] font-black uppercase tracking-wider transition-colors', activeTab === 'minigame' ? 'text-primary' : 'text-muted-foreground hover:text-white')}>
+                        <Gamepad2 size={14} aria-hidden="true" />{lang === 'EN' ? 'Mini game' : 'มินิเกม'}
+                        {activeTab === 'minigame' && <span className="absolute inset-x-0 bottom-0 h-1 rounded-t-full bg-primary" />}
+                    </button>
+                </nav>
             </div>
 
-            <div className="relative z-10 mx-auto max-w-4xl px-4 pt-5 sm:px-6">
-                {!showMinigame && <HomeBeybladePlayground lang={lang} />}
-                <div className="mb-4 flex justify-center">
-                    <button type="button" aria-expanded={showMinigame} aria-controls={`shared-minigame-${tournament.id}`} onClick={() => setShowMinigame(open => !open)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-5 py-3 text-sm font-bold text-primary transition hover:border-primary/60 hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-primary">
-                        {showMinigame ? <X size={18} /> : <Gamepad2 size={18} />}
-                        {showMinigame ? (lang === 'EN' ? 'Close mini game' : 'ปิดมินิเกม') : (lang === 'EN' ? 'Enter mini game' : 'เข้ามินิเกม')}
-                    </button>
-                </div>
-                <div id={`shared-minigame-${tournament.id}`}>
-                    {showMinigame && <BeybladeArena compact lang={lang} />}
-                </div>
-            </div>
+            {activeTab !== 'minigame' && <div className="relative z-10 mx-auto max-w-4xl px-4 pt-2 sm:px-6"><HomeBeybladePlayground lang={lang} compact /></div>}
 
             <main className={cn(
                 "relative z-10 mx-auto transition-all duration-300",
@@ -254,6 +250,7 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                     ? "w-full max-w-none px-0 pt-0" 
                     : "max-w-4xl px-6 pt-8 space-y-8"
             )}>
+                {activeTab === 'minigame' && <div id={`shared-minigame-${tournament.id}`}><BeybladeArena compact lang={lang} showCredits={false} /></div>}
                 {activeTab === 'players' && (
                     <>
                         {/* Stats / Status */}
@@ -419,16 +416,11 @@ export default function PublicTournamentView({ tournament, registrations }: Publ
                     </div>
                 )}
 
-                {/* Footer Info */}
-                {activeTab !== 'bracket' && (
-                    <div className="text-center pt-10 pb-4">
-                        <div className="h-px w-10 bg-white/10 mx-auto mb-6" />
-                        <p className="text-[10px] uppercase font-black italic tracking-[0.4em] text-muted-foreground/30">
-                            {t('public.powered_by')}
-                        </p>
-                    </div>
-                )}
             </main>
+            <footer className="relative z-10 mx-auto mt-8 max-w-4xl border-t border-white/10 px-4 pt-4 sm:px-6">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50">{t('public.powered_by')}</p>
+                <BeybladeModelCredits english={lang === 'EN'} />
+            </footer>
         </div>
     );
 }

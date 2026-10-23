@@ -15,6 +15,7 @@
 # next.js
 /.next/
 /.next-e2e/
+/.next-manual-ui/
 /out/
 
 # production

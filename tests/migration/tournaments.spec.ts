@@ -1,5 +1,9 @@
 import { test, expect, jsonOK, generate, finish } from './support/fixture';
 
+// These journeys verify persistence/scoring, not WebGL animation. Motion itself
+// is covered at normal settings by public-ui and the three-device UI inventory.
+test.use({ contextOptions: { reducedMotion: 'reduce' } });
+
 for (const bracket of ['SINGLE', 'DOUBLE']) for (const count of [2, 3, 4, 5, 8, 9, 16]) for (const reset of bracket === 'DOUBLE' ? [false, true] : [false]) {
     test(`${bracket} ${count} entrants ${reset ? 'grand final reset' : 'normal final'}: persistence, progression, standings, close and reset`, async ({ lab, request, page }, info) => {
         test.setTimeout(300_000);

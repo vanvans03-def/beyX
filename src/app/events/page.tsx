@@ -1,7 +1,8 @@
 import { getEvents } from "@/lib/repository";
 import { EventsClientView } from "@/components/EventsClientView";
 import Link from "next/link";
-import { Metadata, ResolvingMetadata } from "next";
+import type { Metadata } from "next";
+import { shareMetadata } from '@/lib/share-metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,32 +11,22 @@ type Props = {
 }
 
 export async function generateMetadata(
-    { searchParams }: Props,
-    parent: ResolvingMetadata
+    { searchParams }: Props
 ): Promise<Metadata> {
     const sp = await searchParams;
     const id = typeof sp.id === 'string' ? sp.id : undefined;
 
-    if (!id) return {};
+    const fallback = shareMetadata('Events & News', 'ตารางกิจกรรมและการแข่งขัน Beyblade X บน BeyX System', '/events');
+    if (!id) return fallback;
 
     const events = await getEvents();
     const event = events.find(e => e.id === id);
 
-    if (!event) return {};
+    if (!event) return fallback;
 
-    return {
-        title: `${event.title} - BeyX Events`,
-        description: event.description || `Join ${event.title} at ${event.location}`,
-        openGraph: {
-            title: event.title,
-            description: event.description || `Join ${event.title} at ${event.location}`,
-            images: [{
-                url: `/api/og?id=${event.id}`,
-                width: 1200,
-                height: 630,
-            }],
-        },
-    };
+    return shareMetadata(`${event.title} - BeyX Events`,
+        event.description || `Join ${event.title} at ${event.location}`,
+        `/events?id=${encodeURIComponent(event.id)}`);
 }
 
 export default async function EventsPage({ searchParams }: Props) {
@@ -51,10 +42,10 @@ export default async function EventsPage({ searchParams }: Props) {
                 <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px]" />
             </div>
 
-            <main className="relative z-10 max-w-4xl mx-auto p-6 space-y-8" data-aos="fade-in" suppressHydrationWarning>
+            <main className="relative z-10 max-w-4xl mx-auto p-6 space-y-8" suppressHydrationWarning>
                 <header className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white">
+                        <h1 data-motion="reveal" className="text-4xl font-black italic uppercase tracking-tighter text-white">
                             Events <span className="text-primary">&</span> News
                         </h1>
                         <p className="text-muted-foreground text-sm uppercase tracking-widest mt-1">Beyblade X Tournament Schedule</p>

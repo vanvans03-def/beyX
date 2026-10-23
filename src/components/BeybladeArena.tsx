@@ -8,7 +8,7 @@ import { BEYBLADE_MODELS as blades } from '@/data/beyblade-models';
 
 const initialHud = { phase: 'idle' as Phase, count: '3', progress: 0, player: 100, bot: 100, charge: 0, quality: -1, hits: 0, winner: null as number | null, reason: 'spin', skill: false };
 
-export default function BeybladeArena({ compact = false, lang = 'th' }: { compact?: boolean; lang?: string }) {
+export default function BeybladeArena({ compact = false, lang = 'th', showCredits = true }: { compact?: boolean; lang?: string; showCredits?: boolean }) {
     const host = useRef<HTMLDivElement>(null);
     const panel = useRef<HTMLElement>(null);
     const game = useRef(new BeybladeGame());
@@ -221,11 +221,15 @@ export default function BeybladeArena({ compact = false, lang = 'th' }: { compac
                 renderer.setAnimationLoop(visible && !document.hidden && !paused.current && phase !== 'finished' && !(motion.matches && phase === 'idle') ? frame : null);
                 publish(); draw();
             };
-            const steer = (event: PointerEvent) => {
+            let previousPoint: { x: number; z: number } | null = null;
+            const steer = (event: PointerEvent, directional = false) => {
                 const rect = container.getBoundingClientRect();
                 pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
                 ray.setFromCamera(pointer, camera);
                 if (ray.ray.intersectPlane(plane, point)) {
+                    if (directional && previousPoint) game.current.aimDash(point.x - previousPoint.x, point.z - previousPoint.z);
+                    // Accumulate small pointer movements until they form an intentional drag.
+                    if (!previousPoint || Math.hypot(point.x - previousPoint.x, point.z - previousPoint.z) >= 0.12) previousPoint = { x: point.x, z: point.z };
                     const radius = Math.hypot(point.x, point.z), scale = radius > ARENA_RADIUS ? ARENA_RADIUS / radius : 1;
                     game.current.target = { x: point.x * scale, z: point.z * scale };
                 }
@@ -234,11 +238,12 @@ export default function BeybladeArena({ compact = false, lang = 'th' }: { compac
                 if (!event.isPrimary || event.button !== 0 || paused.current) return;
                 container.focus({ preventScroll: true });
                 if (game.current.phase !== 'battle') return;
-                pointerId = event.pointerId; container.setPointerCapture(event.pointerId); steer(event);
+                previousPoint = null; pointerId = event.pointerId; container.setPointerCapture(event.pointerId); steer(event);
             };
-            const move = (event: PointerEvent) => { if (event.pointerId === pointerId && !paused.current) steer(event); };
+            const move = (event: PointerEvent) => { if (event.pointerId === pointerId && !paused.current) steer(event, true); };
             const up = (event: PointerEvent) => {
-                if (event.pointerId !== pointerId) return; pointerId = null; game.current.target = null;
+                if (event.pointerId !== pointerId) return; pointerId = null; previousPoint = null; game.current.target = null;
+                if (event.type === 'pointercancel') game.current.dashAim = null;
                 if (container.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId);
             };
             const keydown = (event: KeyboardEvent) => {
@@ -251,7 +256,7 @@ export default function BeybladeArena({ compact = false, lang = 'th' }: { compac
                 }
             };
             const keyup = (event: KeyboardEvent) => game.current.keys.delete(event.key.length === 1 ? event.key.toLowerCase() : event.key);
-            const blur = () => { game.current.keys.clear(); game.current.target = null; };
+            const blur = () => { game.current.keys.clear(); game.current.target = null; game.current.dashAim = null; previousPoint = null; };
             const resize = new ResizeObserver(() => {
                 const width = container.clientWidth, height = container.clientHeight;
                 renderer.setSize(width, height); camera.aspect = width / Math.max(1, height);
@@ -318,9 +323,9 @@ export default function BeybladeArena({ compact = false, lang = 'th' }: { compac
                     {active && <button type="button" className={button} onClick={() => { paused.current = !paused.current; setPaused(paused.current); refresh(); }}>{isPaused ? <Play size={14} /> : <Pause size={14} />}{isPaused ? (english ? 'Resume' : 'เล่นต่อ') : (english ? 'Pause' : 'หยุดพัก')}</button>}
                     <button type="button" disabled={!ready} className={button} onClick={() => { game.current.reset(selected); paused.current = false; setPaused(false); refresh(); }}><RotateCcw size={14} />{english ? 'Reset' : 'เริ่มใหม่'}</button>
                 </div>
-                <p className="text-center text-[11px] leading-relaxed text-gray-400">{english ? 'Drag or use WASD / arrows. Four hits charge E: ride the gear line to the single yellow dash point. Only a strong dash impact can knock a top into Over / Xtreme pockets. A stopped top loses by Spin Finish.' : 'ลากหรือใช้ WASD / ลูกศร · ชน 4 ครั้งแล้วกด E ไต่รางไปแดชที่จุดสีเหลืองจุดเดียว · ต้องโดนแดชชนแรงจึงกระเด็นตก Over / Xtreme Zone ได้ · หมดแรงหมุนจะล้มและแพ้ Spin Finish'}</p>
+                <p className="text-center text-[11px] leading-relaxed text-gray-400">{english ? 'Drag or use WASD / arrows. Four hits charge E. While approaching/riding the rail, drag in the direction you want to dash; no input keeps the straight inward dash. Normal rail rides spend extra spin stamina. Strong dash impacts can knock tops into Over / Xtreme pockets.' : 'ลากหรือใช้ WASD / ลูกศร · ชน 4 ครั้งชาร์จไม้ตาย E · ระหว่างเข้าราง/ไต่ไลน์ ลากเพื่อเลือกทิศพุ่ง ไม่บังคับจะพุ่งตรงเข้ากลางเหมือนเดิม · ไต่ไลน์ปกติใช้พลังหมุนเพิ่ม · แดชชนแรงจึงกระเด็นตก Over / Xtreme Zone ได้'}</p>
                 <p role="status" className={`text-center text-[10px] ${models.every(Boolean) ? 'text-primary/70' : 'text-amber-200/70'}`}>{models.every(Boolean) ? (english ? 'Original Sketchfab models loaded' : 'โหลดโมเดล Sketchfab แล้ว') : modelError ? (english ? 'Could not load the models. Please refresh to retry.' : 'โหลดโมเดลไม่สำเร็จ กรุณารีเฟรชเพื่อลองอีกครั้ง') : (english ? 'Loading your 3D Beyblades…' : 'กำลังโหลดลูกข่าง 3D…')}</p>
-                <details className="text-center text-[10px] text-gray-500"><summary className="cursor-pointer">{english ? 'Model credits' : 'เครดิตโมเดลที่เลือก'}</summary><p className="mt-2">Toys, Games &amp; hobbies (@tgh14) · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer" className="underline">CC BY-NC-SA 4.0</a></p><div className="mt-1 flex justify-center gap-3">{blades.map(blade => <a key={blade.name} href={blade.source} target="_blank" rel="noreferrer" className="underline">{blade.name}</a>)}</div></details>
+                {showCredits && <details className="text-center text-[10px] text-gray-500"><summary className="cursor-pointer">{english ? 'Model credits' : 'เครดิตโมเดลที่เลือก'}</summary><p className="mt-2">Toys, Games &amp; hobbies (@tgh14) · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer" className="underline">CC BY-NC-SA 4.0</a></p><div className="mt-1 flex justify-center gap-3">{blades.map(blade => <a key={blade.name} href={blade.source} target="_blank" rel="noreferrer" className="underline">{blade.name}</a>)}</div></details>}
             </div>
         </section>
     );

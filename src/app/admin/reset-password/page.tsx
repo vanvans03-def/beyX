@@ -80,13 +80,14 @@ export default function ResetPasswordPage() {
                 {/* Header */}
                 <div className="flex items-center gap-3">
                     <button
+                        aria-label="Back"
                         onClick={() => router.back()}
                         className="w-10 h-10 sm:w-12 sm:h-12 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center border border-white/10 transition-all hover:border-white/20 shrink-0"
                     >
                         <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
                     </button>
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                        <h1 data-motion="reveal" className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
                             <KeyRound className="w-5 h-5 sm:w-7 sm:h-7 text-primary shrink-0" />
                             Change Password
                         </h1>

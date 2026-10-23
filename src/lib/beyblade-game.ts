@@ -2,6 +2,10 @@ export type Phase = 'idle' | 'countdown' | 'battle' | 'finishing' | 'finished';
 // railMode: 0 = free, 1 = approaching rail, 2 = riding gears, 3 = straight dash.
 export type Fighter = { x: number; z: number; vx: number; vz: number; stamina: number; charge: number; angle: number; railMode: number; railAngle: number; railDirection: number; railTravel: number; railTimer: number; railCooldown: number; impact: number; knockout: number; fall: number; height: number; zone: number };
 export const ARENA_RADIUS = 4.7;
+// HUD remains a percentage; more spin endurance comes from lower passive drain.
+export const SPIN_DRAIN_PER_SECOND = 0.8;
+export const NORMAL_RAIL_DRAIN_PER_SECOND = 4;
+export const NORMAL_RAIL_ENTRY_COST = 3;
 export const DASH_GATES = [-Math.PI / 2];
 export const FINISH_ZONES = [
     { angle: Math.PI * 3 / 4, halfWidth: 0.2, reason: 'over' as const, label: 'OVER ZONE', color: 0xffb74d },
@@ -37,6 +41,7 @@ export class BeybladeGame {
     impactId = 0;
     impact: { id: number; x: number; z: number; power: number } | null = null;
     target: { x: number; z: number } | null = null;
+    dashAim: { x: number; z: number } | null = null;
     keys = new Set<string>();
     constructor() { this.reset(); }
     reset(selected = this.selected) {
@@ -45,7 +50,7 @@ export class BeybladeGame {
         this.winner = null; this.hits = 0; this.skill = 0; this.collisionCooldown = 0;
         this.impact = null;
         this.finishTime = 0; this.reason = 'spin';
-        this.target = null; this.keys.clear();
+        this.target = null; this.dashAim = null; this.keys.clear();
         this.fighters = [-1, 1].map(side => ({ x: side * 2, z: 0, vx: 0, vz: 0, stamina: 100, charge: 0, angle: 0, railMode: 0, railAngle: 0, railDirection: -1, railTravel: 0, railTimer: 0, railCooldown: 0, impact: 0, knockout: 0, fall: 0, height: 0, zone: -1 }));
     }
     start() { this.reset(); this.phase = 'countdown'; }
@@ -57,11 +62,17 @@ export class BeybladeGame {
     special() {
         const player = this.fighters[this.selected];
         if (this.phase !== 'battle' || player.charge < 100 || this.skill > 0 || player.railMode === 3) return false;
-        player.charge = 0; this.skill = 4;
+        player.charge = 0; this.skill = 4; this.dashAim = null;
         // Head outward, engage the rail, then leave at a fixed gate. Never aim at the bot.
         player.railMode = 1; player.railTimer = 1.5; player.railTravel = 0;
         player.railAngle = Math.hypot(player.x, player.z) > 0.1 ? Math.atan2(player.z, player.x) : player.angle;
         return true;
+    }
+    /** Commit the latest intentional drag direction for this rail pass only. */
+    aimDash(x: number, z: number) {
+        const player = this.fighters[this.selected], length = Math.hypot(x, z);
+        if (this.phase !== 'battle' || ![1, 2].includes(player.railMode) || !Number.isFinite(length) || length < 0.12) return;
+        this.dashAim = { x: x / length, z: z / length };
     }
     step(dt: number) {
         if (this.phase === 'finishing') {
@@ -105,6 +116,7 @@ export class BeybladeGame {
         if (dx || dz) this.target = null;
         else if (this.target) { dx = this.target.x - p.x; dz = this.target.z - p.z; }
         const length = Math.hypot(dx, dz);
+        if (this.keys.size && length > 0.08) this.aimDash(dx, dz);
         if (length > 0.08 && p.railMode === 0 && p.knockout <= 0) { p.vx += dx / Math.max(1, length) * 13 * dt; p.vz += dz / Math.max(1, length) * 13 * dt; }
         // The bot pursues with a gentle orbit rather than teleporting to the player.
         const bx = p.x - bot.x + Math.cos(this.elapsed * 2) * 0.8;
@@ -135,7 +147,10 @@ export class BeybladeGame {
                 if (gate !== undefined) {
                     const exit = xtremeRailPoint(gate); f.x = exit.x; f.z = exit.z;
                     f.railMode = 3; f.railTimer = 0.4; f.railCooldown = 1.2;
-                    f.vx = -Math.cos(gate) * (powered ? 19 : 12); f.vz = -Math.sin(gate) * (powered ? 19 : 12);
+                    const aim = f === p ? this.dashAim : null;
+                    f.vx = (aim?.x ?? -Math.cos(gate)) * (powered ? 19 : 12);
+                    f.vz = (aim?.z ?? -Math.sin(gate)) * (powered ? 19 : 12);
+                    if (f === p) this.dashAim = null;
                 }
             }
             const damping = Math.exp(-(f.railMode === 3 || f.knockout > 0 ? 0.45 : f.railMode === 1 ? 0 : 1.8) * dt);
@@ -147,7 +162,8 @@ export class BeybladeGame {
                 f.railTimer -= dt;
                 if (f.railTimer <= 0) { f.railMode = 0; if (f === p) this.skill = 0; }
             }
-            f.stamina = Math.max(0, f.stamina - (1.6 + Math.hypot(f.vx, f.vz) * 0.035) * dt);
+            const railEffort = f.railMode === 2 && !powered ? NORMAL_RAIL_DRAIN_PER_SECOND : 0;
+            f.stamina = Math.max(0, f.stamina - (SPIN_DRAIN_PER_SECOND + Math.hypot(f.vx, f.vz) * 0.02 + railEffort) * dt);
             f.angle += (8 + f.stamina * 0.3) * dt;
             const radius = Math.hypot(f.x, f.z);
             const zone = finishZoneAt(Math.atan2(f.z, f.x));
@@ -157,7 +173,7 @@ export class BeybladeGame {
             }
             if (f.railMode === 0 && radius >= ARENA_RADIUS - 0.12 && f.railCooldown <= 0 && f.knockout <= 0) this.engageRail(f);
             // Only a strong dash impact opens a pocket. Driving there or missing a dash rebounds.
-            if (f.railMode === 0 && radius > ARENA_RADIUS) {
+            if ((f.railMode === 0 || f.railMode === 3) && radius > ARENA_RADIUS) {
                 if (zone >= 0 && f.knockout > 0 && outwardSpeed > 3) continue;
                 const nx = f.x / radius, nz = f.z / radius;
                 const outward = f.vx * nx + f.vz * nz;
@@ -182,8 +198,8 @@ export class BeybladeGame {
                     victim.vx += nx * sign * 14; victim.vz += nz * sign * 14;
                     victim.knockout = 1; victim.railMode = 0; victim.railCooldown = 1.2;
                 }
-                p.stamina = Math.max(0, p.stamina - 2.5);
-                bot.stamina = Math.max(0, bot.stamina - (playerDash ? 22 : 3));
+                p.stamina = Math.max(0, p.stamina - 1.8);
+                bot.stamina = Math.max(0, bot.stamina - (playerDash ? 22 : 2.1));
                 if (botDash) p.stamina = Math.max(0, p.stamina - 19.5);
                 p.impact = bot.impact = 0.35;
                 this.impact = { id: ++this.impactId, x: (p.x + bot.x) / 2, z: (p.z + bot.z) / 2, power: dashHit ? 1.6 : 1 };
@@ -195,6 +211,9 @@ export class BeybladeGame {
         if (p.stamina <= 0 || bot.stamina <= 0) this.finish(p.stamina === bot.stamina ? null : p.stamina > bot.stamina ? this.selected : 1 - this.selected, 'spin');
     }
     private engageRail(f: Fighter) {
+        const player = this.fighters[this.selected];
+        if (f === player && f.railMode !== 1) this.dashAim = null;
+        if (!(f === player && this.skill > 0)) f.stamina = Math.max(0, f.stamina - NORMAL_RAIL_ENTRY_COST);
         f.railAngle = Math.atan2(f.z, f.x);
         // Both current models spin right: travel right-to-left along the back rail,
         // regardless of incoming momentum. Add model handedness when left-spin tops exist.
@@ -203,7 +222,7 @@ export class BeybladeGame {
         const point = xtremeRailPoint(f.railAngle); f.x = point.x; f.z = point.z;
     }
     private finish(winner: number | null, reason: 'spin' | 'over' | 'xtreme') {
-        this.winner = winner; this.reason = reason; this.phase = 'finishing'; this.finishTime = 0; this.skill = 0; this.keys.clear(); this.target = null;
+        this.winner = winner; this.reason = reason; this.phase = 'finishing'; this.finishTime = 0; this.skill = 0; this.keys.clear(); this.target = null; this.dashAim = null;
         this.fighters.forEach(f => { f.railMode = 0; f.vx = f.vz = 0; });
     }
 }

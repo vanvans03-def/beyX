@@ -1,5 +1,19 @@
 import { test, expect } from '@playwright/test';
 
+test('homepage remains readable and navigable without animation JavaScript', async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor }) => {
+    const context = await browser.newContext({ viewport, isMobile, hasTouch, deviceScaleFactor, javaScriptEnabled: false, baseURL, ignoreHTTPSErrors: baseURL === 'https://127.0.0.1:3346' && process.env.E2E_LOCAL_TLS === '1' });
+    try {
+        const page = await context.newPage(); await page.goto('/');
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText('BeyX System - Beyblade X Tournament Manager');
+        for (const href of ['/minigame', '/rankings', '/admin', '/score-board']) {
+            const link = page.locator(`a[href="${href}"]`);
+            await expect(link).toBeVisible(); await expect(link).toHaveCSS('opacity', '1');
+        }
+        await page.locator('a[href="/minigame"]').click();
+        await expect(page).toHaveURL(/\/minigame$/);
+    } finally { await context.close(); }
+});
+
 test('homepage rapid collisions remain stable against the screen edge', async ({ page }) => {
     const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -53,6 +67,13 @@ test('homepage models drag, collide, pause, reset and navigate to minigame', asy
     // Timing quality itself is covered deterministically by test:minigame.
     await page.getByRole('button', { name: 'GO SHOOT! / Space', exact: true }).click();
     await page.clock.runFor(4000);
+    const arena = page.getByRole('group', { name: /สนามมินิเกม|Battle arena/ });
+    const field = (await arena.boundingBox())!;
+    await page.mouse.move(field.x + field.width * 0.45, field.y + field.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(field.x + field.width * 0.7, field.y + field.height * 0.35, { steps: 8 });
+    await page.clock.runFor(250);
+    await page.mouse.up();
     await expect(page.getByRole('button', { name: /ไม้ตาย/ })).toBeVisible();
     await page.getByRole('button', { name: 'เริ่มใหม่', exact: true }).click();
     await expect(page.getByRole('button', { name: 'เริ่มมินิเกม', exact: true })).toBeEnabled();

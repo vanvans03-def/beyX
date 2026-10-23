@@ -53,7 +53,7 @@ export default function CreateUserPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-6 md:p-8 flex items-center justify-center relative overflow-hidden">
+        <div className="min-h-svh bg-[#050505] text-white p-4 md:p-8 flex items-start md:items-center justify-center relative overflow-hidden">
             {/* Background Effects */}
             <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
@@ -67,7 +67,7 @@ export default function CreateUserPage() {
                             <UserPlus className="w-6 h-6 text-gray-400" />
                         </button>
                         <div>
-                            <h1 className="text-3xl font-extrabold tracking-tight text-white">{t('admin.users.create.title')}</h1>
+                            <h1 data-motion="reveal" className="text-3xl font-extrabold tracking-tight text-white">{t('admin.users.create.title')}</h1>
                             <p className="text-gray-400 text-sm">{t('admin.users.create.desc')}</p>
                         </div>
                     </div>
@@ -81,7 +81,7 @@ export default function CreateUserPage() {
                     </button>
                 </div>
 
-                <div className="glass-card p-8 rounded-2xl border border-white/10 bg-white/5 shadow-2xl">
+                <div data-motion="enter" className="glass-card p-5 sm:p-8 rounded-2xl border border-white/10 bg-white/5 shadow-2xl">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">

@@ -76,7 +76,7 @@ export default function UsersManagementPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-6 md:p-8 relative overflow-hidden">
+        <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8 relative overflow-hidden">
             {/* Background Gradient */}
             <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
@@ -90,7 +90,7 @@ export default function UsersManagementPage() {
                             <ArrowLeft className="w-5 h-5 text-gray-400" />
                         </button>
                         <div>
-                            <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+                            <h1 data-motion="reveal" className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
                                 <Users className="w-8 h-8 text-primary" /> {t('admin.users.title')}
                             </h1>
                             <p className="text-gray-400 text-sm">{t('admin.users.desc')}</p>
@@ -117,7 +117,7 @@ export default function UsersManagementPage() {
                     <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>
                 ) : (
                     <div className="glass-card rounded-2xl border border-white/10 bg-white/5 overflow-hidden shadow-2xl">
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto" role="region" aria-label="User accounts table — scroll horizontally for more actions" tabIndex={0}>
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="border-b border-white/10 bg-white/5 text-gray-400 text-xs font-bold uppercase tracking-wider">

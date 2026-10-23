@@ -98,7 +98,7 @@ test('superadmin creates organizer, duplicate name is rejected and password rese
     await jsonOK(await lab.superadmin.api.post('/api/admin/users', { data: payload }));
     expect((await lab.superadmin.api.post('/api/admin/users', { data: payload })).status()).toBe(400);
     await jsonOK(await lab.superadmin.api.put('/api/admin/users', { data: { username, newPassword: replacement } }));
-    const api = await playwright.request.newContext({ baseURL });
+    const api = await playwright.request.newContext({ baseURL, ignoreHTTPSErrors: baseURL === 'https://127.0.0.1:3346' && process.env.E2E_LOCAL_TLS === '1' });
     try {
         expect((await api.post('/api/auth/login', { data: { username, password } })).status()).toBe(401);
         await jsonOK(await api.post('/api/auth/login', { data: { username, password: replacement } }));

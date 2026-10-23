@@ -512,8 +512,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         }
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         setHistoryTooltip({
-            x: rect.left + window.scrollX,
-            y: rect.bottom + window.scrollY + 10
+            // This popover is fixed: use viewport, not document coordinates.
+            x: Math.max(12, Math.min(rect.left, window.innerWidth - Math.min(360, window.innerWidth - 24) - 12)),
+            y: Math.max(12, Math.min(rect.bottom + 10, window.innerHeight - Math.min(500, window.innerHeight - 24) - 12))
         });
     };
 
@@ -1953,7 +1954,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     />
                 </div>
             )}
-            <div className="min-h-screen bg-background p-4 md:p-6" data-aos="fade-in" suppressHydrationWarning>
+            <div className="min-h-screen bg-background p-4 md:p-6" suppressHydrationWarning>
                 <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
                     <header className="flex flex-col md:flex-row items-center justify-between gap-4 glass-card p-4 rounded-xl">
                         <div className="flex items-center gap-4 w-full md:w-auto">
@@ -1961,7 +1962,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                 <ArrowLeft className="h-6 w-6" />
                             </Link>
                             <div>
-                                <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+                                <h1 data-motion="reveal" className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
                                     {tournament?.name || "Tournament Details"}
                                 </h1>
                                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground min-w-0">
@@ -2057,7 +2058,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         {t('admin.matches.title')}
                                     </h3>
                                 </div>
-                                <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
+                                <div className="flex flex-col xl:flex-row items-center gap-2 w-full xl:w-auto">
                                     {/* Row 1: Search + History, Scroll, Refresh */}
                                     <div className="flex items-center gap-2 w-full md:w-auto">
                                         <div className="relative flex-1 md:w-64">
@@ -2073,6 +2074,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         {/* History Button */}
                                         <button
                                             onClick={handleShowHistory}
+                                            aria-label="History"
+                                            aria-expanded={!!historyTooltip}
                                             className={`flex-none flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap ${historyTooltip ? "bg-primary text-black border-primary" : "bg-secondary border-transparent hover:border-white/10"}`}
                                         >
                                             <Clock className="h-4 w-4" />
@@ -2102,6 +2105,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         </button>
                                         <button
                                             onClick={() => fetchMatches(bracketUrl)}
+                                            aria-label={t('admin.matches.refresh')}
                                             className="flex-none text-xs px-2.5 py-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors whitespace-nowrap"
                                         >
                                             <RefreshCw className="h-4 w-4 md:hidden" />
@@ -2109,7 +2113,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                         </button>
                                     </div>
                                     {/* Row 2: Scoreboard + 3-2-1 */}
-                                    <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
+                                    <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
                                         {/* Scoreboard Button */}
                                         <button
                                             onClick={() => {
@@ -2202,8 +2206,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                     })) ? (
                                         <div className="flex flex-col items-center gap-2 animate-in fade-in zoom-in duration-300">
                                             <Trophy className="w-12 h-12 text-yellow-500 mb-2 opacity-80" />
-                                            <span className="text-lg font-bold text-foreground">ไม่พบการแข่งขันแล้ว</span>
-                                            <span className="text-sm text-muted-foreground">กรุณากดจบการแข่งขัน (Finish Tournament)</span>
+                                            <span className="text-lg font-bold text-foreground">{tournament?.status === 'CLOSED' || tournament?.status === 'COMPLETED' ? (lang === 'EN' ? 'Tournament finished' : 'การแข่งขันจบแล้ว') : (lang === 'EN' ? 'All matches completed' : 'แข่งครบทุกแมตช์แล้ว')}</span>
+                                            <span className="text-sm text-muted-foreground">{tournament?.status === 'CLOSED' || tournament?.status === 'COMPLETED' ? (lang === 'EN' ? 'View final standings using the public tournament link.' : 'ดูอันดับและสถิติสุดท้ายได้จากลิงก์ Public View') : (lang === 'EN' ? 'Please finish the tournament.' : 'กรุณากดจบการแข่งขัน (Finish Tournament)')}</span>
                                         </div>
                                     ) : (
                                         t('admin.matches.empty')
@@ -2655,14 +2659,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                     {/* History Tooltip */}
                     {historyTooltip && (
                         <div
-                            className="fixed z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-right"
+                            className="fixed z-[200] animate-in fade-in zoom-in-95 duration-100 origin-top-right"
                             style={{
-                                left: Math.min(historyTooltip.x, window.innerWidth - 380), // Ensure it fits on screen
+                                left: historyTooltip.x,
                                 top: historyTooltip.y
                             }}
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <div className="bg-popover/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 w-[90vw] max-w-[360px] max-h-[500px] flex flex-col text-popover-foreground">
+                            <div className="bg-popover/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 w-[calc(100vw-24px)] max-w-[360px] max-h-[min(500px,calc(100dvh-24px))] flex flex-col text-popover-foreground">
                                 <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
                                     <h4 className="font-bold text-sm flex items-center gap-2">
                                         <Clock className="h-4 w-4 text-primary" />
@@ -2712,6 +2716,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                                                     ) : (tournament?.status !== 'COMPLETED' && tournament?.status !== 'CLOSED' || tournament?.provider === 'INTERNAL') && (
                                                         <button
                                                             onClick={() => {
+                                                                setHistoryTooltip(null);
                                                                 setModalConfig({
                                                                     isOpen: true,
                                                                     title: t('admin.modal.custom_select_winner'),
@@ -3757,17 +3762,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
 
 
-                    <Modal
-                        isOpen={modalConfig.isOpen}
-                        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
-                        title={modalConfig.title}
-                        description={modalConfig.desc}
-                        type={modalConfig.type}
-                        variant={modalConfig.variant}
-                        onConfirm={modalConfig.onConfirm}
-                        confirmText={modalConfig.confirmText || (modalConfig.variant === 'destructive' ? t('gen.delete') : 'OK')}
-                    />
-
                     {/* EDIT PLAYER NAME MODAL */}
                     <Modal
                         isOpen={!!editingRegistration}
@@ -4387,7 +4381,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                         type={modalConfig.type}
                         variant={modalConfig.variant}
                         onConfirm={modalConfig.onConfirm}
-                        confirmText={modalConfig.confirmText}
+                        confirmText={modalConfig.confirmText || (modalConfig.variant === 'destructive' ? t('gen.delete') : 'OK')}
                     />
                 </div>
             </div >

@@ -223,7 +223,7 @@ export default function CustomScoringPage() {
                             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
                         </button>
                         <div>
-                            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2 sm:gap-3">
+                            <h1 data-motion="reveal" className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2 sm:gap-3">
                                 <Award className="w-6 h-6 sm:w-8 h-8 text-primary" /> {t('custom_scoring.title')}
                             </h1>
                             <p className="text-gray-400 text-[11px] sm:text-xs md:text-sm">{t('custom_scoring.desc')}</p>

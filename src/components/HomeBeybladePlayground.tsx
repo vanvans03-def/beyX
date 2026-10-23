@@ -6,10 +6,11 @@ import { Pause, Play, RotateCcw } from 'lucide-react';
 import { BEYBLADE_MODELS } from '@/data/beyblade-models';
 import { advancePlaygroundBody, bounceAtEdges, resolvePlaygroundContacts } from '@/lib/beyblade-playground-physics';
 import { createBeybladeImpacts } from '@/lib/beyblade-impact-effects';
+import { BeybladeModelCredits } from '@/components/BeybladeModelCredits';
 
 type Actions = { drag: (index: number, x: number, y: number) => void; release: (index: number) => void; move: (index: number, x: number, y: number) => void; reset: () => void; refresh: () => void };
 
-export default function HomeBeybladePlayground({ lang }: { lang: string }) {
+export default function HomeBeybladePlayground({ lang, compact = false }: { lang: string; compact?: boolean }) {
     const zone = useRef<HTMLDivElement>(null);
     const canvasHost = useRef<HTMLDivElement>(null);
     const handles = useRef<(HTMLButtonElement | null)[]>([]);
@@ -52,7 +53,7 @@ export default function HomeBeybladePlayground({ lang }: { lang: string }) {
             });
             const placeInZone = () => {
                 const rect = area.getBoundingClientRect();
-                bodies.forEach((body, index) => { body.x = rect.left + rect.width * (index === 0 ? 0.28 : 0.72); body.y = rect.top + 64; body.vx = body.vy = 0; body.returnAfter = 0; body.held = false; bounceAtEdges(body, width, height); });
+                bodies.forEach((body, index) => { body.x = rect.left + rect.width * (index === 0 ? 0.28 : 0.72); body.y = rect.top + (compact ? 26 : 64); body.vx = body.vy = 0; body.returnAfter = 0; body.held = false; bounceAtEdges(body, width, height); });
             };
             const resolveContacts = () => {
                 const contact = resolvePlaygroundContacts(bodies[0], bodies[1], time, width, height);
@@ -81,7 +82,7 @@ export default function HomeBeybladePlayground({ lang }: { lang: string }) {
                     if (!paused.current && !motion.matches) body.spin.rotation.y += dt * (body.held ? 8 : 3);
                     if (!paused.current && !motion.matches && !body.held && time >= body.returnAfter) {
                         const x = rect.left + rect.width * (index === 0 ? 0.28 : 0.72) + Math.sin(time * 0.9 + index * 2.7) * rect.width * 0.13;
-                        const y = rect.top + 64 + Math.cos(time * 1.25 + index * 2) * 21;
+                        const y = rect.top + (compact ? 26 : 64) + Math.cos(time * 1.25 + index * 2) * (compact ? 8 : 21);
                         body.vx += (x - body.x) * 5 * dt;
                         body.vy += (y - body.y) * 5 * dt;
                     }
@@ -154,26 +155,26 @@ export default function HomeBeybladePlayground({ lang }: { lang: string }) {
                 if (disposed) { owned.forEach(resource => resource.dispose()); return; }
                 owned.forEach(resource => resources.add(resource));
                 const box = new T.Box3().setFromObject(gltf.scene), size = box.getSize(new T.Vector3()), center = box.getCenter(new T.Vector3());
-                const scale = 72 / Math.max(size.x, size.z);
+                const scale = (compact ? 46 : 72) / Math.max(size.x, size.z);
                 gltf.scene.scale.setScalar(scale); gltf.scene.position.copy(center.multiplyScalar(-scale));
                 bodies[index].spin.add(gltf.scene); bodies[index].ready = true; draw();
             }));
             if (!disposed) setLoaded(true);
         }).catch(reason => { if (!disposed && reason.name !== 'AbortError') { setError(true); console.warn('Home Beyblades unavailable', reason); } });
         return () => { disposed = true; cleanup(); };
-    }, []);
+    }, [compact]);
 
     return <>
-        <div ref={zone} className="relative h-[170px] w-full" aria-label={english ? 'Beyblade playground' : 'ลูกข่างเล่นบนหน้าแรก'}>
+        <div ref={zone} className={`relative w-full ${compact ? 'h-[88px]' : 'h-[170px]'}`} aria-label={english ? 'Beyblade playground' : 'ลูกข่างเล่นบนหน้าแรก'}>
             <div className="absolute inset-x-0 bottom-0 space-y-2 text-center">
-                <p role="status" className="text-xs text-muted-foreground">{error ? (english ? '3D is unavailable on this browser' : 'เบราว์เซอร์นี้เปิดลูกข่าง 3D ไม่ได้') : !loaded ? (english ? 'Loading Beyblades…' : 'กำลังโหลดลูกข่าง…') : (english ? 'Drag the Beyblades anywhere · Arrow keys work too' : 'ลากลูกข่างไปเล่นได้ทั่วหน้าจอ · ใช้ปุ่มลูกศรได้ด้วย')}</p>
+                <p role="status" className={compact ? 'sr-only' : 'text-xs text-muted-foreground'}>{error ? (english ? '3D is unavailable on this browser' : 'เบราว์เซอร์นี้เปิดลูกข่าง 3D ไม่ได้') : !loaded ? (english ? 'Loading Beyblades…' : 'กำลังโหลดลูกข่าง…') : compact ? '' : (english ? 'Drag the Beyblades anywhere · Arrow keys work too' : 'ลากลูกข่างไปเล่นได้ทั่วหน้าจอ · ใช้ปุ่มลูกศรได้ด้วย')}</p>
                 <div className="flex justify-center gap-3 text-[11px] text-muted-foreground">
                     <button type="button" disabled={!loaded} onClick={() => { paused.current = !paused.current; setPaused(paused.current); actions.current?.refresh(); }} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 hover:text-primary disabled:opacity-40">{isPaused ? <Play size={12} /> : <Pause size={12} />}{isPaused ? (english ? 'Animate' : 'ให้วิ่งเล่น') : (english ? 'Pause' : 'พักลูกข่าง')}</button>
                     <button type="button" disabled={!loaded} onClick={() => actions.current?.reset()} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 hover:text-primary disabled:opacity-40"><RotateCcw size={12} />{english ? 'Bring back' : 'เรียกกลับ'}</button>
                 </div>
             </div>
         </div>
-        <details className="!mt-2 text-[10px] text-muted-foreground/60"><summary className="cursor-pointer">{english ? '3D model credits' : 'เครดิตโมเดล 3D'}</summary><p>Toys, Games &amp; hobbies (@tgh14) · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer" className="underline">CC BY-NC-SA 4.0</a></p><div className="flex justify-center gap-3">{BEYBLADE_MODELS.map(blade => <a key={blade.name} href={blade.source} target="_blank" rel="noreferrer" className="underline">{blade.name}</a>)}</div></details>
+        {!compact && <BeybladeModelCredits english={english} />}
         {typeof document !== 'undefined' && createPortal(<div className="pointer-events-none fixed inset-0 z-30 overflow-hidden" aria-label={english ? 'Interactive Beyblades' : 'ลูกข่างที่ขยับเล่นได้'}>
             <div ref={canvasHost} className="absolute inset-0" aria-hidden="true" />
             {BEYBLADE_MODELS.map((blade, index) => <button key={blade.name} ref={node => { handles.current[index] = node; }} type="button" aria-label={`${english ? 'Drag' : 'ลาก'} ${blade.name}`} title={blade.name} style={{ visibility: 'hidden' }} className="pointer-events-auto absolute left-0 top-0 h-[88px] w-[88px] cursor-grab touch-none rounded-full outline-none hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing"

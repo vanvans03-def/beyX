@@ -114,7 +114,7 @@ export function RegistrationView({
     };
 
     return (
-        <div className="pb-24" data-aos="fade-in" suppressHydrationWarning>
+        <div className="pb-24" suppressHydrationWarning>
             <div className="flex justify-end mb-4">
                 <button
                     type="button"
@@ -268,7 +268,7 @@ export function RegistrationView({
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
                             <div className="flex items-center gap-2">
-                                <h3 className="text-lg font-bold text-foreground">{t('reg.deck.main')}</h3>
+                                <h3 data-motion="reveal" className="text-lg font-bold text-foreground">{t('reg.deck.main')}</h3>
                                 <button
                                     onClick={() => setShowResetConfirm(true)}
                                     className="p-1.5 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
@@ -510,7 +510,7 @@ export function RegistrationView({
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-background border border-border rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
                         <div className="p-4 border-b border-white/10 flex items-center justify-between sticky top-0 bg-background/95 backdrop-blur z-10 rounded-t-2xl">
-                            <h3 className="text-lg font-bold flex items-center gap-2">
+                            <h3 data-motion="reveal" className="text-lg font-bold flex items-center gap-2">
                                 <Globe className="h-4 w-4 text-primary" />
                                 {t('reg.btn.registered_players') || 'Registered Players'} ({existingPlayers.length})
                             </h3>

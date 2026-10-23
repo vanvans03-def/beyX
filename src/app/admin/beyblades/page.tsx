@@ -215,7 +215,7 @@ export default function BeybladesManagementPage() {
                             <ArrowLeft className="w-5 h-5 text-gray-400" />
                         </button>
                         <div>
-                            <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+                            <h1 data-motion="reveal" className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
                                 <Shield className="w-8 h-8 text-primary" /> {lang === 'TH' ? 'ระบบจัดการคลังเบย์เบลดและชิ้นส่วนเสริม' : 'Global Catalog Manager'}
                             </h1>
                             <p className="text-gray-400 text-sm">

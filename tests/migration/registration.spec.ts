@@ -18,9 +18,11 @@ for (const [type, mode] of [['Open', 'Standard'], ['U10', 'Under10'], ['U10Custo
             await page.getByPlaceholder('Search Blade...').fill(mainBeys[i]);
             await page.getByRole('button').filter({ hasText: mainBeys[i] }).last().click();
         }
-        const submitted = page.waitForResponse(response => response.url().endsWith('/api/register') && response.request().method() === 'POST');
-        await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน', exact: true }).click();
-        await jsonOK(await submitted);
+        const [submitted] = await Promise.all([
+            page.waitForResponse(response => response.url().endsWith('/api/register') && response.request().method() === 'POST', { timeout: 60_000 }),
+            page.getByRole('button', { name: 'ยืนยันการลงทะเบียน', exact: true }).click(),
+        ]);
+        await jsonOK(submitted);
         // Browser owns its generated device ID. Reuse it for update/ownership checks.
         const actual = await lab.db.query('SELECT device_uuid FROM public.registrations WHERE tournament_id=$1 AND player_name=$2', [id, payload.playerName]);
         expect(actual.rows).toHaveLength(1); payload.deviceUUID = actual.rows[0].device_uuid;

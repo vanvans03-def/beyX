@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
@@ -11,33 +11,36 @@ export default function LoginPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [formError, setFormError] = useState('');
+    const passwordInput = useRef<HTMLInputElement>(null);
     const router = useRouter();
 
     const handleGoogleLogin = () => {
         window.location.assign('/api/auth/google');
     };
 
-    const [errorShown, setErrorShown] = useState(false);
+    const errorShown = useRef(false);
 
     useEffect(() => {
-        if (typeof window !== 'undefined' && !errorShown) {
+        if (!errorShown.current) {
+            errorShown.current = true;
             const params = new URLSearchParams(window.location.search);
             const error = params.get('error');
             if (error === 'no_email') {
                 toast.error("บัญชี Google นี้ไม่มีอีเมลเชื่อมต่อ");
-                setErrorShown(true);
             } else if (error === 'oauth_failed') {
                 toast.error("เข้าสู่ระบบผ่าน Google ล้มเหลว กรุณาลองใหม่อีกครั้ง");
-                setErrorShown(true);
             } else if (error === 'oauth_unavailable') {
                 toast.error("Google Login ยังไม่ได้ตั้งค่า");
-                setErrorShown(true);
             }
         }
-    }, [errorShown]);
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (loading) return;
+        setFormError('');
         setLoading(true);
 
         try {
@@ -54,66 +57,81 @@ export default function LoginPage() {
                 router.refresh(); // Update client-side authentication state
                 router.push(data.redirectTo);
             } else {
-                toast.error(data.error || 'Login failed');
+                setFormError(data.error || 'Login failed. Please check your username and password.');
+                passwordInput.current?.focus();
             }
         } catch {
-            toast.error("Something went wrong");
+            setFormError('Connection failed. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[#050505] text-white p-4 relative overflow-hidden">
+        <div className="min-h-svh flex flex-col bg-[#050505] text-white p-4 sm:p-6 relative overflow-hidden">
             {/* Dynamic Background */}
-            <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] animate-pulse-slow" />
-            <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] animate-pulse-slow delay-1000" />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,#063324_0%,transparent_65%)]" />
 
-            <div className="relative z-10 mx-auto w-full min-w-0 max-w-md space-y-6 py-6 sm:space-y-8">
+            <div className="relative z-10 mx-auto w-full min-w-0 max-w-md space-y-5 py-2 sm:my-auto sm:py-8">
                 <Link
                     href="/"
-                    className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-gray-300 backdrop-blur-sm transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+                    data-motion="enter"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
                 >
                     <ArrowLeft className="h-4 w-4" />
                     กลับหน้าแรก / Home
                 </Link>
 
-                <div className="text-center space-y-2">
-                    <div className="mx-auto w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 mb-6 backdrop-blur-sm">
+                <div className="text-center space-y-2 pt-2">
+                    <div data-motion="enter" className="mx-auto w-14 h-14 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mb-3">
                         <ShieldCheck className="w-8 h-8 text-primary" />
                     </div>
-                    <h1 className="text-3xl font-extrabold tracking-tight text-white">Admin Portal</h1>
-                    <p className="text-gray-400">Sign in to manage your tournaments</p>
+                    <h1 data-motion="enter" className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">Admin Portal</h1>
+                    <p data-motion="enter" className="text-sm text-gray-400">Sign in to manage your tournaments</p>
                 </div>
 
-                <div className="glass-card p-8 rounded-2xl border border-white/10 backdrop-blur-xl bg-white/5 shadow-2xl">
-                    <form onSubmit={handleLogin} className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-sm font-bold text-gray-300 uppercase tracking-wider">Username</label>
+                <div className="motion-panel glass-card p-5 sm:p-7 rounded-2xl border border-white/10 bg-white/[0.03]">
+                    <form onSubmit={handleLogin} aria-busy={loading} className="space-y-5">
+                        <div data-motion="enter" className="space-y-2">
+                            <label htmlFor="login-username" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Username</label>
                             <input
                                 type="text"
+                                id="login-username"
+                                autoComplete="username"
+                                autoCapitalize="none"
+                                spellCheck={false}
+                                aria-invalid={!!formError}
+                                aria-describedby={formError ? 'login-error' : undefined}
                                 value={username}
-                                onChange={(e) => setUsername(e.target.value)}
+                                onChange={(e) => { setUsername(e.target.value); setFormError(''); }}
                                 className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-medium"
                                 placeholder="Enter username"
                                 required
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-sm font-bold text-gray-300 uppercase tracking-wider">Password</label>
-                            <input
-                                type="password"
+                        <div data-motion="enter" className="space-y-2">
+                            <label htmlFor="login-password" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Password</label>
+                            <div className="relative"><input
+                                ref={passwordInput}
+                                type={showPassword ? 'text' : 'password'}
+                                id="login-password"
+                                autoComplete="current-password"
+                                aria-invalid={!!formError}
+                                aria-describedby={formError ? 'login-error' : undefined}
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-medium"
+                                onChange={(e) => { setPassword(e.target.value); setFormError(''); }}
+                                className="w-full bg-black/50 border border-white/10 rounded-xl pl-4 pr-14 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors font-medium"
                                 placeholder="••••••••"
                                 required
-                            />
+                            /><button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 hover:text-primary">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
                         </div>
+
+                        {formError && <p id="login-error" data-motion="feedback" role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm leading-relaxed text-red-200">{formError}</p>}
 
                         <button
                             type="submit"
+                            data-motion="enter"
                             disabled={loading}
                             className="w-full bg-primary hover:bg-primary/90 text-black font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-wide cursor-pointer"
                         >
@@ -164,7 +182,7 @@ export default function LoginPage() {
                     </form>
                 </div>
 
-                <div className="text-center text-xs text-gray-600">
+                <div className="text-center text-[11px] text-gray-500">
                     &copy; 2026 BeyBlade X Tournament Manager
                 </div>
             </div>

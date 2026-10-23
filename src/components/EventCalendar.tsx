@@ -3,8 +3,19 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useHydrated } from '@/hooks/useHydrated';
 
-export function EventCalendar({ events, onDateSelect }: { events: { date: Date; title: string }[], onDateSelect?: (date: Date) => void }) {
+type CalendarProps = { events: { date: Date; title: string }[]; onDateSelect?: (date: Date) => void };
+
+export function EventCalendar(props: CalendarProps) {
+    const hydrated = useHydrated();
+    // Dates/locale belong to the viewer. Do not hydrate a server-local calendar
+    // against a browser with a different locale or day/time zone.
+    if (!hydrated) return <div role="status" aria-label="Loading calendar" className="h-[340px] w-full animate-pulse rounded-xl bg-white/[0.02] md:h-[420px]" />;
+    return <CalendarContent {...props} />;
+}
+
+function CalendarContent({ events, onDateSelect }: CalendarProps) {
     const [currentDate, setCurrentDate] = useState(new Date());
 
     const daysInMonth = useMemo(() => {
@@ -23,6 +34,7 @@ export function EventCalendar({ events, onDateSelect }: { events: { date: Date; 
 
     const changeMonth = (offset: number) => {
         const newDate = new Date(currentDate);
+        newDate.setDate(1); // Jan 31 -> next month must be February, not March.
         newDate.setMonth(newDate.getMonth() + offset);
         setCurrentDate(newDate);
     };
@@ -100,8 +112,8 @@ export function EventCalendar({ events, onDateSelect }: { events: { date: Date; 
             <div className="flex items-center justify-between mb-6">
                 <h4 className="text-lg font-bold text-white capitalize">{monthName}</h4>
                 <div className="flex gap-2">
-                    <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-                    <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ChevronRight className="w-5 h-5" /></button>
+                    <button aria-label="Previous month" onClick={() => changeMonth(-1)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+                    <button aria-label="Next month" onClick={() => changeMonth(1)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ChevronRight className="w-5 h-5" /></button>
                 </div>
             </div>
 

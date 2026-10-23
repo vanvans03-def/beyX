@@ -69,11 +69,11 @@ export default function RealtimeTournamentWrapper({ initialTournament, tournamen
                 <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.03]" />
             </div>
 
-            <main className="relative z-10 max-w-lg mx-auto min-h-screen px-6 py-12 flex flex-col" data-aos="fade-in" suppressHydrationWarning>
+            <main className="relative z-10 max-w-lg mx-auto min-h-screen px-6 py-12 flex flex-col" suppressHydrationWarning>
                 {/* Header */}
                 <header className="flex flex-col items-center justify-center space-y-2 mb-6">
                     <div className="text-center space-y-1">
-                        <h1 className="text-2xl font-black italic text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] uppercase py-2 leading-relaxed">
+                        <h1 data-motion="reveal" className="text-2xl font-black italic text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] uppercase py-2 leading-relaxed">
                             {tournament?.name || "TOURNAMENT REGISTER"}
                         </h1>
                         <p className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase flex items-center justify-center gap-1">

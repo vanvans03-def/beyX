@@ -71,7 +71,7 @@ export default function AdminPage() {
     // New Creation State
     const [newType, setNewType] = useState<"U10" | "U10Custom" | "NoMoreMeta" | "Open" | "Standard">("Standard");
     const [isCustomBanList, setIsCustomBanList] = useState(false);
-    const [newProvider, setNewProvider] = useState<'CHALLONGE' | 'INTERNAL'>("CHALLONGE");
+    const [newProvider, setNewProvider] = useState<'CHALLONGE' | 'INTERNAL'>("INTERNAL");
     const [newBracketType, setNewBracketType] = useState<'SINGLE' | 'DOUBLE'>("SINGLE");
 
     // Default ban list checks
@@ -154,6 +154,7 @@ export default function AdminPage() {
             const json = await res.json();
             if (json.success) {
                 setUserProfile(json.user);
+                if (json.user.internal_bracket_enabled === false) setNewProvider('CHALLONGE');
                 setShopNameInput(json.user.shop_name || json.user.username);
                 setApiKeyInput(json.user.challonge_api_key || "");
                 setEmailInput(json.user.email || "");
@@ -631,8 +632,13 @@ export default function AdminPage() {
             </div>
 
             <div className="relative z-10 p-4 md:p-6">
-                <div className="max-w-4xl mx-auto space-y-6 md:space-y-8">
-                    <header className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
+                    <details className="group rounded-2xl border border-white/10 bg-white/[0.02]" data-testid="admin-menu">
+                        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+                            <h1 className="text-xl sm:text-2xl font-bold text-primary">{t('admin.title')}</h1>
+                            <Plus aria-hidden="true" className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-45" />
+                        </summary>
+                    <header className="grid grid-cols-1 gap-3 border-t border-white/10 p-4 sm:grid-cols-2">
                         <style dangerouslySetInnerHTML={{
                             __html: `
                         input[type="date"]::-webkit-calendar-picker-indicator,
@@ -641,13 +647,14 @@ export default function AdminPage() {
                             cursor: pointer;
                         }
                     `}} />
-                        <div className="flex items-center gap-4">
-                            <div className="flex flex-col">
-                                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent text-center md:text-left">
-                                    {t('admin.title')}
-                                </h1>
+                        <div className="flex min-w-0 items-start justify-between gap-3 sm:col-span-2">
+                            <div className="flex min-w-0 flex-1 flex-col">
                                 {userProfile && (
-                                    <div className="flex flex-col gap-1 mt-1">
+                                    <>
+                                    <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground"><Store size={14} className="shrink-0" /><span className="break-all">{userProfile.shop_name}</span></p>
+                                    <details className="mt-2 rounded-lg border border-white/10 bg-black/15 px-3">
+                                    <summary className="cursor-pointer py-2 text-xs font-bold text-gray-300">{lang === 'TH' ? 'ตั้งค่าบัญชีและการเชื่อมต่อ' : 'Account & integrations'}</summary>
+                                    <div className="flex flex-col gap-3 border-t border-white/10 py-3">
                                         {/* Shop Name Edit */}
                                         <div className="flex items-center gap-2 text-sm text-gray-400">
                                             {isEditingShop ? (
@@ -664,7 +671,7 @@ export default function AdminPage() {
                                                 <>
                                                     <Store className="w-4 h-4" />
                                                     <span>{userProfile.shop_name}</span>
-                                                    <button onClick={() => setIsEditingShop(true)} className="text-gray-500 hover:text-white transition-colors">
+                                                    <button aria-label="Edit shop name" onClick={() => setIsEditingShop(true)} className="flex h-8 w-8 items-center justify-center text-gray-400 hover:text-white transition-colors">
                                                         <Pencil className="w-3 h-3" />
                                                     </button>
                                                 </>
@@ -730,10 +737,10 @@ export default function AdminPage() {
                                                 Change Password
                                             </Link>
                                         </div>
-                                    </div>
+                                    </div></details></>
                                 )}
                             </div>
-                            <button onClick={toggleLang} className="p-2 rounded-full hover:bg-secondary/50 transition-colors">
+                            <button onClick={toggleLang} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 hover:bg-secondary/50 transition-colors">
                                 <Globe className="h-5 w-5 text-muted-foreground" />
                                 <span className="sr-only">Switch Language</span>
                             </button>
@@ -741,20 +748,22 @@ export default function AdminPage() {
 
                         {/* Tab Navigation */}
                         {/* Tab Navigation - Scrollable on mobile if needed or just flex */}
-                        <div className="flex bg-secondary/30 p-1 rounded-lg shrink-0">
+                        <nav aria-label="Dashboard sections" className="grid grid-cols-2 bg-secondary/30 p-1 rounded-xl">
                             <button
                                 onClick={() => setActiveTab('tournaments')}
+                                aria-pressed={activeTab === 'tournaments'}
                                 className={cn("px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap", activeTab === 'tournaments' ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:text-foreground")}
                             >
                                 Tournaments
                             </button>
                             <button
                                 onClick={() => setActiveTab('events')}
+                                aria-pressed={activeTab === 'events'}
                                 className={cn("px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap", activeTab === 'events' ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:text-foreground")}
                             >
                                 Events
                             </button>
-                        </div>
+                        </nav>
 
                         {/* Global Event Toggle */}
                         {activeTab === 'events' && (
@@ -775,7 +784,7 @@ export default function AdminPage() {
                             </div>
                         )}
 
-                        <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-end flex-wrap">
+                        <nav aria-label="Account tools" className="flex items-center gap-2 flex-wrap sm:justify-end [&>a]:min-h-10 [&>a]:justify-center">
                             {userProfile?.role === 'superadmin' ? (
                                 <>
                                     <Link
@@ -821,12 +830,13 @@ export default function AdminPage() {
                                     router.refresh();
                                     router.push("/");
                                 }}
-                                className="text-xs text-muted-foreground hover:text-destructive underline whitespace-nowrap"
+                                className="ml-auto min-h-10 rounded-lg border border-white/10 px-3 text-xs text-muted-foreground hover:border-destructive/40 hover:text-destructive whitespace-nowrap"
                             >
                                 Logout
                             </button>
-                        </div>
+                        </nav>
                     </header>
+                    </details>
 
                     {activeTab === 'tournaments' ? (
                         <>
@@ -838,17 +848,18 @@ export default function AdminPage() {
                                     <p className="text-sm text-gray-400">การสร้างทัวร์นาเมนต์ถูกปิดใช้งานโดยผู้ดูแลระบบสูงสุด (Super Admin)</p>
                                 </div>
                             ) : (
-                                <div className="glass-card p-6 rounded-xl space-y-4">
+                                <div className="glass-card p-4 sm:p-5 rounded-xl space-y-3" data-testid="create-tournament-panel">
                                 <h2 className="text-lg font-bold">{t('admin.create.title')}</h2>
-                                <form onSubmit={handleCreate} className="space-y-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                <form onSubmit={handleCreate} className="space-y-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                                         {/* Name Input */}
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">
+                                        <div className="space-y-1 sm:col-span-2">
+                                            <label htmlFor="new-tournament-name" className="text-[10px] uppercase font-bold text-muted-foreground px-1">
                                                 {lang === 'TH' ? 'ชื่อทัวร์นาเมนต์' : 'Tournament Name'}
                                             </label>
                                             <input
                                                 type="text"
+                                                id="new-tournament-name"
                                                 placeholder={t('admin.create.placeholder')}
                                                 value={newTournamentName}
                                                 onChange={(e) => {
@@ -864,9 +875,10 @@ export default function AdminPage() {
 
                                         {/* Rules & Points */}
                                         <div className="space-y-1">
-                                            <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Rules & Points</label>
+                                            <label htmlFor="new-tournament-rules" className="text-[10px] uppercase font-bold text-muted-foreground px-1">Rules & Points</label>
                                             <div className="relative">
                                                 <select
+                                                    id="new-tournament-rules"
                                                     value={newType}
                                                     onChange={(e) => setNewType(e.target.value as any)}
                                                     className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 pr-10 outline-none transition-colors border text-sm h-10 cursor-pointer appearance-none"
@@ -886,15 +898,16 @@ export default function AdminPage() {
 
                                         {/* Tournament System */}
                                         <div className="space-y-1">
-                                            <label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Tournament System</label>
+                                            <label htmlFor="new-tournament-system" className="text-[10px] uppercase font-bold text-muted-foreground px-1">Tournament System</label>
                                             <div className="relative">
                                                 <select
+                                                    id="new-tournament-system"
                                                     value={newProvider}
                                                     onChange={(e) => setNewProvider(e.target.value as any)}
                                                     className="w-full bg-secondary border-transparent focus:border-primary rounded-lg px-4 py-2 pr-10 outline-none transition-colors border text-sm h-10 cursor-pointer appearance-none"
                                                 >
-                                                    <option value="CHALLONGE">Challonge (External)</option>
-                                                    <option value="INTERNAL">BeyX Bracket (Internal)</option>
+                                                    <option value="INTERNAL" disabled={userProfile?.internal_bracket_enabled === false}>BeyX (Internal)</option>
+                                                    <option value="CHALLONGE">Challonge</option>
                                                 </select>
                                                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
                                                     <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
@@ -980,7 +993,7 @@ export default function AdminPage() {
                                             </h2>
                                             <div className="grid gap-4">
                                                 {activeTournaments.map((t) => (
-                                                    <div key={t.id} className={`glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors ${isStarted(t) ? 'bg-amber-500/10 border-amber-500/30' : 'bg-gradient-to-r from-transparent to-primary/5'}`}>
+                                                    <div key={t.id} data-motion="reveal" className={`motion-panel glass-card p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-primary/50 transition-colors ${isStarted(t) ? 'bg-amber-500/10 border-amber-500/30' : 'bg-gradient-to-r from-transparent to-primary/5'}`}>
                                                         <div>
                                                             <h3 className="font-bold text-lg text-white">{t.name}</h3>
                                                             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
@@ -1310,9 +1323,9 @@ export default function AdminPage() {
                             <div className="space-y-4">
                                 <h2 className="text-lg font-bold">Upcoming Events</h2>
                                 {loading ? <Loader2 className="animate-spin mx-auto" /> : (
-                                    <div className="grid gap-4" data-aos="fade-up" data-aos-delay="200">
+                                    <div className="grid gap-4">
                                         {events.map(e => (
-                                            <div key={e.id} className="glass-card p-4 rounded-xl flex gap-4 items-start">
+                                            <div key={e.id} data-motion="reveal" className="motion-panel glass-card p-4 rounded-xl flex gap-4 items-start">
                                                 {e.image && <img src={e.image} className="w-24 h-24 object-cover rounded-lg bg-black/50" />}
                                                 <div className="flex-1">
                                                     <h3 className="font-bold text-lg">{e.title}</h3>

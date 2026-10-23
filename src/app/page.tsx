@@ -7,8 +7,10 @@ export const metadata: Metadata = {
     description: 'BeyX System — Beyblade X Tournament Registration & Management',
 };
 
-export const dynamic = 'force-dynamic';
+// Public shell has no server-side data: serve complete HTML, not a streamed
+// loading boundary that depends on JavaScript to reveal the main navigation.
+export const dynamic = 'force-static';
 
-export default async function Home() {
-    return <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background p-6"><div className="pointer-events-none fixed inset-0 z-0"><div className="absolute left-1/2 top-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-[150px]" /><div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.05]" /></div><HomeContent version={appConfig.version} /></div>;
+export default function Home() {
+    return <div className="relative flex min-h-screen flex-col items-center justify-center overflow-x-clip bg-background px-4 py-6 sm:px-6 sm:py-10"><div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true"><div className="absolute left-1/2 top-0 h-[600px] w-[min(100vw,800px)] -translate-x-1/2 rounded-full bg-primary/[0.06] blur-[100px]" /><div className="motion-grid absolute inset-0" /></div><HomeContent version={appConfig.version} /></div>;
 }

@@ -62,7 +62,7 @@ export function Modal({
         <div className={cn(
             "fixed inset-0 z-[9999] flex justify-center overflow-y-auto transition-all duration-300",
             compact ? "items-center px-3 py-4" : "items-start px-4 pt-20",
-            isOpen ? "opacity-100" : "opacity-0"
+            isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         )}>
             {/* Backdrop */}
             <div

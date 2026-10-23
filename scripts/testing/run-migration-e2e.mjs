@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import net from 'node:net';
+import http from 'node:http';
+import https from 'node:https';
 import { spawn, execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import dotenv from 'dotenv';
@@ -11,10 +13,13 @@ const settings = { ...(fs.existsSync(file) ? dotenv.parse(fs.readFileSync(file))
 const live = process.argv.includes('--challonge');
 const ui = process.argv.includes('--ui');
 const staging = process.argv.includes('--staging');
-const args = process.argv.slice(2).filter(arg => !['--challonge', '--ui', '--staging'].includes(arg));
+const production = process.argv.includes('--production');
+const args = process.argv.slice(2).filter(arg => !['--challonge', '--ui', '--staging', '--production'].includes(arg));
 let server;
+let proxy;
 let stopping = false;
 async function stop() {
+    if (proxy) { proxy.closeAllConnections(); proxy.close(); proxy = undefined; }
     if (!server || server.exitCode !== null || server.signalCode !== null || stopping) return;
     stopping = true;
     if (process.platform === 'win32') {
@@ -70,8 +75,10 @@ async function main() {
     const port = Number(settings.E2E_PORT || 3345);
     if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid E2E_PORT.');
     await new Promise((resolve, reject) => { const probe = net.createServer(); probe.once('error', () => reject(new Error(`Port ${port} is occupied; refusing to use another application server.`))); probe.listen(port, '127.0.0.1', () => probe.close(resolve)); });
+    const tlsPort = port + 1;
+    const testBase = `${production ? 'https' : 'http'}://127.0.0.1:${production ? tlsPort : port}`;
     const env = {
-        ...settings, NODE_ENV: 'development', TEST_BASE_URL: `http://127.0.0.1:${port}`,
+        ...settings, NODE_ENV: production ? 'production' : 'development', TEST_BASE_URL: testBase,
         E2E_CHALLONGE_LIVE: live ? '1' : '0',
         DATA_BACKEND: 'postgres', AUTH_BACKEND: 'local', REALTIME_BACKEND: 'postgres',
         DATABASE_URL: ui ? '' : url, REALTIME_DATABASE_URL: ui ? '' : settings.E2E_REALTIME_DATABASE_URL || url, DATABASE_URL_UNPOOLED: ui ? '' : settings.E2E_REALTIME_DATABASE_URL || url,
@@ -79,23 +86,45 @@ async function main() {
         APP_SESSION_SECRET: randomBytes(48).toString('hex'), NEXT_DIST_DIR: '.next-e2e', NEXT_TYPESCRIPT_CONFIG: 'tsconfig.e2e.json',
         REDIS_URL: '', SUPABASE_SERVICE_ROLE_KEY: '', NEXT_PUBLIC_SUPABASE_URL: '', NEXT_PUBLIC_SUPABASE_ANON_KEY: '',
         NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: 'false', GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '',
-        NEXT_PUBLIC_BASE_URL: `http://127.0.0.1:${port}`, NEXT_PUBLIC_APP_URL: `http://127.0.0.1:${port}`,
+        NEXT_PUBLIC_BASE_URL: testBase, NEXT_PUBLIC_APP_URL: testBase,
         BLOB_READ_WRITE_TOKEN: '', AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '',
         CHALLONGE_API_KEY: '', CLOUDFLARE_R2_ACCESS_KEY_ID: '', CLOUDFLARE_R2_SECRET_ACCESS_KEY: '',
         CLOUDFLARE_R2_ACCOUNT_ID: '', CLOUDFLARE_R2_BUCKET_NAME: '', CLOUDFLARE_R2_PUBLIC_URL: '',
     };
-    server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '-p', String(port)], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell: false });
+    if (production) {
+        execFileSync(process.execPath, ['scripts/testing/create-local-test-tls.mjs'], { stdio: 'inherit' });
+        console.log('Building an isolated production test bundle (no production credentials).');
+        server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'build'], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell: false });
+        const buildLog = fs.createWriteStream('test-results/e2e-build.log', { flags: 'w' });
+        server.stdout.pipe(buildLog); server.stderr.pipe(buildLog);
+        const buildCode = await new Promise((resolve, reject) => { server.once('error', reject); server.once('close', code => resolve(code ?? 1)); });
+        if (buildCode !== 0) throw new Error('Isolated build failed. See test-results/e2e-build.log.');
+    }
+    server = spawn(process.execPath, ['node_modules/next/dist/bin/next', production ? 'start' : 'dev', '-H', '127.0.0.1', '-p', String(port)], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell: false });
     const log = fs.createWriteStream('test-results/e2e-server.log', { flags: 'w' });
     server.stdout.pipe(log); server.stderr.pipe(log);
     server.once('error', error => { console.error(error.message); });
     let ready = false;
     for (let i = 0; i < 120; i++) {
         if (server.exitCode !== null) throw new Error('Test server exited. See test-results/e2e-server.log.');
-        try { ready = (await fetch(`${env.TEST_BASE_URL}/api/health`, { signal: AbortSignal.timeout(2000) })).ok; } catch { /* waiting for compilation */ }
+        try { ready = (await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(2000) })).ok; } catch { /* waiting for compilation */ }
         if (ready) break;
         await new Promise(resolve => setTimeout(resolve, 1000));
     }
     if (!ready) throw new Error('Test server did not become ready. See test-results/e2e-server.log.');
+    if (production) {
+        // Secure cookies are tested over real TLS; never weaken runtime cookie settings.
+        proxy = https.createServer({ key: fs.readFileSync('test-results/motion-local-key.pem'), cert: fs.readFileSync('test-results/motion-local-cert.pem') }, (request, response) => {
+            const upstream = http.request({ hostname: '127.0.0.1', port, path: request.url, method: request.method,
+                headers: { ...request.headers, 'x-forwarded-proto': 'https' } }, incoming => {
+                response.writeHead(incoming.statusCode || 502, incoming.headers); incoming.pipe(response);
+            });
+            upstream.on('error', () => { if (!response.headersSent) response.writeHead(502); response.end(); });
+            response.on('close', () => upstream.destroy()); request.pipe(upstream);
+        });
+        await new Promise((resolve, reject) => { proxy.once('error', reject); proxy.listen(tlsPort, '127.0.0.1', resolve); });
+        env.E2E_LOCAL_TLS = '1';
+    }
     console.log(`Running ${ui ? 'UI-only' : 'isolated migration'} E2E at ${env.TEST_BASE_URL}. ${live ? 'Live Challonge enabled.' : 'No external tournament writes.'}`);
     const child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '-c', 'playwright.migration.config.ts', ...(live ? ['challonge-live.spec.ts', '--project=desktop'] : ui ? ['public-ui.spec.ts'] : []), ...args], { env, stdio: 'inherit', shell: false });
     const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', code => resolve(code ?? 1)); });

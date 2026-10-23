@@ -33,7 +33,7 @@ export const test = base.extend<{ lab: Lab }>({
             for (const role of ['superadmin', 'user', 'user']) {
                 const id = randomUUID(), username = `${tag}${accounts.length}`, shop = username;
                 await db.query(`INSERT INTO public.users (id, username, password_hash, shop_name, email, role, event_mode_enabled, internal_bracket_enabled, ranking_organizer_enabled) VALUES ($1,$2,$3,$4,$5,$6,true,true,true)`, [id, username, hash, shop, `${username}@example.invalid`, role]);
-                const api = await playwright.request.newContext({ baseURL });
+                const api = await playwright.request.newContext({ baseURL, ignoreHTTPSErrors: baseURL === 'https://127.0.0.1:3346' && process.env.E2E_LOCAL_TLS === '1' });
                 const account = { id, username, shop, password: `${tag}Password!`, api }; accounts.push(account);
                 await jsonOK(await api.post('/api/auth/login', { data: { username, password: account.password } }));
                 const profile = await jsonOK(await api.get('/api/admin/profile'));

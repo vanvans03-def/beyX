@@ -138,3 +138,59 @@ body {
   scrollbar-width: none !important;
   /* Firefox */
 }
+
+/* Motion is an enhancement. Content is visible and controls work without JS. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
+.motion-card {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(130deg, #121b17, #0b100e 72%);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+.motion-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(240px circle at var(--spot-x, 50%) var(--spot-y, 50%), rgba(0, 255, 148, 0.13), transparent 75%);
+  transition: opacity 180ms ease;
+}
+.motion-card:focus-within { border-color: rgba(0, 255, 148, 0.6); }
+.motion-card:active { border-color: var(--primary); background-color: rgba(0, 255, 148, 0.07); }
+.motion-card .motion-arrow { transition: translate 180ms ease, color 180ms ease; }
+.motion-card:focus-visible .motion-arrow { color: var(--primary); }
+.motion-icon { transition: background-color 180ms ease, color 180ms ease; }
+.motion-grid {
+  background-image: linear-gradient(rgba(0, 255, 148, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 148, 0.025) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(ellipse at 50% 15%, black, transparent 75%);
+}
+.motion-panel {
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 12px 50px -30px rgba(0, 255, 148, 0.17);
+}
+/* Prevent iOS focus zoom on ordinary forms; dense bracket widgets are unchanged. */
+@media (max-width: 640px) {
+  form input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  form select, form textarea { font-size: 16px; }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .motion-card:hover { border-color: rgba(0, 255, 148, 0.4); box-shadow: 0 8px 30px -18px rgba(0, 255, 148, 0.35); }
+  .motion-card[data-motion-hover]::before { opacity: 1; }
+  .motion-card:hover .motion-arrow { translate: 4px 0; color: var(--primary); }
+  .motion-card:hover .motion-icon { background-color: rgba(0, 255, 148, 0.18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-card, .motion-card::before, .motion-arrow, .motion-icon { transition: none !important; }
+  [data-motion] { opacity: 1 !important; transform: none !important; }
+  .animate-pulse, .animate-pulse-slow, .animate-bounce, .animate-ping { animation: none !important; }
+}

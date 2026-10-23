@@ -136,7 +136,7 @@ export default function RankingsPage() {
                 <div className="flex items-center justify-between gap-3"><Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-white"><ArrowLeft className="h-4 w-4" /> {t('rankings.back')}</Link><button onClick={toggleLang} className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/10"><Globe className="h-3.5 w-3.5" /> {lang === 'TH' ? 'EN' : 'TH'}</button></div>
                 <header className="text-center space-y-2">
                     <Trophy className="mx-auto h-10 w-10 text-yellow-400" />
-                    <h1 className="text-2xl font-black sm:text-3xl">{t('rankings.title')}</h1>
+                    <h1 data-motion="reveal" className="text-2xl font-black sm:text-3xl">{t('rankings.title')}</h1>
                     <p className="text-sm text-muted-foreground">{scope === 'winrate' ? t('rankings.winrate_rule') : t('rankings.rule')}</p>
                 </header>
                 <div className="flex flex-wrap justify-center gap-2">

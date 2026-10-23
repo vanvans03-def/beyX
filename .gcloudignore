@@ -3,6 +3,7 @@
 node_modules
 .next
 .next-e2e
+.next-manual-ui
 .env*
 .neon
 backups

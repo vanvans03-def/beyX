@@ -1,6 +1,7 @@
 node_modules
 .next
 .next-e2e
+.next-manual-ui
 test-results
 playwright-report
 performance-results
